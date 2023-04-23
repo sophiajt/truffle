@@ -42,7 +42,6 @@ pub enum NodeType {
     In,
     NotIn,
     Modulo,
-    FloorDivision,
     And,
     Or,
     Pow,
@@ -109,9 +108,7 @@ impl NodeType {
     pub fn precedence(&self) -> usize {
         match self {
             NodeType::Pow => 100,
-            NodeType::Multiply | NodeType::Divide | NodeType::Modulo | NodeType::FloorDivision => {
-                95
-            }
+            NodeType::Multiply | NodeType::Divide | NodeType::Modulo => 95,
             NodeType::Plus | NodeType::Minus => 90,
             NodeType::ShiftLeft | NodeType::ShiftRight => 85,
             NodeType::NotRegexMatch
@@ -367,16 +364,6 @@ impl<'a> Parser<'a> {
             self.lexer.peek(),
             Some(Token {
                 token_type: TokenType::DotDot,
-                ..
-            })
-        )
-    }
-
-    pub fn is_comment(&mut self) -> bool {
-        matches!(
-            self.lexer.peek(),
-            Some(Token {
-                token_type: TokenType::Comment,
                 ..
             })
         )
@@ -676,10 +663,7 @@ impl<'a> Parser<'a> {
         } else if self.is_name() {
             self.variable_or_call()
         } else {
-            panic!("incomplete: {:?}", self.lexer.peek());
-            let bare_string = self.name();
-            self.delta.node_types[bare_string.0] = NodeType::String;
-            return bare_string;
+            self.error("incomplete expression")
         };
 
         if self.is_dotdot() {
@@ -774,10 +758,6 @@ impl<'a> Parser<'a> {
                 TokenType::ForwardSlash => {
                     self.lexer.next();
                     self.create_node(NodeType::Divide, span_start, span_end)
-                }
-                TokenType::ForwardSlashForwardSlash => {
-                    self.lexer.next();
-                    self.create_node(NodeType::FloorDivision, span_start, span_end)
                 }
                 TokenType::LessThan => {
                     self.lexer.next();
@@ -975,9 +955,10 @@ impl<'a> Parser<'a> {
                 self.lexer.next();
             }
             _ => {
-                // self.error(ShellErrorType::Expected(
-                //     String::from_utf8_lossy(keyword).to_string(),
-                // ));
+                self.error(format!(
+                    "expected keyword: {}",
+                    String::from_utf8_lossy(keyword)
+                ));
             }
         }
     }

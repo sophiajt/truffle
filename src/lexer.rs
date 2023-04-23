@@ -6,10 +6,7 @@ pub struct Lexer<'a> {
 #[derive(Debug)]
 pub enum TokenType {
     Number,
-    Space,
-    Newline,
     Comma,
-    Comment,
     String,
     Dot,
     DotDot,
@@ -185,6 +182,15 @@ impl<'a> Lexer<'a> {
             if !whitespace.contains(&self.source[token_offset]) {
                 break;
             }
+            token_offset += 1;
+        }
+        self.span_offset += token_offset;
+        self.source = &self.source[token_offset..];
+    }
+
+    pub fn skip_comment(&mut self) {
+        let mut token_offset = 0;
+        while token_offset < self.source.len() && self.source[token_offset] != b'\n' {
             token_offset += 1;
         }
         self.span_offset += token_offset;
@@ -494,6 +500,9 @@ impl<'a> Lexer<'a> {
                 return self.lex_number();
             } else if self.source[0] == b'"' {
                 return self.lex_quoted_string();
+            } else if self.source[0] == b'/' && self.source.len() > 1 && self.source[1] == b'/' {
+                // Comment
+                self.skip_comment();
             } else if is_symbol(self.source[0]) {
                 return self.lex_symbol();
             } else if self.source[0] == b' '
