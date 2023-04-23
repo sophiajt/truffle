@@ -1,10 +1,11 @@
+mod delta;
 mod errors;
 mod lexer;
 mod line_editor;
 mod parser;
-mod parser_delta;
+mod typechecker;
 
-use crate::parser::Parser;
+use crate::{parser::Parser, typechecker::TypeChecker};
 use line_editor::{LineEditor, ReadLineOutput};
 
 fn main() {
@@ -32,9 +33,23 @@ fn main() {
                     println!("error: {:?}", error);
                 }
 
-                let result = parser.delta;
+                let mut typechecker = TypeChecker::new(parser.delta.ast_nodes.len());
+                typechecker.typecheck(&parser.delta);
 
+                for error in &typechecker.errors {
+                    println!("error: {:?}", error);
+                }
+
+                let result = &parser.delta;
                 result.print();
+
+                for ast_node in result.ast_nodes.iter().enumerate() {
+                    println!("{:?}", ast_node)
+                }
+
+                for node_type in typechecker.node_types.iter().enumerate() {
+                    println!("{:?}", node_type)
+                }
             }
             Err(err) => {
                 println!("{:?}", err);

@@ -1,28 +1,28 @@
-use crate::parser::{NodeId, NodeType};
+use crate::parser::{AstNode, NodeId};
 
 #[derive(Debug)]
-pub struct ParserDelta {
+pub struct EngineDelta {
     pub node_id_offset: usize,
     pub span_start: Vec<usize>,
     pub span_end: Vec<usize>,
-    pub node_types: Vec<NodeType>,
+    pub ast_nodes: Vec<AstNode>,
 }
 
-impl ParserDelta {
+impl EngineDelta {
     pub fn new(node_id_offset: usize) -> Self {
         Self {
             node_id_offset,
             span_start: vec![],
             span_end: vec![],
-            node_types: vec![],
+            ast_nodes: vec![],
         }
     }
 
     pub fn print(&self) {
-        if self.node_types.is_empty() {
+        if self.ast_nodes.is_empty() {
             println!("<empty>");
         } else {
-            self.print_helper(&NodeId(self.node_types.len() - 1), 0)
+            self.print_helper(&NodeId(self.ast_nodes.len() - 1), 0)
         }
     }
 
@@ -31,8 +31,8 @@ impl ParserDelta {
             print!(" ")
         }
 
-        match &self.node_types[node_id.0] {
-            NodeType::Let {
+        match &self.ast_nodes[node_id.0] {
+            AstNode::Let {
                 variable_name,
                 initializer,
             } => {
@@ -43,7 +43,7 @@ impl ParserDelta {
                 self.print_helper(variable_name, indent + 2);
                 self.print_helper(initializer, indent + 2);
             }
-            NodeType::LetMut {
+            AstNode::LetMut {
                 variable_name,
                 initializer,
             } => {
@@ -54,7 +54,7 @@ impl ParserDelta {
                 self.print_helper(variable_name, indent + 2);
                 self.print_helper(initializer, indent + 2);
             }
-            NodeType::Param { name, ty } => {
+            AstNode::Param { name, ty } => {
                 println!(
                     "Param ({}, {}):",
                     self.span_start[node_id.0], self.span_end[node_id.0],
@@ -64,7 +64,7 @@ impl ParserDelta {
                     self.print_helper(ty, indent + 2);
                 }
             }
-            NodeType::Closure { params, block } => {
+            AstNode::Closure { params, block } => {
                 println!(
                     "Closure ({}, {}):",
                     self.span_start[node_id.0], self.span_end[node_id.0],
@@ -72,7 +72,7 @@ impl ParserDelta {
                 self.print_helper(params, indent + 2);
                 self.print_helper(block, indent + 2);
             }
-            NodeType::Fn {
+            AstNode::Fn {
                 name,
                 params,
                 block,
@@ -82,7 +82,7 @@ impl ParserDelta {
                 self.print_helper(params, indent + 2);
                 self.print_helper(block, indent + 2);
             }
-            NodeType::Block(nodes) => {
+            AstNode::Block(nodes) => {
                 println!(
                     "Block ({}, {}):",
                     self.span_start[node_id.0], self.span_end[node_id.0],
@@ -91,7 +91,7 @@ impl ParserDelta {
                     self.print_helper(node, indent + 2);
                 }
             }
-            NodeType::Params(nodes) => {
+            AstNode::Params(nodes) => {
                 print!(
                     "Params ({}, {}):",
                     self.span_start[node_id.0], self.span_end[node_id.0],
@@ -106,7 +106,7 @@ impl ParserDelta {
                     self.print_helper(node, indent + 2);
                 }
             }
-            NodeType::Call { head, args } => {
+            AstNode::Call { head, args } => {
                 println!(
                     "Call ({}, {}):",
                     self.span_start[node_id.0], self.span_end[node_id.0],
@@ -117,7 +117,7 @@ impl ParserDelta {
                     self.print_helper(arg, indent + 2);
                 }
             }
-            NodeType::BinaryOp { lhs, op, rhs } => {
+            AstNode::BinaryOp { lhs, op, rhs } => {
                 println!(
                     "BinaryOp ({}, {}):",
                     self.span_start[node_id.0], self.span_end[node_id.0],
@@ -127,7 +127,7 @@ impl ParserDelta {
                 self.print_helper(op, indent + 2);
                 self.print_helper(rhs, indent + 2)
             }
-            NodeType::Range { lhs, rhs } => {
+            AstNode::Range { lhs, rhs } => {
                 println!(
                     "Range ({}, {}):",
                     self.span_start[node_id.0], self.span_end[node_id.0],
@@ -136,7 +136,7 @@ impl ParserDelta {
                 self.print_helper(lhs, indent + 2);
                 self.print_helper(rhs, indent + 2)
             }
-            NodeType::If {
+            AstNode::If {
                 condition,
                 then_block,
                 else_expression,

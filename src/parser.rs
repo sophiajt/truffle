@@ -1,16 +1,16 @@
+use crate::delta::EngineDelta;
 use crate::errors::ScriptError;
 use crate::lexer::{Lexer, Token, TokenType};
-use crate::parser_delta::ParserDelta;
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
-    pub delta: ParserDelta,
+    pub delta: EngineDelta,
     pub errors: Vec<ScriptError>,
     content_length: usize,
 }
 
 #[derive(Debug)]
-pub enum NodeType {
+pub enum AstNode {
     Int,
     Float,
     String,
@@ -104,31 +104,31 @@ pub enum NodeType {
     Garbage,
 }
 
-impl NodeType {
+impl AstNode {
     pub fn precedence(&self) -> usize {
         match self {
-            NodeType::Pow => 100,
-            NodeType::Multiply | NodeType::Divide | NodeType::Modulo => 95,
-            NodeType::Plus | NodeType::Minus => 90,
-            NodeType::ShiftLeft | NodeType::ShiftRight => 85,
-            NodeType::NotRegexMatch
-            | NodeType::RegexMatch
-            | NodeType::StartsWith
-            | NodeType::EndsWith
-            | NodeType::LessThan
-            | NodeType::LessThanOrEqual
-            | NodeType::GreaterThan
-            | NodeType::GreaterThanOrEqual
-            | NodeType::Equal
-            | NodeType::NotEqual
-            | NodeType::In
-            | NodeType::NotIn
-            | NodeType::Append => 80,
-            NodeType::BitAnd => 75,
-            NodeType::BitXor => 70,
-            NodeType::BitOr => 60,
-            NodeType::And => 50,
-            NodeType::Or => 40,
+            AstNode::Pow => 100,
+            AstNode::Multiply | AstNode::Divide | AstNode::Modulo => 95,
+            AstNode::Plus | AstNode::Minus => 90,
+            AstNode::ShiftLeft | AstNode::ShiftRight => 85,
+            AstNode::NotRegexMatch
+            | AstNode::RegexMatch
+            | AstNode::StartsWith
+            | AstNode::EndsWith
+            | AstNode::LessThan
+            | AstNode::LessThanOrEqual
+            | AstNode::GreaterThan
+            | AstNode::GreaterThanOrEqual
+            | AstNode::Equal
+            | AstNode::NotEqual
+            | AstNode::In
+            | AstNode::NotIn
+            | AstNode::Append => 80,
+            AstNode::BitAnd => 75,
+            AstNode::BitXor => 70,
+            AstNode::BitOr => 60,
+            AstNode::And => 50,
+            AstNode::Or => 40,
             _ => 0,
         }
     }
@@ -143,7 +143,7 @@ impl<'a> Parser<'a> {
 
         Self {
             lexer: Lexer::new(source, span_offset),
-            delta: ParserDelta::new(node_id_offset),
+            delta: EngineDelta::new(node_id_offset),
             errors: vec![],
             content_length,
         }
@@ -461,7 +461,7 @@ impl<'a> Parser<'a> {
             ..
         }) = self.lexer.next()
         {
-            let node_id = self.create_node(NodeType::Garbage, span_start, span_end);
+            let node_id = self.create_node(AstNode::Garbage, span_start, span_end);
             self.errors.push(ScriptError {
                 message: message.into(),
 
@@ -471,7 +471,7 @@ impl<'a> Parser<'a> {
             node_id
         } else {
             let node_id =
-                self.create_node(NodeType::Garbage, self.content_length, self.content_length);
+                self.create_node(AstNode::Garbage, self.content_length, self.content_length);
             self.errors.push(ScriptError {
                 message: message.into(),
 
@@ -484,13 +484,13 @@ impl<'a> Parser<'a> {
 
     pub fn create_node(
         &mut self,
-        node_type: NodeType,
+        node_type: AstNode,
         span_start: usize,
         span_end: usize,
     ) -> NodeId {
         self.delta.span_start.push(span_start);
         self.delta.span_end.push(span_end);
-        self.delta.node_types.push(node_type);
+        self.delta.ast_nodes.push(node_type);
 
         NodeId(self.delta.span_start.len() - 1 + self.delta.node_id_offset)
     }
@@ -527,7 +527,7 @@ impl<'a> Parser<'a> {
         }
         let span_end = self.position();
 
-        self.create_node(NodeType::Block(code_body), span_start, span_end)
+        self.create_node(AstNode::Block(code_body), span_start, span_end)
     }
 
     pub fn fn_definition(&mut self) -> NodeId {
@@ -543,7 +543,7 @@ impl<'a> Parser<'a> {
         let span_end = self.position();
 
         self.create_node(
-            NodeType::Fn {
+            AstNode::Fn {
                 name,
                 params,
                 block,
@@ -607,7 +607,7 @@ impl<'a> Parser<'a> {
 
                     let (span_start, span_end) = self.spanning(&lhs, &rhs);
                     expr_stack.push(self.create_node(
-                        NodeType::BinaryOp { lhs, op, rhs },
+                        AstNode::BinaryOp { lhs, op, rhs },
                         span_start,
                         span_end,
                     ))
@@ -636,7 +636,7 @@ impl<'a> Parser<'a> {
             let (span_start, span_end) = self.spanning(&lhs, &rhs);
 
             expr_stack.push(self.create_node(
-                NodeType::BinaryOp { lhs, op, rhs },
+                AstNode::BinaryOp { lhs, op, rhs },
                 span_start,
                 span_end,
             ))
@@ -673,7 +673,7 @@ impl<'a> Parser<'a> {
             let rhs = self.simple_expression();
             let span_end = self.position();
 
-            self.create_node(NodeType::Range { lhs: expr, rhs }, span_start, span_end)
+            self.create_node(AstNode::Range { lhs: expr, rhs }, span_start, span_end)
         } else {
             expr
         }
@@ -698,9 +698,9 @@ impl<'a> Parser<'a> {
                 self.lexer.next();
 
                 if contents.contains(&b'.') {
-                    self.create_node(NodeType::Float, span_start, span_end)
+                    self.create_node(AstNode::Float, span_start, span_end)
                 } else {
-                    self.create_node(NodeType::Int, span_start, span_end)
+                    self.create_node(AstNode::Int, span_start, span_end)
                 }
             }
             _ => self.error("expected: number"),
@@ -716,7 +716,7 @@ impl<'a> Parser<'a> {
                 contents,
             }) if contents == b"true" => {
                 self.lexer.next();
-                self.create_node(NodeType::True, span_start, span_end)
+                self.create_node(AstNode::True, span_start, span_end)
             }
             Some(Token {
                 token_type: TokenType::Name,
@@ -725,7 +725,7 @@ impl<'a> Parser<'a> {
                 contents,
             }) if contents == b"false" => {
                 self.lexer.next();
-                self.create_node(NodeType::False, span_start, span_end)
+                self.create_node(AstNode::False, span_start, span_end)
             }
             _ => self.error("expected: boolean"),
         }
@@ -741,67 +741,67 @@ impl<'a> Parser<'a> {
             }) => match token_type {
                 TokenType::Plus => {
                     self.lexer.next();
-                    self.create_node(NodeType::Plus, span_start, span_end)
+                    self.create_node(AstNode::Plus, span_start, span_end)
                 }
                 TokenType::PlusPlus => {
                     self.lexer.next();
-                    self.create_node(NodeType::Append, span_start, span_end)
+                    self.create_node(AstNode::Append, span_start, span_end)
                 }
                 TokenType::Dash => {
                     self.lexer.next();
-                    self.create_node(NodeType::Minus, span_start, span_end)
+                    self.create_node(AstNode::Minus, span_start, span_end)
                 }
                 TokenType::Asterisk => {
                     self.lexer.next();
-                    self.create_node(NodeType::Multiply, span_start, span_end)
+                    self.create_node(AstNode::Multiply, span_start, span_end)
                 }
                 TokenType::ForwardSlash => {
                     self.lexer.next();
-                    self.create_node(NodeType::Divide, span_start, span_end)
+                    self.create_node(AstNode::Divide, span_start, span_end)
                 }
                 TokenType::LessThan => {
                     self.lexer.next();
-                    self.create_node(NodeType::LessThan, span_start, span_end)
+                    self.create_node(AstNode::LessThan, span_start, span_end)
                 }
                 TokenType::LessThanEqual => {
                     self.lexer.next();
-                    self.create_node(NodeType::LessThanOrEqual, span_start, span_end)
+                    self.create_node(AstNode::LessThanOrEqual, span_start, span_end)
                 }
                 TokenType::GreaterThan => {
                     self.lexer.next();
-                    self.create_node(NodeType::GreaterThan, span_start, span_end)
+                    self.create_node(AstNode::GreaterThan, span_start, span_end)
                 }
                 TokenType::GreaterThanEqual => {
                     self.lexer.next();
-                    self.create_node(NodeType::GreaterThanOrEqual, span_start, span_end)
+                    self.create_node(AstNode::GreaterThanOrEqual, span_start, span_end)
                 }
                 TokenType::EqualsEquals => {
                     self.lexer.next();
-                    self.create_node(NodeType::Equal, span_start, span_end)
+                    self.create_node(AstNode::Equal, span_start, span_end)
                 }
                 TokenType::ExclamationEquals => {
                     self.lexer.next();
-                    self.create_node(NodeType::NotEqual, span_start, span_end)
+                    self.create_node(AstNode::NotEqual, span_start, span_end)
                 }
                 TokenType::AsteriskAsterisk => {
                     self.lexer.next();
-                    self.create_node(NodeType::Pow, span_start, span_end)
+                    self.create_node(AstNode::Pow, span_start, span_end)
                 }
                 TokenType::EqualsTilde => {
                     self.lexer.next();
-                    self.create_node(NodeType::RegexMatch, span_start, span_end)
+                    self.create_node(AstNode::RegexMatch, span_start, span_end)
                 }
                 TokenType::ExclamationTilde => {
                     self.lexer.next();
-                    self.create_node(NodeType::NotRegexMatch, span_start, span_end)
+                    self.create_node(AstNode::NotRegexMatch, span_start, span_end)
                 }
                 TokenType::AmpersandAmpersand => {
                     self.lexer.next();
-                    self.create_node(NodeType::And, span_start, span_end)
+                    self.create_node(AstNode::And, span_start, span_end)
                 }
                 TokenType::PipePipe => {
                     self.lexer.next();
-                    self.create_node(NodeType::Or, span_start, span_end)
+                    self.create_node(AstNode::Or, span_start, span_end)
                 }
                 _ => self.error("expected: operator"),
             },
@@ -810,7 +810,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn operator_precedence(&mut self, operator: &NodeId) -> usize {
-        self.delta.node_types[operator.0].precedence()
+        self.delta.ast_nodes[operator.0].precedence()
     }
 
     pub fn spanning(&mut self, from: &NodeId, to: &NodeId) -> (usize, usize) {
@@ -826,7 +826,7 @@ impl<'a> Parser<'a> {
                 ..
             }) => {
                 self.lexer.next();
-                self.create_node(NodeType::String, span_start, span_end)
+                self.create_node(AstNode::String, span_start, span_end)
             }
             _ => self.error("expected: string"),
         }
@@ -841,7 +841,7 @@ impl<'a> Parser<'a> {
                 ..
             }) => {
                 self.lexer.next();
-                self.create_node(NodeType::Name, span_start, span_end)
+                self.create_node(AstNode::Name, span_start, span_end)
             }
             _ => self.error("expect name"),
         }
@@ -859,7 +859,7 @@ impl<'a> Parser<'a> {
 
         let span_end = self.position();
 
-        self.create_node(NodeType::Params(param_list), span_start, span_end)
+        self.create_node(AstNode::Params(param_list), span_start, span_end)
     }
 
     pub fn param_list(&mut self) -> Vec<NodeId> {
@@ -886,14 +886,14 @@ impl<'a> Parser<'a> {
                 let span_end = self.position();
 
                 params.push(self.create_node(
-                    NodeType::Param { name, ty: Some(ty) },
+                    AstNode::Param { name, ty: Some(ty) },
                     span_start,
                     span_end,
                 ))
             } else {
                 let span_end = self.position();
                 params.push(self.create_node(
-                    NodeType::Param { name, ty: None },
+                    AstNode::Param { name, ty: None },
                     span_start,
                     span_end,
                 ))
@@ -914,7 +914,7 @@ impl<'a> Parser<'a> {
             let name_end = name.span_end;
 
             if self.is_lparen() {
-                let head = self.create_node(NodeType::Name, name_start, name_end);
+                let head = self.create_node(AstNode::Name, name_start, name_end);
                 // We're a call
                 self.lparen();
                 let mut args = vec![];
@@ -935,10 +935,10 @@ impl<'a> Parser<'a> {
                 self.rparen();
 
                 let span_end = self.position();
-                self.create_node(NodeType::Call { head, args }, span_start, span_end)
+                self.create_node(AstNode::Call { head, args }, span_start, span_end)
             } else {
                 // We're a variable
-                self.create_node(NodeType::Variable, name_start, name_end)
+                self.create_node(AstNode::Variable, name_start, name_end)
             }
         } else {
             self.error("expected variable or call")
