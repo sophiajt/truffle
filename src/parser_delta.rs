@@ -72,6 +72,16 @@ impl ParserDelta {
                 self.print_helper(params, indent + 2);
                 self.print_helper(block, indent + 2);
             }
+            NodeType::Fn {
+                name,
+                params,
+                block,
+            } => {
+                println!("Fn:",);
+                self.print_helper(name, indent + 2);
+                self.print_helper(params, indent + 2);
+                self.print_helper(block, indent + 2);
+            }
             NodeType::Block(nodes) => {
                 println!(
                     "Block ({}, {}):",

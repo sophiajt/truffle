@@ -459,6 +459,10 @@ impl<'a> Parser<'a> {
                 contents,
                 ..
             }) if contents == b"false" => true,
+            Some(Token {
+                token_type: TokenType::Name,
+                ..
+            }) => true,
             _ => false,
         }
     }
@@ -507,8 +511,13 @@ impl<'a> Parser<'a> {
     pub fn code_block(&mut self, in_block: bool) -> NodeId {
         let span_start = self.position();
         let mut code_body = vec![];
+        if in_block {
+            self.lcurly();
+        }
+
         while self.has_tokens() {
-            if (self.is_rcurly() || self.is_rparen()) && in_block {
+            if self.is_rcurly() && in_block {
+                self.rcurly();
                 break;
             } else if self.is_semicolon() {
                 self.lexer.next();
@@ -570,7 +579,11 @@ impl<'a> Parser<'a> {
         // }
 
         // Otherwise assume a math expression
-        let lhs = self.simple_expression();
+        let lhs = if self.is_simple_expression() {
+            self.simple_expression()
+        } else {
+            return self.error("incomplete math expression");
+        };
 
         expr_stack.push(lhs);
 
@@ -660,8 +673,10 @@ impl<'a> Parser<'a> {
             self.string()
         } else if self.is_number() {
             self.number()
+        } else if self.is_name() {
+            self.variable_or_call()
         } else {
-            panic!("incomplete");
+            panic!("incomplete: {:?}", self.lexer.peek());
             let bare_string = self.name();
             self.delta.node_types[bare_string.0] = NodeType::String;
             return bare_string;
@@ -678,6 +693,14 @@ impl<'a> Parser<'a> {
         } else {
             expr
         }
+    }
+
+    pub fn peek(&mut self) -> Option<Token> {
+        self.lexer.peek()
+    }
+
+    pub fn next(&mut self) -> Option<Token> {
+        self.lexer.next()
     }
 
     pub fn number(&mut self) -> NodeId {
@@ -898,6 +921,48 @@ impl<'a> Parser<'a> {
         }
 
         params
+    }
+
+    pub fn variable_or_call(&mut self) -> NodeId {
+        if self.is_name() {
+            let span_start = self.position();
+
+            let name = self
+                .next()
+                .expect("internal error: missing token that was expected to be there");
+            let name_start = name.span_start;
+            let name_end = name.span_end;
+
+            if self.is_lparen() {
+                let head = self.create_node(NodeType::Name, name_start, name_end);
+                // We're a call
+                self.lparen();
+                let mut args = vec![];
+                loop {
+                    if self.is_simple_expression() {
+                        args.push(self.simple_expression());
+
+                        if self.is_comma() {
+                            self.lexer.next();
+                            continue;
+                        } else if self.is_rparen() {
+                            break;
+                        } else {
+                            args.push(self.error("unexpected value in call arguments"));
+                        }
+                    }
+                }
+                self.rparen();
+
+                let span_end = self.position();
+                self.create_node(NodeType::Call { head, args }, span_start, span_end)
+            } else {
+                // We're a variable
+                self.create_node(NodeType::Variable, name_start, name_end)
+            }
+        } else {
+            self.error("expected variable or call")
+        }
     }
 
     pub fn keyword(&mut self, keyword: &[u8]) {

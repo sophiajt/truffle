@@ -1,15 +1,11 @@
-mod line_editor;
-use line_editor::{LineEditor, ReadLineOutput};
-
+mod errors;
 mod lexer;
-use lexer::Lexer;
-
-use crate::parser::Parser;
-
+mod line_editor;
 mod parser;
 mod parser_delta;
 
-mod errors;
+use crate::parser::Parser;
+use line_editor::{LineEditor, ReadLineOutput};
 
 fn main() {
     let mut line_editor = LineEditor::new();
