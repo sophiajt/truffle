@@ -34,24 +34,18 @@ impl EngineDelta {
         match &self.ast_nodes[node_id.0] {
             AstNode::Let {
                 variable_name,
+                ty,
                 initializer,
+                is_mutable,
             } => {
                 println!(
-                    "Let ({}, {}):",
-                    self.span_start[node_id.0], self.span_end[node_id.0],
+                    "Let ({}, {}, mutable: {}):",
+                    self.span_start[node_id.0], self.span_end[node_id.0], is_mutable
                 );
                 self.print_helper(variable_name, indent + 2);
-                self.print_helper(initializer, indent + 2);
-            }
-            AstNode::LetMut {
-                variable_name,
-                initializer,
-            } => {
-                println!(
-                    "Mut ({}, {}):",
-                    self.span_start[node_id.0], self.span_end[node_id.0],
-                );
-                self.print_helper(variable_name, indent + 2);
+                if let Some(ty) = ty {
+                    self.print_helper(ty, indent + 2);
+                }
                 self.print_helper(initializer, indent + 2);
             }
             AstNode::Param { name, ty } => {

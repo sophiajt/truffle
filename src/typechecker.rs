@@ -76,6 +76,21 @@ impl TypeChecker {
                     self.node_types[node_id.0] = type_id;
                 }
             }
+            AstNode::Let {
+                variable_name,
+                ty,
+                initializer,
+                is_mutable,
+            } => {
+                self.typecheck_node(*initializer, delta);
+
+                // if let Some(ty) = ty {
+                //     self.lookup_typename(*ty, delta)
+                // }
+                self.node_types[variable_name.0] = self.node_types[initializer.0];
+
+                self.node_types[node_id.0] = VOID_TYPE;
+            }
             _ => self.error("unsupported ast node in typechecker", node_id),
         }
     }

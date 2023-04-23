@@ -57,11 +57,9 @@ pub enum AstNode {
     // Statements
     Let {
         variable_name: NodeId,
+        ty: Option<NodeId>,
         initializer: NodeId,
-    },
-    LetMut {
-        variable_name: NodeId,
-        initializer: NodeId,
+        is_mutable: bool,
     },
 
     // Definitions
@@ -522,6 +520,9 @@ impl<'a> Parser<'a> {
                     let p = self.lexer.peek();
                     self.error(format!("new line or semicolon (found {:?})", p));
                 }
+            } else if self.is_keyword(b"let") {
+                let result = self.let_statement();
+                code_body.push(result);
             } else {
                 let span_start = self.position();
                 let expression = self.expression();
@@ -918,6 +919,59 @@ impl<'a> Parser<'a> {
         params
     }
 
+    pub fn let_statement(&mut self) -> NodeId {
+        let mut is_mutable = false;
+        let span_start = self.position();
+
+        self.keyword(b"let");
+
+        if self.is_keyword(b"mut") {
+            is_mutable = true;
+            self.next();
+        }
+
+        let variable_name = self.variable();
+
+        let ty = if self.is_colon() {
+            // We have a type
+            self.colon();
+
+            Some(self.name())
+        } else {
+            None
+        };
+
+        self.equals();
+
+        let initializer = self.expression();
+
+        let span_end = self.position();
+
+        self.create_node(
+            AstNode::Let {
+                variable_name,
+                ty,
+                initializer,
+                is_mutable,
+            },
+            span_start,
+            span_end,
+        )
+    }
+
+    pub fn variable(&mut self) -> NodeId {
+        if self.is_name() {
+            let name = self
+                .next()
+                .expect("internal error: missing token that was expected to be there");
+            let name_start = name.span_start;
+            let name_end = name.span_end;
+            self.create_node(AstNode::Variable, name_start, name_end)
+        } else {
+            self.error("expected variable")
+        }
+    }
+
     pub fn variable_or_call(&mut self) -> NodeId {
         if self.is_name() {
             let span_start = self.position();
@@ -1030,6 +1084,20 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 self.error("expected: right bracket '}'");
+            }
+        }
+    }
+
+    pub fn equals(&mut self) {
+        match self.lexer.peek() {
+            Some(Token {
+                token_type: TokenType::Equals,
+                ..
+            }) => {
+                self.lexer.next();
+            }
+            _ => {
+                self.error("expected: equals '='");
             }
         }
     }
