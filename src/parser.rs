@@ -101,6 +101,7 @@ pub enum AstNode {
         then_block: NodeId,
         else_expression: Option<NodeId>,
     },
+    Statement(NodeId),
     Garbage,
 }
 
@@ -522,7 +523,21 @@ impl<'a> Parser<'a> {
                     self.error(format!("new line or semicolon (found {:?})", p));
                 }
             } else {
-                code_body.push(self.expression());
+                let span_start = self.position();
+                let expression = self.expression();
+                let span_end = self.position();
+
+                if self.is_semicolon() {
+                    // This is a statement, not an expression
+                    self.next();
+                    code_body.push(self.create_node(
+                        AstNode::Statement(expression),
+                        span_start,
+                        span_end,
+                    ))
+                } else {
+                    code_body.push(expression);
+                }
             }
         }
         let span_end = self.position();

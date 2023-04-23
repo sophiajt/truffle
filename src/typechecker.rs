@@ -58,14 +58,22 @@ impl TypeChecker {
                     self.error("mismatch types for operation", node_id)
                 }
             }
+            AstNode::Statement(node) => {
+                self.typecheck_node(*node, delta);
+                self.node_types[node_id.0] = VOID_TYPE;
+            }
             AstNode::Block(nodes) => {
                 if nodes.is_empty() {
                     self.node_types[node_id.0] = VOID_TYPE;
                 } else {
                     // FIXME: grab the last one if it's an expression
+                    let mut type_id = UNKNOWN_TYPE;
                     for node_id in nodes {
-                        self.typecheck_node(*node_id, delta)
+                        self.typecheck_node(*node_id, delta);
+
+                        type_id = self.node_types[node_id.0];
                     }
+                    self.node_types[node_id.0] = type_id;
                 }
             }
             _ => self.error("unsupported ast node in typechecker", node_id),
