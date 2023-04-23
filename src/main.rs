@@ -4,6 +4,13 @@ use line_editor::{LineEditor, ReadLineOutput};
 mod lexer;
 use lexer::Lexer;
 
+use crate::parser::Parser;
+
+mod parser;
+mod parser_delta;
+
+mod errors;
+
 fn main() {
     let mut line_editor = LineEditor::new();
 
@@ -21,11 +28,17 @@ fn main() {
                 }
                 println!("line: {line}");
 
-                let mut lexer = Lexer::new(line.as_bytes(), 0);
+                let mut parser = Parser::new(line.as_bytes(), 0, 0);
 
-                while let Some(token) = lexer.next() {
-                    println!("token: {:?}", token);
+                parser.parse();
+
+                for error in &parser.errors {
+                    println!("error: {:?}", error);
                 }
+
+                let result = parser.delta;
+
+                result.print();
             }
             Err(err) => {
                 println!("{:?}", err);

@@ -14,6 +14,8 @@ pub enum TokenType {
     Dot,
     DotDot,
     Name,
+    Pipe,
+    PipePipe,
     Colon,
     Semicolon,
     Plus,
@@ -177,7 +179,6 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn skip_space(&mut self) {
-        let span_start = self.span_offset;
         let mut token_offset = 0;
         let whitespace: &[u8] = &[b' ', b'\t', b'\r', b'\n'];
         while token_offset < self.source.len() {
@@ -187,20 +188,16 @@ impl<'a> Lexer<'a> {
             token_offset += 1;
         }
         self.span_offset += token_offset;
-
-        let contents = &self.source[..token_offset];
         self.source = &self.source[token_offset..];
     }
 
     pub fn lex_name(&mut self) -> Option<Token<'a>> {
         let span_start = self.span_offset;
         let mut token_offset = 0;
-        while token_offset < self.source.len() {
-            if self.source[token_offset].is_ascii_whitespace()
-                || is_symbol(self.source[token_offset])
-            {
-                break;
-            }
+        while token_offset < self.source.len()
+            && (self.source[token_offset].is_ascii_alphanumeric()
+                || self.source[token_offset] == b'_')
+        {
             token_offset += 1;
         }
         self.span_offset += token_offset;
@@ -417,6 +414,23 @@ impl<'a> Lexer<'a> {
                 } else {
                     Token {
                         token_type: TokenType::Exclamation,
+                        contents: &self.source[..1],
+                        span_start,
+                        span_end: span_start + 1,
+                    }
+                }
+            }
+            b'|' => {
+                if self.source.len() > 1 && self.source[1] == b'|' {
+                    Token {
+                        token_type: TokenType::PipePipe,
+                        contents: &self.source[..2],
+                        span_start,
+                        span_end: span_start + 2,
+                    }
+                } else {
+                    Token {
+                        token_type: TokenType::Pipe,
                         contents: &self.source[..1],
                         span_start,
                         span_end: span_start + 1,
