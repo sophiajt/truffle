@@ -4,7 +4,7 @@ use crate::lexer::{Lexer, Token, TokenType};
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
-    pub delta: EngineDelta,
+    pub delta: EngineDelta<'a>,
     pub errors: Vec<ScriptError>,
     content_length: usize,
 }
@@ -15,6 +15,7 @@ pub enum AstNode {
     Float,
     String,
     Name,
+    Type,
     Variable,
 
     // Command-specific
@@ -142,7 +143,7 @@ impl<'a> Parser<'a> {
 
         Self {
             lexer: Lexer::new(source, span_offset),
-            delta: EngineDelta::new(node_id_offset),
+            delta: EngineDelta::new(node_id_offset, source),
             errors: vec![],
             content_length,
         }
@@ -863,6 +864,21 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn typename(&mut self) -> NodeId {
+        match self.lexer.peek() {
+            Some(Token {
+                token_type: TokenType::Name,
+                span_start,
+                span_end,
+                ..
+            }) => {
+                self.lexer.next();
+                self.create_node(AstNode::Type, span_start, span_end)
+            }
+            _ => self.error("expect name"),
+        }
+    }
+
     pub fn params(&mut self) -> NodeId {
         let span_start = self.position();
         let param_list = {
@@ -936,7 +952,7 @@ impl<'a> Parser<'a> {
             // We have a type
             self.colon();
 
-            Some(self.name())
+            Some(self.typename())
         } else {
             None
         };

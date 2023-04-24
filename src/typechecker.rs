@@ -76,6 +76,21 @@ impl TypeChecker {
                     self.node_types[node_id.0] = type_id;
                 }
             }
+            AstNode::Type => {
+                let span_start = delta.span_start[node_id.0];
+                let span_end = delta.span_end[node_id.0];
+
+                let contents = &delta.contents[span_start..span_end];
+
+                match contents {
+                    b"i64" => self.node_types[node_id.0] = I64_TYPE,
+                    b"f64" => self.node_types[node_id.0] = F64_TYPE,
+                    _ => self.error(
+                        format!("unknown type: {}", String::from_utf8_lossy(contents)),
+                        node_id,
+                    ),
+                }
+            }
             AstNode::Let {
                 variable_name,
                 ty,
@@ -84,9 +99,12 @@ impl TypeChecker {
             } => {
                 self.typecheck_node(*initializer, delta);
 
-                // if let Some(ty) = ty {
-                //     self.lookup_typename(*ty, delta)
-                // }
+                if let Some(ty) = ty {
+                    self.typecheck_node(*ty, delta)
+
+                    // TODO: Check to make sure the initializer matches the ty
+                }
+
                 self.node_types[variable_name.0] = self.node_types[initializer.0];
 
                 self.node_types[node_id.0] = VOID_TYPE;
