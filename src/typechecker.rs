@@ -81,7 +81,7 @@ impl<'source> TypeChecker<'source> {
                     if lhs_ty != rhs_ty {
                         self.error("mismatched types during assignment", node_id)
                     }
-                    if !matches!(lhs, AstNode::Variable(_)) {
+                    if !matches!(lhs, AstNode::Variable) {
                         self.error("assignment should use a variable on the left side", node_id)
                     }
                     self.node_types[node_id.0] = VOID_TYPE;
@@ -153,7 +153,7 @@ impl<'source> TypeChecker<'source> {
 
                 self.node_types[node_id.0] = VOID_TYPE;
             }
-            AstNode::Variable(unbound_node_id) => self.resolve_variable(unbound_node_id, delta),
+            AstNode::Variable => self.resolve_variable(&node_id, delta),
             _ => self.error("unsupported ast node in typechecker", node_id),
         }
     }

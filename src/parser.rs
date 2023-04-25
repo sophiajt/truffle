@@ -16,7 +16,7 @@ pub enum AstNode {
     String,
     Name,
     Type,
-    Variable(NodeId), // Holds the NodeId of its def as it resolves
+    Variable,
 
     // Booleans
     True,
@@ -953,12 +953,7 @@ impl<'source> Parser<'source> {
                 .expect("internal error: missing token that was expected to be there");
             let name_start = name.span_start;
             let name_end = name.span_end;
-            let next_node_id = self.delta.node_id_offset + self.delta.ast_nodes.len();
-            self.create_node(
-                AstNode::Variable(NodeId(next_node_id)),
-                name_start,
-                name_end,
-            )
+            self.create_node(AstNode::Variable, name_start, name_end)
         } else {
             self.error("expected variable")
         }
@@ -999,12 +994,7 @@ impl<'source> Parser<'source> {
                 self.create_node(AstNode::Call { head, args }, span_start, span_end)
             } else {
                 // We're a variable
-                let next_node_id = self.delta.node_id_offset + self.delta.ast_nodes.len();
-                self.create_node(
-                    AstNode::Variable(NodeId(next_node_id)),
-                    name_start,
-                    name_end,
-                )
+                self.create_node(AstNode::Variable, name_start, name_end)
             }
         } else {
             self.error("expected variable or call")
