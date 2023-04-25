@@ -7,7 +7,7 @@ use crate::{
 #[derive(Clone, Copy, Debug)]
 pub struct ValueId(usize);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ValueType {
     Unknown,
     Void,
@@ -16,7 +16,7 @@ pub enum ValueType {
     Bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Value {
     ty: ValueType,
     val: i64,
@@ -57,6 +57,28 @@ pub enum Instruction {
         rhs: ValueId,
         target: ValueId,
     },
+
+    // Integer comparisons (e.g., ILT = Integer + LessThan)
+    ILT {
+        lhs: ValueId,
+        rhs: ValueId,
+        target: ValueId,
+    },
+    ILTE {
+        lhs: ValueId,
+        rhs: ValueId,
+        target: ValueId,
+    },
+    IGT {
+        lhs: ValueId,
+        rhs: ValueId,
+        target: ValueId,
+    },
+    IGTE {
+        lhs: ValueId,
+        rhs: ValueId,
+        target: ValueId,
+    },
 }
 
 pub struct FunctionCodegen {
@@ -77,6 +99,14 @@ impl FunctionCodegen {
 
     pub fn i64_const(&mut self, value: i64) -> ValueId {
         self.new_register_with_value(Value::new_i64(ValueType::I64, value))
+    }
+
+    pub fn bool_const(&mut self, value: bool) -> ValueId {
+        if value {
+            self.new_register_with_value(Value::new_i64(ValueType::Bool, 1))
+        } else {
+            self.new_register_with_value(Value::new_i64(ValueType::Bool, 0))
+        }
     }
 
     pub fn iadd(&mut self, lhs: ValueId, rhs: ValueId) -> ValueId {
@@ -115,6 +145,42 @@ impl FunctionCodegen {
         target
     }
 
+    pub fn ilt(&mut self, lhs: ValueId, rhs: ValueId) -> ValueId {
+        let target = self.new_register(ValueType::Bool);
+
+        self.instructions
+            .push(Instruction::ILT { lhs, rhs, target });
+
+        target
+    }
+
+    pub fn ilte(&mut self, lhs: ValueId, rhs: ValueId) -> ValueId {
+        let target = self.new_register(ValueType::Bool);
+
+        self.instructions
+            .push(Instruction::ILTE { lhs, rhs, target });
+
+        target
+    }
+
+    pub fn igt(&mut self, lhs: ValueId, rhs: ValueId) -> ValueId {
+        let target = self.new_register(ValueType::Bool);
+
+        self.instructions
+            .push(Instruction::IGT { lhs, rhs, target });
+
+        target
+    }
+
+    pub fn igte(&mut self, lhs: ValueId, rhs: ValueId) -> ValueId {
+        let target = self.new_register(ValueType::Bool);
+
+        self.instructions
+            .push(Instruction::IGTE { lhs, rhs, target });
+
+        target
+    }
+
     pub fn eval(&mut self) -> Value {
         let mut output = ValueId(0);
         for instr in &self.instructions {
@@ -148,6 +214,38 @@ impl FunctionCodegen {
                     let rhs = &self.registers[rhs.0];
 
                     self.registers[target.0].val = lhs.val / rhs.val;
+
+                    output = *target;
+                }
+                Instruction::ILT { lhs, rhs, target } => {
+                    let lhs = &self.registers[lhs.0];
+                    let rhs = &self.registers[rhs.0];
+
+                    self.registers[target.0].val = (lhs.val < rhs.val) as i64;
+
+                    output = *target;
+                }
+                Instruction::ILTE { lhs, rhs, target } => {
+                    let lhs = &self.registers[lhs.0];
+                    let rhs = &self.registers[rhs.0];
+
+                    self.registers[target.0].val = (lhs.val <= rhs.val) as i64;
+
+                    output = *target;
+                }
+                Instruction::IGT { lhs, rhs, target } => {
+                    let lhs = &self.registers[lhs.0];
+                    let rhs = &self.registers[rhs.0];
+
+                    self.registers[target.0].val = (lhs.val > rhs.val) as i64;
+
+                    output = *target;
+                }
+                Instruction::IGTE { lhs, rhs, target } => {
+                    let lhs = &self.registers[lhs.0];
+                    let rhs = &self.registers[rhs.0];
+
+                    self.registers[target.0].val = (lhs.val >= rhs.val) as i64;
 
                     output = *target;
                 }
@@ -206,6 +304,8 @@ impl Translater {
                 self.translate_binop(builder, *lhs, *op, *rhs, delta, typechecker)
             }
             AstNode::Block(nodes) => self.translate_block(builder, nodes, delta, typechecker),
+            AstNode::True => builder.bool_const(true),
+            AstNode::False => builder.bool_const(false),
             _ => panic!("unsupported translation"),
         }
     }
@@ -242,6 +342,10 @@ impl Translater {
             AstNode::Minus => builder.isub(lhs, rhs),
             AstNode::Multiply => builder.imul(lhs, rhs),
             AstNode::Divide => builder.idiv(lhs, rhs),
+            AstNode::LessThan => builder.ilt(lhs, rhs),
+            AstNode::LessThanOrEqual => builder.ilt(lhs, rhs),
+            AstNode::GreaterThan => builder.igt(lhs, rhs),
+            AstNode::GreaterThanOrEqual => builder.igte(lhs, rhs),
             _ => panic!("unsupported operation"),
         }
     }
