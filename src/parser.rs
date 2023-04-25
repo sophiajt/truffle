@@ -51,6 +51,11 @@ pub enum AstNode {
         condition: NodeId,
         block: NodeId,
     },
+    For {
+        variable: NodeId,
+        range: NodeId,
+        block: NodeId,
+    },
 
     // Definitions
     Fn {
@@ -499,6 +504,9 @@ impl<'source> Parser<'source> {
                 code_body.push(result);
             } else if self.is_keyword(b"while") {
                 let result = self.while_statement();
+                code_body.push(result);
+            } else if self.is_keyword(b"for") {
+                let result = self.for_statement();
                 code_body.push(result);
             } else {
                 let span_start = self.position();
@@ -987,6 +995,28 @@ impl<'source> Parser<'source> {
         let span_end = self.position();
 
         self.create_node(AstNode::While { condition, block }, span_start, span_end)
+    }
+
+    pub fn for_statement(&mut self) -> NodeId {
+        let span_start = self.position();
+        self.keyword(b"for");
+
+        let variable = self.variable();
+        self.keyword(b"in");
+
+        let range = self.simple_expression();
+        let block = self.block(true);
+        let span_end = self.position();
+
+        self.create_node(
+            AstNode::For {
+                variable,
+                range,
+                block,
+            },
+            span_start,
+            span_end,
+        )
     }
 
     pub fn variable(&mut self) -> NodeId {

@@ -111,24 +111,7 @@ impl<'source> TypeChecker<'source> {
                 ty,
                 initializer,
                 is_mutable,
-            } => {
-                self.typecheck_node(*initializer, delta);
-
-                if let Some(ty) = ty {
-                    self.typecheck_node(*ty, delta);
-
-                    // TODO make this a compatibility check rather than equality check
-                    if self.node_types[ty.0] != self.node_types[initializer.0] {
-                        self.error("initializer does not match declared type", *initializer)
-                    }
-                }
-
-                self.define_variable(*variable_name, delta);
-
-                self.node_types[variable_name.0] = self.node_types[initializer.0];
-
-                self.node_types[node_id.0] = VOID_TYPE;
-            }
+            } => self.typecheck_let(*variable_name, *ty, *initializer, node_id, delta),
             AstNode::Variable => self.resolve_variable(node_id, delta),
             AstNode::If {
                 condition,
@@ -138,6 +121,11 @@ impl<'source> TypeChecker<'source> {
             AstNode::While { condition, block } => {
                 self.typecheck_while(*condition, *block, node_id, delta)
             }
+            AstNode::For {
+                variable,
+                range,
+                block,
+            } => self.typecheck_for(*variable, *range, *block, node_id, delta),
             AstNode::True => self.node_types[node_id.0] = BOOL_TYPE,
             AstNode::False => self.node_types[node_id.0] = BOOL_TYPE,
             AstNode::Range { lhs, rhs } => self.typecheck_range(*lhs, *rhs, node_id, delta),
@@ -152,6 +140,31 @@ impl<'source> TypeChecker<'source> {
         }
     }
 
+    pub fn typecheck_let(
+        &mut self,
+        variable_name: NodeId,
+        ty: Option<NodeId>,
+        initializer: NodeId,
+        node_id: NodeId,
+        delta: &'source EngineDelta,
+    ) {
+        self.typecheck_node(initializer, delta);
+
+        if let Some(ty) = ty {
+            self.typecheck_node(ty, delta);
+
+            // TODO make this a compatibility check rather than equality check
+            if self.node_types[ty.0] != self.node_types[initializer.0] {
+                self.error("initializer does not match declared type", initializer)
+            }
+        }
+
+        self.define_variable(variable_name, delta);
+
+        self.node_types[variable_name.0] = self.node_types[initializer.0];
+
+        self.node_types[node_id.0] = VOID_TYPE;
+    }
     pub fn typecheck_if(
         &mut self,
         condition: NodeId,
@@ -197,6 +210,34 @@ impl<'source> TypeChecker<'source> {
         }
 
         self.typecheck_node(block, delta);
+
+        self.node_types[node_id.0] = VOID_TYPE;
+    }
+
+    pub fn typecheck_for(
+        &mut self,
+        variable_name: NodeId,
+        range: NodeId,
+        block: NodeId,
+        node_id: NodeId,
+        delta: &'source EngineDelta,
+    ) {
+        self.typecheck_node(range, delta);
+        let range_ty = self.node_types[range.0];
+
+        let range_inner_ty = match &self.types[range_ty.0] {
+            Type::Range(range_inner_ty) => *range_inner_ty,
+            _ => {
+                self.error("expected range value in for loop", range);
+                UNKNOWN_TYPE
+            }
+        };
+
+        self.typecheck_node(block, delta);
+
+        self.define_variable(variable_name, delta);
+
+        self.node_types[variable_name.0] = range_inner_ty;
 
         self.node_types[node_id.0] = VOID_TYPE;
     }
