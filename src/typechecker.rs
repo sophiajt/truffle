@@ -137,6 +137,7 @@ impl<'source> TypeChecker<'source> {
             } => self.typecheck_if(*condition, *then_block, *else_expression, node_id, delta),
             AstNode::True => self.node_types[node_id.0] = BOOL_TYPE,
             AstNode::False => self.node_types[node_id.0] = BOOL_TYPE,
+            AstNode::Range { lhs, rhs } => self.typecheck_range(*lhs, *rhs, node_id, delta),
             _ => self.error("unsupported ast node in typechecker", node_id),
         }
     }
@@ -232,6 +233,33 @@ impl<'source> TypeChecker<'source> {
         }
     }
 
+    pub fn typecheck_range(
+        &mut self,
+        lhs: NodeId,
+        rhs: NodeId,
+        node_id: NodeId,
+        delta: &'source EngineDelta,
+    ) {
+        self.typecheck_node(lhs, delta);
+        self.typecheck_node(rhs, delta);
+
+        let lhs_ty = self.node_types[lhs.0];
+        let rhs_ty = self.node_types[rhs.0];
+
+        // For now, require both sides to be i64
+        if lhs_ty != I64_TYPE {
+            self.error("expected i64 for range", lhs)
+        }
+
+        if rhs_ty != I64_TYPE {
+            self.error("expected i64 for range", rhs)
+        }
+
+        let type_id = self.create_or_find_type(Type::Range(I64_TYPE));
+
+        self.node_types[node_id.0] = type_id
+    }
+
     pub fn define_variable(&mut self, variable_name_node_id: NodeId, delta: &'source EngineDelta) {
         let variable_name = &delta.contents
             [delta.span_start[variable_name_node_id.0]..delta.span_end[variable_name_node_id.0]];
@@ -264,6 +292,19 @@ impl<'source> TypeChecker<'source> {
         None
     }
 
+    pub fn create_or_find_type(&mut self, ty: Type) -> TypeId {
+        let mut idx = 0;
+        while idx < self.types.len() {
+            if self.types[idx] == ty {
+                return TypeId(idx);
+            }
+            idx += 1;
+        }
+        self.types.push(ty);
+
+        TypeId(self.types.len() - 1)
+    }
+
     pub fn enter_scope(&mut self) {
         self.scope.push(Scope::new());
     }
@@ -273,11 +314,13 @@ impl<'source> TypeChecker<'source> {
     }
 }
 
+#[derive(PartialEq)]
 pub enum Type {
     Unknown,
     Void,
     I64,
     F64,
     Bool,
+    Range(TypeId),
     Fn(Vec<TypeId>, TypeId),
 }

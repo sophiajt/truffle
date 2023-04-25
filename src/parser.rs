@@ -29,8 +29,6 @@ pub enum AstNode {
     GreaterThan,
     LessThanOrEqual,
     GreaterThanOrEqual,
-    RegexMatch,
-    NotRegexMatch,
     Plus,
     Append,
     Minus,
@@ -148,11 +146,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_operator(&mut self) -> bool {
         match self.lexer.peek() {
-            Some(Token {
-                token_type,
-                contents,
-                ..
-            }) => match token_type {
+            Some(Token { token_type, .. }) => match token_type {
                 TokenType::Asterisk
                 | TokenType::AsteriskAsterisk
                 | TokenType::Dash
