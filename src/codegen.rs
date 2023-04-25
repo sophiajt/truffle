@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use crate::{
-    delta::{self, EngineDelta},
+    delta::EngineDelta,
     parser::{AstNode, NodeId},
-    typechecker::TypeChecker,
+    typechecker::{TypeChecker, I64_TYPE},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -78,6 +80,11 @@ pub enum Instruction {
         lhs: ValueId,
         rhs: ValueId,
         target: ValueId,
+    },
+
+    MOV {
+        target: ValueId,
+        source: ValueId,
     },
 }
 
@@ -181,6 +188,12 @@ impl FunctionCodegen {
         target
     }
 
+    pub fn mov(&mut self, target: ValueId, source: ValueId) -> ValueId {
+        self.instructions.push(Instruction::MOV { target, source });
+
+        target
+    }
+
     pub fn eval(&mut self) -> Value {
         let mut output = ValueId(0);
         for instr in &self.instructions {
@@ -249,6 +262,9 @@ impl FunctionCodegen {
 
                     output = *target;
                 }
+                Instruction::MOV { target, source } => {
+                    self.registers[target.0].val = self.registers[source.0].val;
+                }
             }
         }
 
@@ -267,11 +283,15 @@ impl FunctionCodegen {
     }
 }
 
-pub struct Translater {}
+pub struct Translater {
+    var_lookup: HashMap<NodeId, ValueId>,
+}
 
 impl Translater {
     pub fn new() -> Self {
-        Translater {}
+        Translater {
+            var_lookup: HashMap::new(),
+        }
     }
 
     pub fn translate<'source>(
@@ -306,7 +326,16 @@ impl Translater {
             AstNode::Block(nodes) => self.translate_block(builder, nodes, delta, typechecker),
             AstNode::True => builder.bool_const(true),
             AstNode::False => builder.bool_const(false),
-            _ => panic!("unsupported translation"),
+            AstNode::Let {
+                variable_name,
+                initializer,
+                ..
+            } => self.translate_var_decl(builder, *variable_name, *initializer, delta, typechecker),
+            AstNode::Variable => self.translate_variable(node_id, typechecker),
+            AstNode::Statement(node_id) => {
+                self.translate_node(builder, *node_id, delta, typechecker)
+            }
+            x => panic!("unsupported translation: {:?}", x),
         }
     }
 
@@ -343,11 +372,47 @@ impl Translater {
             AstNode::Multiply => builder.imul(lhs, rhs),
             AstNode::Divide => builder.idiv(lhs, rhs),
             AstNode::LessThan => builder.ilt(lhs, rhs),
-            AstNode::LessThanOrEqual => builder.ilt(lhs, rhs),
+            AstNode::LessThanOrEqual => builder.ilte(lhs, rhs),
             AstNode::GreaterThan => builder.igt(lhs, rhs),
             AstNode::GreaterThanOrEqual => builder.igte(lhs, rhs),
+            AstNode::Assignment => builder.mov(lhs, rhs),
             _ => panic!("unsupported operation"),
         }
+    }
+
+    pub fn translate_var_decl<'source>(
+        &mut self,
+        builder: &mut FunctionCodegen,
+        variable_name: NodeId,
+        initializer: NodeId,
+        delta: &'source EngineDelta,
+        typechecker: &TypeChecker,
+    ) -> ValueId {
+        //let ty = typechecker.node_types[variable_name.0];
+
+        let initializer = self.translate_node(builder, initializer, delta, typechecker);
+
+        self.var_lookup.insert(variable_name, initializer);
+
+        initializer
+    }
+
+    pub fn translate_variable<'source>(
+        &mut self,
+        variable_name: NodeId,
+        typechecker: &TypeChecker,
+    ) -> ValueId {
+        let def_site = typechecker
+            .variable_def
+            .get(&variable_name)
+            .expect("internal error: resolved variable not found");
+
+        let value_id = self
+            .var_lookup
+            .get(def_site)
+            .expect("internal error: resolved variable missing definition");
+
+        *value_id
     }
 
     pub fn translate_block<'source>(
