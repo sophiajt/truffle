@@ -646,7 +646,10 @@ impl<'source> Parser<'source> {
         let expr = if self.is_lcurly() {
             self.code_block(true)
         } else if self.is_lparen() {
-            self.expression()
+            self.lparen();
+            let output = self.expression();
+            self.rparen();
+            output
         } else if self.is_keyword(b"true") || self.is_keyword(b"false") {
             self.boolean()
         } else if self.is_string() {
@@ -1014,6 +1017,8 @@ impl<'source> Parser<'source> {
                         } else {
                             args.push(self.error("unexpected value in call arguments"));
                         }
+                    } else {
+                        break;
                     }
                 }
                 self.rparen();
