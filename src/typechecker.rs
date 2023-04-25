@@ -39,13 +39,14 @@ pub const UNKNOWN_TYPE: TypeId = TypeId(0);
 pub const VOID_TYPE: TypeId = TypeId(1);
 pub const I64_TYPE: TypeId = TypeId(2);
 pub const F64_TYPE: TypeId = TypeId(3);
+pub const BOOL_TYPE: TypeId = TypeId(4);
 
 impl<'source> TypeChecker<'source> {
     pub fn new(node_count: usize) -> Self {
         let node_types = vec![UNKNOWN_TYPE; node_count];
 
         Self {
-            types: vec![Type::Unknown, Type::Void, Type::I64, Type::F64],
+            types: vec![Type::Unknown, Type::Void, Type::I64, Type::F64, Type::Bool],
             errors: vec![],
 
             node_types,
@@ -68,32 +69,7 @@ impl<'source> TypeChecker<'source> {
                 self.node_types[node_id.0] = I64_TYPE;
             }
             AstNode::BinaryOp { lhs, op, rhs } => {
-                self.typecheck_node(*lhs, delta);
-                self.typecheck_node(*rhs, delta);
-
-                let lhs_ty = self.node_types[lhs.0];
-                let rhs_ty = self.node_types[rhs.0];
-                let lhs = &delta.ast_nodes[lhs.0];
-                let op = &delta.ast_nodes[op.0];
-
-                if op == &AstNode::Assignment {
-                    // FIXME: replace with compatibility check rather than an equality check
-                    if lhs_ty != rhs_ty {
-                        self.error("mismatched types during assignment", node_id)
-                    }
-                    if !matches!(lhs, AstNode::Variable) {
-                        self.error("assignment should use a variable on the left side", node_id)
-                    }
-                    self.node_types[node_id.0] = VOID_TYPE;
-                } else {
-                    if lhs_ty == I64_TYPE && rhs_ty == I64_TYPE {
-                        self.node_types[node_id.0] = I64_TYPE;
-                    } else if lhs_ty == F64_TYPE && rhs_ty == F64_TYPE {
-                        self.node_types[node_id.0] = F64_TYPE;
-                    } else {
-                        self.error("mismatch types for operation", node_id)
-                    }
-                }
+                self.typecheck_binop(*lhs, *op, *rhs, node_id, delta);
             }
             AstNode::Statement(node) => {
                 self.typecheck_node(*node, delta);
@@ -147,13 +123,20 @@ impl<'source> TypeChecker<'source> {
                     }
                 }
 
-                self.define_variable(variable_name, delta);
+                self.define_variable(*variable_name, delta);
 
                 self.node_types[variable_name.0] = self.node_types[initializer.0];
 
                 self.node_types[node_id.0] = VOID_TYPE;
             }
-            AstNode::Variable => self.resolve_variable(&node_id, delta),
+            AstNode::Variable => self.resolve_variable(node_id, delta),
+            AstNode::If {
+                condition,
+                then_block,
+                else_expression,
+            } => self.typecheck_if(*condition, *then_block, *else_expression, node_id, delta),
+            AstNode::True => self.node_types[node_id.0] = BOOL_TYPE,
+            AstNode::False => self.node_types[node_id.0] = BOOL_TYPE,
             _ => self.error("unsupported ast node in typechecker", node_id),
         }
     }
@@ -165,25 +148,109 @@ impl<'source> TypeChecker<'source> {
         }
     }
 
-    pub fn define_variable(&mut self, variable_name_node_id: &NodeId, delta: &'source EngineDelta) {
+    pub fn typecheck_if(
+        &mut self,
+        condition: NodeId,
+        then_block: NodeId,
+        else_expression: Option<NodeId>,
+        node_id: NodeId,
+        delta: &'source EngineDelta,
+    ) {
+        self.typecheck_node(condition, delta);
+        let condition_ty = self.node_types[condition.0];
+
+        if condition_ty != BOOL_TYPE {
+            self.error("expected bool for if condition", condition);
+        }
+
+        self.typecheck_node(then_block, delta);
+        let then_ty = self.node_types[then_block.0];
+
+        if let Some(else_expression) = else_expression {
+            self.typecheck_node(else_expression, delta);
+            let else_ty = self.node_types[else_expression.0];
+
+            if then_ty != else_ty {
+                self.error("then and else output different types", else_expression)
+            }
+        }
+
+        self.node_types[node_id.0] = then_ty
+    }
+
+    pub fn typecheck_binop(
+        &mut self,
+        lhs: NodeId,
+        op: NodeId,
+        rhs: NodeId,
+        node_id: NodeId, // whole expression NodeId
+        delta: &'source EngineDelta,
+    ) {
+        self.typecheck_node(lhs, delta);
+        self.typecheck_node(rhs, delta);
+
+        let lhs_ty = self.node_types[lhs.0];
+        let rhs_ty = self.node_types[rhs.0];
+        let lhs = &delta.ast_nodes[lhs.0];
+        let op = &delta.ast_nodes[op.0];
+
+        match op {
+            AstNode::Assignment => {
+                // FIXME: replace with compatibility check rather than an equality check
+                if lhs_ty != rhs_ty {
+                    self.error("mismatched types during assignment", node_id)
+                }
+                if !matches!(lhs, AstNode::Variable) {
+                    self.error("assignment should use a variable on the left side", node_id)
+                }
+                self.node_types[node_id.0] = VOID_TYPE;
+            }
+            AstNode::LessThan
+            | AstNode::LessThanOrEqual
+            | AstNode::GreaterThan
+            | AstNode::GreaterThanOrEqual => {
+                if (lhs_ty == I64_TYPE && rhs_ty == I64_TYPE)
+                    || (lhs_ty == F64_TYPE && rhs_ty == F64_TYPE)
+                {
+                    self.node_types[node_id.0] = BOOL_TYPE;
+                } else {
+                    self.error("mismatch types for operation", node_id)
+                }
+            }
+            AstNode::Equal | AstNode::NotEqual => {
+                self.node_types[node_id.0] = BOOL_TYPE;
+            }
+            _ => {
+                if lhs_ty == I64_TYPE && rhs_ty == I64_TYPE {
+                    self.node_types[node_id.0] = I64_TYPE;
+                } else if lhs_ty == F64_TYPE && rhs_ty == F64_TYPE {
+                    self.node_types[node_id.0] = F64_TYPE;
+                } else {
+                    self.error("mismatch types for operation", node_id)
+                }
+            }
+        }
+    }
+
+    pub fn define_variable(&mut self, variable_name_node_id: NodeId, delta: &'source EngineDelta) {
         let variable_name = &delta.contents
             [delta.span_start[variable_name_node_id.0]..delta.span_end[variable_name_node_id.0]];
         self.scope
             .last_mut()
             .expect("internal error: missing expected scope frame")
             .variables
-            .insert(variable_name, *variable_name_node_id);
+            .insert(variable_name, variable_name_node_id);
     }
 
-    pub fn resolve_variable(&mut self, unbound_node_id: &NodeId, delta: &'source EngineDelta) {
+    pub fn resolve_variable(&mut self, unbound_node_id: NodeId, delta: &'source EngineDelta) {
         let variable_name =
             &delta.contents[delta.span_start[unbound_node_id.0]..delta.span_end[unbound_node_id.0]];
 
         if let Some(node_id) = self.find_variable(variable_name) {
-            self.variable_def.insert(*unbound_node_id, node_id);
+            self.variable_def.insert(unbound_node_id, node_id);
             self.node_types[unbound_node_id.0] = self.node_types[node_id.0];
         } else {
-            self.error("variable not found", *unbound_node_id)
+            self.error("variable not found", unbound_node_id)
         }
     }
 
@@ -211,5 +278,6 @@ pub enum Type {
     Void,
     I64,
     F64,
+    Bool,
     Fn(Vec<TypeId>, TypeId),
 }

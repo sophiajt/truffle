@@ -550,9 +550,10 @@ impl<'source> Parser<'source> {
 
         let mut last_prec = 1000000;
 
-        // // Check for special forms
-        // if self.is_keyword(b"if") {
-        //     return self.if_expression();
+        // Check for special forms
+        if self.is_keyword(b"if") {
+            return self.if_expression();
+        }
         // } else if self.is_keyword(b"where") {
         //     return self.where_expression();
         // }
@@ -569,7 +570,7 @@ impl<'source> Parser<'source> {
         while self.has_tokens() {
             if self.is_operator() {
                 let op = self.operator();
-                let op_prec = self.operator_precedence(&op);
+                let op_prec = self.operator_precedence(op);
 
                 let rhs = if self.is_simple_expression() {
                     self.simple_expression()
@@ -585,7 +586,7 @@ impl<'source> Parser<'source> {
                         .pop()
                         .expect("internal error: expression stack empty");
 
-                    last_prec = self.operator_precedence(&op);
+                    last_prec = self.operator_precedence(op);
 
                     if last_prec < op_prec {
                         expr_stack.push(op);
@@ -597,7 +598,7 @@ impl<'source> Parser<'source> {
                         .pop()
                         .expect("internal error: expression stack empty");
 
-                    let (span_start, span_end) = self.spanning(&lhs, &rhs);
+                    let (span_start, span_end) = self.spanning(lhs, rhs);
                     expr_stack.push(self.create_node(
                         AstNode::BinaryOp { lhs, op, rhs },
                         span_start,
@@ -625,7 +626,7 @@ impl<'source> Parser<'source> {
                 .pop()
                 .expect("internal error: expression stack empty");
 
-            let (span_start, span_end) = self.spanning(&lhs, &rhs);
+            let (span_start, span_end) = self.spanning(lhs, rhs);
 
             expr_stack.push(self.create_node(
                 AstNode::BinaryOp { lhs, op, rhs },
@@ -797,11 +798,11 @@ impl<'source> Parser<'source> {
         }
     }
 
-    pub fn operator_precedence(&mut self, operator: &NodeId) -> usize {
+    pub fn operator_precedence(&mut self, operator: NodeId) -> usize {
         self.delta.ast_nodes[operator.0].precedence()
     }
 
-    pub fn spanning(&mut self, from: &NodeId, to: &NodeId) -> (usize, usize) {
+    pub fn spanning(&mut self, from: NodeId, to: NodeId) -> (usize, usize) {
         (self.delta.span_start[from.0], self.delta.span_end[to.0])
     }
 
@@ -904,6 +905,33 @@ impl<'source> Parser<'source> {
         }
 
         params
+    }
+
+    pub fn if_expression(&mut self) -> NodeId {
+        let span_start = self.position();
+        self.keyword(b"if");
+
+        let condition = self.expression();
+
+        let then_block = self.code_block(true);
+
+        let else_expression = if self.is_keyword(b"else") {
+            self.lexer.next();
+            Some(self.expression())
+        } else {
+            None
+        };
+        let span_end = self.position();
+
+        self.create_node(
+            AstNode::If {
+                condition,
+                then_block,
+                else_expression,
+            },
+            span_start,
+            span_end,
+        )
     }
 
     pub fn let_statement(&mut self) -> NodeId {
