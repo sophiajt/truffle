@@ -2,25 +2,21 @@ use crate::delta::EngineDelta;
 use crate::errors::ScriptError;
 use crate::lexer::{Lexer, Token, TokenType};
 
-pub struct Parser<'a> {
-    lexer: Lexer<'a>,
-    pub delta: EngineDelta<'a>,
+pub struct Parser<'source> {
+    lexer: Lexer<'source>,
+    pub delta: EngineDelta<'source>,
     pub errors: Vec<ScriptError>,
     content_length: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum AstNode {
     Int,
     Float,
     String,
     Name,
     Type,
-    Variable,
-
-    // Command-specific
-    Flag,
-    NamedArg,
+    Variable(NodeId), // Holds the NodeId of its def as it resolves
 
     // Booleans
     True,
@@ -40,20 +36,11 @@ pub enum AstNode {
     Minus,
     Multiply,
     Divide,
-    In,
-    NotIn,
     Modulo,
     And,
     Or,
     Pow,
-    BitOr,
-    BitXor,
-    BitAnd,
-    ShiftLeft,
-    ShiftRight,
-    StartsWith,
-    EndsWith,
-    Interpolation,
+    Assignment,
 
     // Statements
     Let {
@@ -110,35 +97,25 @@ impl AstNode {
             AstNode::Pow => 100,
             AstNode::Multiply | AstNode::Divide | AstNode::Modulo => 95,
             AstNode::Plus | AstNode::Minus => 90,
-            AstNode::ShiftLeft | AstNode::ShiftRight => 85,
-            AstNode::NotRegexMatch
-            | AstNode::RegexMatch
-            | AstNode::StartsWith
-            | AstNode::EndsWith
-            | AstNode::LessThan
+            AstNode::LessThan
             | AstNode::LessThanOrEqual
             | AstNode::GreaterThan
             | AstNode::GreaterThanOrEqual
             | AstNode::Equal
-            | AstNode::NotEqual
-            | AstNode::In
-            | AstNode::NotIn
-            | AstNode::Append => 80,
-            AstNode::BitAnd => 75,
-            AstNode::BitXor => 70,
-            AstNode::BitOr => 60,
+            | AstNode::NotEqual => 80,
             AstNode::And => 50,
             AstNode::Or => 40,
+            AstNode::Assignment => 10,
             _ => 0,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub usize);
 
-impl<'a> Parser<'a> {
-    pub fn new(source: &'a [u8], span_offset: usize, node_id_offset: usize) -> Self {
+impl<'source> Parser<'source> {
+    pub fn new(source: &'source [u8], span_offset: usize, node_id_offset: usize) -> Self {
         let content_length = source.len();
 
         Self {
@@ -180,18 +157,16 @@ impl<'a> Parser<'a> {
                 | TokenType::AsteriskAsterisk
                 | TokenType::Dash
                 | TokenType::EqualsEquals
-                | TokenType::EqualsTilde
                 | TokenType::ExclamationEquals
-                | TokenType::ExclamationTilde
                 | TokenType::ForwardSlash
                 | TokenType::LessThan
                 | TokenType::LessThanEqual
                 | TokenType::Plus
-                | TokenType::PlusPlus
                 | TokenType::GreaterThan
                 | TokenType::GreaterThanEqual
                 | TokenType::AmpersandAmpersand
-                | TokenType::PipePipe => true,
+                | TokenType::PipePipe
+                | TokenType::Equals => true,
 
                 _ => false,
             },
@@ -804,14 +779,6 @@ impl<'a> Parser<'a> {
                     self.lexer.next();
                     self.create_node(AstNode::Pow, span_start, span_end)
                 }
-                TokenType::EqualsTilde => {
-                    self.lexer.next();
-                    self.create_node(AstNode::RegexMatch, span_start, span_end)
-                }
-                TokenType::ExclamationTilde => {
-                    self.lexer.next();
-                    self.create_node(AstNode::NotRegexMatch, span_start, span_end)
-                }
                 TokenType::AmpersandAmpersand => {
                     self.lexer.next();
                     self.create_node(AstNode::And, span_start, span_end)
@@ -819,6 +786,10 @@ impl<'a> Parser<'a> {
                 TokenType::PipePipe => {
                     self.lexer.next();
                     self.create_node(AstNode::Or, span_start, span_end)
+                }
+                TokenType::Equals => {
+                    self.lexer.next();
+                    self.create_node(AstNode::Assignment, span_start, span_end)
                 }
                 _ => self.error("expected: operator"),
             },
@@ -982,7 +953,12 @@ impl<'a> Parser<'a> {
                 .expect("internal error: missing token that was expected to be there");
             let name_start = name.span_start;
             let name_end = name.span_end;
-            self.create_node(AstNode::Variable, name_start, name_end)
+            let next_node_id = self.delta.node_id_offset + self.delta.ast_nodes.len();
+            self.create_node(
+                AstNode::Variable(NodeId(next_node_id)),
+                name_start,
+                name_end,
+            )
         } else {
             self.error("expected variable")
         }
@@ -1023,7 +999,12 @@ impl<'a> Parser<'a> {
                 self.create_node(AstNode::Call { head, args }, span_start, span_end)
             } else {
                 // We're a variable
-                self.create_node(AstNode::Variable, name_start, name_end)
+                let next_node_id = self.delta.node_id_offset + self.delta.ast_nodes.len();
+                self.create_node(
+                    AstNode::Variable(NodeId(next_node_id)),
+                    name_start,
+                    name_end,
+                )
             }
         } else {
             self.error("expected variable or call")

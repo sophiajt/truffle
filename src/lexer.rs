@@ -1,5 +1,5 @@
-pub struct Lexer<'a> {
-    source: &'a [u8],
+pub struct Lexer<'source> {
+    source: &'source [u8],
     span_offset: usize,
 }
 
@@ -43,9 +43,9 @@ pub enum TokenType {
 }
 
 #[derive(Debug)]
-pub struct Token<'a> {
+pub struct Token<'source> {
     pub token_type: TokenType,
-    pub contents: &'a [u8],
+    pub contents: &'source [u8],
     pub span_start: usize,
     pub span_end: usize,
 }
@@ -58,15 +58,15 @@ fn is_symbol(b: u8) -> bool {
     .contains(&b)
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(source: &'a [u8], span_offset: usize) -> Self {
+impl<'source> Lexer<'source> {
+    pub fn new(source: &'source [u8], span_offset: usize) -> Self {
         Self {
             source,
             span_offset,
         }
     }
 
-    pub fn lex_quoted_string(&mut self) -> Option<Token<'a>> {
+    pub fn lex_quoted_string(&mut self) -> Option<Token<'source>> {
         let span_start = self.span_offset;
         let mut token_offset = 1;
         let mut is_escaped = false;
@@ -95,7 +95,7 @@ impl<'a> Lexer<'a> {
         })
     }
 
-    pub fn lex_number(&mut self) -> Option<Token<'a>> {
+    pub fn lex_number(&mut self) -> Option<Token<'source>> {
         let span_start = self.span_offset;
         let mut token_offset = 0;
         while token_offset < self.source.len() {
@@ -197,7 +197,7 @@ impl<'a> Lexer<'a> {
         self.source = &self.source[token_offset..];
     }
 
-    pub fn lex_name(&mut self) -> Option<Token<'a>> {
+    pub fn lex_name(&mut self) -> Option<Token<'source>> {
         let span_start = self.span_offset;
         let mut token_offset = 0;
         while token_offset < self.source.len()
@@ -218,7 +218,7 @@ impl<'a> Lexer<'a> {
         })
     }
 
-    pub fn lex_symbol(&mut self) -> Option<Token<'a>> {
+    pub fn lex_symbol(&mut self) -> Option<Token<'source>> {
         let span_start = self.span_offset;
 
         let result = match self.source[0] {
@@ -481,8 +481,8 @@ impl<'a> Lexer<'a> {
     }
 }
 
-impl<'a> Lexer<'a> {
-    pub fn peek(&mut self) -> Option<Token<'a>> {
+impl<'source> Lexer<'source> {
+    pub fn peek(&mut self) -> Option<Token<'source>> {
         let prev_offset = self.span_offset;
         let prev_source = self.source;
         let output = self.next();
@@ -492,7 +492,7 @@ impl<'a> Lexer<'a> {
         output
     }
 
-    pub fn next(&mut self) -> Option<Token<'a>> {
+    pub fn next(&mut self) -> Option<Token<'source>> {
         loop {
             if self.source.is_empty() {
                 return None;
