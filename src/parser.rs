@@ -47,6 +47,10 @@ pub enum AstNode {
         initializer: NodeId,
         is_mutable: bool,
     },
+    While {
+        condition: NodeId,
+        block: NodeId,
+    },
 
     // Definitions
     Fn {
@@ -137,7 +141,7 @@ impl<'source> Parser<'source> {
     }
 
     pub fn program(&mut self) -> NodeId {
-        self.code_block(false)
+        self.block(false)
     }
 
     pub fn has_tokens(&mut self) -> bool {
@@ -464,15 +468,15 @@ impl<'source> Parser<'source> {
         NodeId(self.delta.span_start.len() - 1 + self.delta.node_id_offset)
     }
 
-    pub fn code_block(&mut self, in_block: bool) -> NodeId {
+    pub fn block(&mut self, expect_parens: bool) -> NodeId {
         let span_start = self.position();
         let mut code_body = vec![];
-        if in_block {
+        if expect_parens {
             self.lcurly();
         }
 
         while self.has_tokens() {
-            if self.is_rcurly() && in_block {
+            if self.is_rcurly() && expect_parens {
                 self.rcurly();
                 break;
             } else if self.is_semicolon() {
@@ -492,6 +496,9 @@ impl<'source> Parser<'source> {
                 }
             } else if self.is_keyword(b"let") {
                 let result = self.let_statement();
+                code_body.push(result);
+            } else if self.is_keyword(b"while") {
+                let result = self.while_statement();
                 code_body.push(result);
             } else {
                 let span_start = self.position();
@@ -524,7 +531,7 @@ impl<'source> Parser<'source> {
 
         let params = self.params();
 
-        let block = self.code_block(true);
+        let block = self.block(true);
 
         let span_end = self.position();
 
@@ -638,7 +645,7 @@ impl<'source> Parser<'source> {
         let span_start = self.position();
 
         let expr = if self.is_lcurly() {
-            self.code_block(true)
+            self.block(true)
         } else if self.is_lparen() {
             self.lparen();
             let output = self.expression();
@@ -910,7 +917,7 @@ impl<'source> Parser<'source> {
 
         let condition = self.expression();
 
-        let then_block = self.code_block(true);
+        let then_block = self.block(true);
 
         let else_expression = if self.is_keyword(b"else") {
             self.lexer.next();
@@ -969,6 +976,17 @@ impl<'source> Parser<'source> {
             span_start,
             span_end,
         )
+    }
+
+    pub fn while_statement(&mut self) -> NodeId {
+        let span_start = self.position();
+        self.keyword(b"while");
+
+        let condition = self.expression();
+        let block = self.block(true);
+        let span_end = self.position();
+
+        self.create_node(AstNode::While { condition, block }, span_start, span_end)
     }
 
     pub fn variable(&mut self) -> NodeId {

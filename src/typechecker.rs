@@ -135,6 +135,9 @@ impl<'source> TypeChecker<'source> {
                 then_block,
                 else_expression,
             } => self.typecheck_if(*condition, *then_block, *else_expression, node_id, delta),
+            AstNode::While { condition, block } => {
+                self.typecheck_while(*condition, *block, node_id, delta)
+            }
             AstNode::True => self.node_types[node_id.0] = BOOL_TYPE,
             AstNode::False => self.node_types[node_id.0] = BOOL_TYPE,
             AstNode::Range { lhs, rhs } => self.typecheck_range(*lhs, *rhs, node_id, delta),
@@ -177,6 +180,25 @@ impl<'source> TypeChecker<'source> {
         }
 
         self.node_types[node_id.0] = then_ty
+    }
+
+    pub fn typecheck_while(
+        &mut self,
+        condition: NodeId,
+        block: NodeId,
+        node_id: NodeId,
+        delta: &'source EngineDelta,
+    ) {
+        self.typecheck_node(condition, delta);
+        let condition_ty = self.node_types[condition.0];
+
+        if condition_ty != BOOL_TYPE {
+            self.error("expected bool for while condition", condition);
+        }
+
+        self.typecheck_node(block, delta);
+
+        self.node_types[node_id.0] = VOID_TYPE;
     }
 
     pub fn typecheck_binop(
