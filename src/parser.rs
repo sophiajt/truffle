@@ -497,7 +497,7 @@ impl<'source> Parser<'source> {
                     && self.has_tokens()
                 {
                     let p = self.lexer.peek();
-                    self.error(format!("new line or semicolon (found {:?})", p));
+                    self.error(format!("expected newline or semicolon but found {:?}", p));
                 }
             } else if self.is_keyword(b"let") {
                 let result = self.let_statement();

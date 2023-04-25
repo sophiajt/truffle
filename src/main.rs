@@ -1,3 +1,4 @@
+mod codegen;
 mod delta;
 mod errors;
 mod lexer;
@@ -5,7 +6,7 @@ mod line_editor;
 mod parser;
 mod typechecker;
 
-use crate::{parser::Parser, typechecker::TypeChecker};
+use crate::{codegen::Translater, parser::Parser, typechecker::TypeChecker};
 use line_editor::{LineEditor, ReadLineOutput};
 
 fn main() {
@@ -53,6 +54,14 @@ fn main() {
                     );
                     idx += 1;
                 }
+
+                let mut translater = Translater::new();
+
+                let mut output = translater.translate(&parser.delta, &typechecker);
+
+                output.debug_print();
+
+                println!("result: {:?}", output.eval());
             }
             Err(err) => {
                 println!("{:?}", err);
