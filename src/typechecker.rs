@@ -334,6 +334,38 @@ impl<'source> TypeChecker<'source> {
     pub fn exit_scope(&mut self) {
         self.scope.pop();
     }
+
+    // Debug functionality
+    pub fn print_node_types(&self) {
+        let mut idx = 0;
+        while idx < self.node_types.len() {
+            println!("{}: {}", idx, self.stringify_type(self.node_types[idx]));
+            idx += 1;
+        }
+    }
+
+    pub fn stringify_type(&self, type_id: TypeId) -> String {
+        if type_id == UNKNOWN_TYPE {
+            "unknown".into()
+        } else if type_id == VOID_TYPE {
+            "void".into()
+        } else if type_id == I64_TYPE {
+            "i64".into()
+        } else if type_id == F64_TYPE {
+            "f64".into()
+        } else if type_id == BOOL_TYPE {
+            "bool".into()
+        } else {
+            match self.types[type_id.0] {
+                Type::Range(ty) => {
+                    let inner_type = self.stringify_type(ty);
+
+                    format!("Range<{}>", inner_type)
+                }
+                _ => "<not yet implemented>".into(),
+            }
+        }
+    }
 }
 
 #[derive(PartialEq)]

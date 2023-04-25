@@ -43,12 +43,15 @@ fn main() {
                 let result = &parser.delta;
                 result.print();
 
-                for ast_node in result.ast_nodes.iter().enumerate() {
-                    println!("{:?}", ast_node)
-                }
-
-                for node_type in typechecker.node_types.iter().enumerate() {
-                    println!("{:?}", node_type)
+                let mut idx = 0;
+                while idx < result.ast_nodes.len() {
+                    println!(
+                        "{}: {:?} ({})",
+                        idx,
+                        result.ast_nodes[idx],
+                        typechecker.stringify_type(typechecker.node_types[idx])
+                    );
+                    idx += 1;
                 }
             }
             Err(err) => {
