@@ -103,7 +103,6 @@ pub struct FunctionCodegen {
     pub instructions: Vec<Instruction>,
     pub register_values: Vec<i64>,
     pub register_types: Vec<ValueType>,
-    pub return_value: RegisterId,
 }
 
 impl FunctionCodegen {
@@ -319,10 +318,7 @@ impl FunctionCodegen {
             }
         }
 
-        (
-            self.register_values[self.return_value.0],
-            self.register_types[self.return_value.0],
-        )
+        (self.register_values[0], self.register_types[0])
     }
 
     pub fn debug_print(&self) {
@@ -357,12 +353,11 @@ impl Translater {
             instructions: vec![],
             register_values: vec![],
             register_types: vec![],
-            return_value: RegisterId(0), // replaced during codegen
         };
         if !delta.ast_nodes.is_empty() {
             let last = delta.ast_nodes.len() - 1;
-            builder.return_value =
-                self.translate_node(&mut builder, NodeId(last), delta, typechecker);
+            let result = self.translate_node(&mut builder, NodeId(last), delta, typechecker);
+            builder.mov(RegisterId(0), result);
         }
 
         builder
