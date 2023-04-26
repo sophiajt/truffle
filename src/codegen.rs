@@ -12,7 +12,7 @@ pub struct InstructionId(usize);
 #[derive(Clone, Copy, Debug)]
 pub struct RegisterId(usize);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ValueType {
     Unknown,
     Void,
@@ -21,7 +21,7 @@ pub enum ValueType {
     Bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Value {
     ty: ValueType,
     val: i64,
@@ -101,29 +101,32 @@ pub enum Instruction {
 
 pub struct FunctionCodegen {
     pub instructions: Vec<Instruction>,
-    pub registers: Vec<Value>,
+    pub register_values: Vec<i64>,
+    pub register_types: Vec<ValueType>,
+    pub return_value: RegisterId,
 }
 
 impl FunctionCodegen {
-    pub fn new_register_with_value(&mut self, value: Value) -> RegisterId {
-        self.registers.push(value);
+    pub fn new_register_with_value(&mut self, value: i64, value_type: ValueType) -> RegisterId {
+        self.register_values.push(value);
+        self.register_types.push(value_type);
 
-        RegisterId(self.registers.len() - 1)
+        RegisterId(self.register_values.len() - 1)
     }
 
     pub fn new_register(&mut self, ty: ValueType) -> RegisterId {
-        self.new_register_with_value(Value::new_i64(ty, 0))
+        self.new_register_with_value(0, ty)
     }
 
     pub fn i64_const(&mut self, value: i64) -> RegisterId {
-        self.new_register_with_value(Value::new_i64(ValueType::I64, value))
+        self.new_register_with_value(value, ValueType::I64)
     }
 
     pub fn bool_const(&mut self, value: bool) -> RegisterId {
         if value {
-            self.new_register_with_value(Value::new_i64(ValueType::Bool, 1))
+            self.new_register_with_value(1, ValueType::Bool)
         } else {
-            self.new_register_with_value(Value::new_i64(ValueType::Bool, 0))
+            self.new_register_with_value(0, ValueType::Bool)
         }
     }
 
@@ -225,87 +228,76 @@ impl FunctionCodegen {
         self.instructions.push(Instruction::JMP(location))
     }
 
-    pub fn eval(&mut self) -> Value {
-        let mut output = RegisterId(0);
+    pub fn eval(&mut self) -> (i64, ValueType) {
         let mut instruction_pointer = 0;
         let length = self.instructions.len();
 
         while instruction_pointer < length {
             match &self.instructions[instruction_pointer] {
                 Instruction::IADD { lhs, rhs, target } => {
-                    let lhs = &self.registers[lhs.0];
-                    let rhs = &self.registers[rhs.0];
+                    self.register_values[target.0] =
+                        self.register_values[lhs.0] + self.register_values[rhs.0];
 
-                    self.registers[target.0].val = lhs.val + rhs.val;
-
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::ISUB { lhs, rhs, target } => {
-                    let lhs = &self.registers[lhs.0];
-                    let rhs = &self.registers[rhs.0];
+                    let lhs = &self.register_values[lhs.0];
+                    let rhs = &self.register_values[rhs.0];
 
-                    self.registers[target.0].val = lhs.val - rhs.val;
+                    self.register_values[target.0] = lhs - rhs;
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::IMUL { lhs, rhs, target } => {
-                    let lhs = &self.registers[lhs.0];
-                    let rhs = &self.registers[rhs.0];
+                    let lhs = &self.register_values[lhs.0];
+                    let rhs = &self.register_values[rhs.0];
 
-                    self.registers[target.0].val = lhs.val * rhs.val;
+                    self.register_values[target.0] = lhs * rhs;
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::IDIV { lhs, rhs, target } => {
-                    let lhs = &self.registers[lhs.0];
-                    let rhs = &self.registers[rhs.0];
+                    let lhs = &self.register_values[lhs.0];
+                    let rhs = &self.register_values[rhs.0];
 
-                    self.registers[target.0].val = lhs.val / rhs.val;
+                    self.register_values[target.0] = lhs / rhs;
 
-                    output = *target;
                     instruction_pointer += 1
                 }
                 Instruction::ILT { lhs, rhs, target } => {
-                    let lhs = &self.registers[lhs.0];
-                    let rhs = &self.registers[rhs.0];
+                    let lhs = &self.register_values[lhs.0];
+                    let rhs = &self.register_values[rhs.0];
 
-                    self.registers[target.0].val = (lhs.val < rhs.val) as i64;
+                    self.register_values[target.0] = (lhs < rhs) as i64;
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::ILTE { lhs, rhs, target } => {
-                    let lhs = &self.registers[lhs.0];
-                    let rhs = &self.registers[rhs.0];
+                    let lhs = &self.register_values[lhs.0];
+                    let rhs = &self.register_values[rhs.0];
 
-                    self.registers[target.0].val = (lhs.val <= rhs.val) as i64;
+                    self.register_values[target.0] = (lhs <= rhs) as i64;
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::IGT { lhs, rhs, target } => {
-                    let lhs = &self.registers[lhs.0];
-                    let rhs = &self.registers[rhs.0];
+                    let lhs = &self.register_values[lhs.0];
+                    let rhs = &self.register_values[rhs.0];
 
-                    self.registers[target.0].val = (lhs.val > rhs.val) as i64;
+                    self.register_values[target.0] = (lhs > rhs) as i64;
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::IGTE { lhs, rhs, target } => {
-                    let lhs = &self.registers[lhs.0];
-                    let rhs = &self.registers[rhs.0];
+                    let lhs = &self.register_values[lhs.0];
+                    let rhs = &self.register_values[rhs.0];
 
-                    self.registers[target.0].val = (lhs.val >= rhs.val) as i64;
+                    self.register_values[target.0] = (lhs >= rhs) as i64;
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::MOV { target, source } => {
-                    self.registers[target.0].val = self.registers[source.0].val;
+                    self.register_values[target.0] = self.register_values[source.0];
                     instruction_pointer += 1;
                 }
                 Instruction::BRIF {
@@ -313,7 +305,7 @@ impl FunctionCodegen {
                     then_branch,
                     else_branch,
                 } => {
-                    let condition = self.registers[condition.0].val;
+                    let condition = self.register_values[condition.0];
 
                     if condition == 0 {
                         instruction_pointer = else_branch.0;
@@ -327,7 +319,10 @@ impl FunctionCodegen {
             }
         }
 
-        self.registers[output.0].clone()
+        (
+            self.register_values[self.return_value.0],
+            self.register_types[self.return_value.0],
+        )
     }
 
     pub fn debug_print(&self) {
@@ -336,8 +331,8 @@ impl FunctionCodegen {
             println!("{:?}", instr);
         }
         println!("registers:");
-        for register in self.registers.iter().enumerate() {
-            println!("{:?}", register);
+        for (idx, value) in self.register_values.iter().enumerate() {
+            println!("{}: {} ({:?})", idx, value, self.register_types[idx]);
         }
     }
 }
@@ -360,11 +355,14 @@ impl Translater {
     ) -> FunctionCodegen {
         let mut builder = FunctionCodegen {
             instructions: vec![],
-            registers: vec![],
+            register_values: vec![],
+            register_types: vec![],
+            return_value: RegisterId(0), // replaced during codegen
         };
         if !delta.ast_nodes.is_empty() {
             let last = delta.ast_nodes.len() - 1;
-            self.translate_node(&mut builder, NodeId(last), delta, typechecker);
+            builder.return_value =
+                self.translate_node(&mut builder, NodeId(last), delta, typechecker);
         }
 
         builder
