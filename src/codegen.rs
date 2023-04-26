@@ -12,7 +12,7 @@ pub struct InstructionId(usize);
 #[derive(Clone, Copy, Debug)]
 pub struct RegisterId(usize);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ValueType {
     Unknown,
     Void,
@@ -103,6 +103,7 @@ pub struct FunctionCodegen {
     pub instructions: Vec<Instruction>,
     pub register_values: Vec<i64>,
     pub register_types: Vec<ValueType>,
+    pub return_value: RegisterId,
 }
 
 impl FunctionCodegen {
@@ -227,8 +228,7 @@ impl FunctionCodegen {
         self.instructions.push(Instruction::JMP(location))
     }
 
-    pub fn eval(&mut self) -> RegisterId {
-        let mut output = RegisterId(0);
+    pub fn eval(&mut self) -> (i64, ValueType) {
         let mut instruction_pointer = 0;
         let length = self.instructions.len();
 
@@ -238,7 +238,6 @@ impl FunctionCodegen {
                     self.register_values[target.0] =
                         self.register_values[lhs.0] + self.register_values[rhs.0];
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::ISUB { lhs, rhs, target } => {
@@ -247,7 +246,6 @@ impl FunctionCodegen {
 
                     self.register_values[target.0] = lhs - rhs;
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::IMUL { lhs, rhs, target } => {
@@ -256,7 +254,6 @@ impl FunctionCodegen {
 
                     self.register_values[target.0] = lhs * rhs;
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::IDIV { lhs, rhs, target } => {
@@ -265,7 +262,6 @@ impl FunctionCodegen {
 
                     self.register_values[target.0] = lhs / rhs;
 
-                    output = *target;
                     instruction_pointer += 1
                 }
                 Instruction::ILT { lhs, rhs, target } => {
@@ -274,7 +270,6 @@ impl FunctionCodegen {
 
                     self.register_values[target.0] = (lhs < rhs) as i64;
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::ILTE { lhs, rhs, target } => {
@@ -283,7 +278,6 @@ impl FunctionCodegen {
 
                     self.register_values[target.0] = (lhs <= rhs) as i64;
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::IGT { lhs, rhs, target } => {
@@ -292,7 +286,6 @@ impl FunctionCodegen {
 
                     self.register_values[target.0] = (lhs > rhs) as i64;
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::IGTE { lhs, rhs, target } => {
@@ -301,7 +294,6 @@ impl FunctionCodegen {
 
                     self.register_values[target.0] = (lhs >= rhs) as i64;
 
-                    output = *target;
                     instruction_pointer += 1;
                 }
                 Instruction::MOV { target, source } => {
@@ -327,7 +319,10 @@ impl FunctionCodegen {
             }
         }
 
-        output
+        (
+            self.register_values[self.return_value.0],
+            self.register_types[self.return_value.0],
+        )
     }
 
     pub fn debug_print(&self) {
@@ -337,7 +332,7 @@ impl FunctionCodegen {
         }
         println!("registers:");
         for (idx, value) in self.register_values.iter().enumerate() {
-            println!("{} ({:?})", value, self.register_types[idx]);
+            println!("{}: {} ({:?})", idx, value, self.register_types[idx]);
         }
     }
 }
@@ -362,10 +357,12 @@ impl Translater {
             instructions: vec![],
             register_values: vec![],
             register_types: vec![],
+            return_value: RegisterId(0), // replaced during codegen
         };
         if !delta.ast_nodes.is_empty() {
             let last = delta.ast_nodes.len() - 1;
-            self.translate_node(&mut builder, NodeId(last), delta, typechecker);
+            builder.return_value =
+                self.translate_node(&mut builder, NodeId(last), delta, typechecker);
         }
 
         builder

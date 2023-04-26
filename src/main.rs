@@ -81,7 +81,7 @@ fn run_line(line: &str) {
 
     let mut output = translater.translate(&parser.delta, &typechecker);
 
-    output.debug_print();
+    println!("output: {:?}", output.eval());
 
-    println!("result: {:?}", output.eval());
+    output.debug_print();
 }
