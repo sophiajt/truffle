@@ -406,6 +406,9 @@ impl Translater {
                 delta,
                 typechecker,
             ),
+            AstNode::While { condition, block } => {
+                self.translate_while(builder, *condition, *block, delta, typechecker)
+            }
             x => panic!("unsupported translation: {:?}", x),
         }
     }
@@ -528,6 +531,37 @@ impl Translater {
             then_branch,
             else_branch,
         };
+        output
+    }
+
+    pub fn translate_while<'source>(
+        &mut self,
+        builder: &mut FunctionCodegen,
+        condition: NodeId,
+        block: NodeId,
+        delta: &'source EngineDelta,
+        typechecker: &TypeChecker,
+    ) -> RegisterId {
+        let output = builder.new_register(ValueType::Void);
+
+        let top = builder.instructions.len();
+        let condition = self.translate_node(builder, condition, delta, typechecker);
+
+        let brif_location = builder.instructions.len();
+        builder.brif(output, condition, InstructionId(0), InstructionId(0));
+
+        let block_begin = InstructionId(builder.instructions.len());
+        self.translate_node(builder, block, delta, typechecker);
+        builder.jmp(InstructionId(top));
+
+        let block_end = InstructionId(builder.instructions.len());
+
+        builder.instructions[brif_location] = Instruction::BRIF {
+            condition,
+            then_branch: block_begin,
+            else_branch: block_end,
+        };
+
         output
     }
 
