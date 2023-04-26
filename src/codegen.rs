@@ -12,7 +12,7 @@ pub struct InstructionId(usize);
 #[derive(Clone, Copy, Debug)]
 pub struct RegisterId(usize);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum ValueType {
     Unknown,
     Void,
@@ -21,7 +21,7 @@ pub enum ValueType {
     Bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Value {
     ty: ValueType,
     val: i64,
@@ -225,7 +225,7 @@ impl FunctionCodegen {
         self.instructions.push(Instruction::JMP(location))
     }
 
-    pub fn eval(&mut self) -> Value {
+    pub fn eval(&mut self) -> &Value {
         let mut output = RegisterId(0);
         let mut instruction_pointer = 0;
         let length = self.instructions.len();
@@ -327,7 +327,7 @@ impl FunctionCodegen {
             }
         }
 
-        self.registers[output.0].clone()
+        &self.registers[output.0]
     }
 
     pub fn debug_print(&self) {
