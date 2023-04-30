@@ -6,8 +6,16 @@ mod line_editor;
 mod parser;
 mod typechecker;
 
-use crate::{codegen::Translater, parser::Parser, typechecker::TypeChecker};
+use crate::{
+    codegen::Translater,
+    parser::Parser,
+    typechecker::{FnRegister, TypeChecker},
+};
 use line_editor::{LineEditor, ReadLineOutput};
+
+fn print_int(value: i64) {
+    println!("value: {value}")
+}
 
 fn main() {
     let args = std::env::args();
@@ -57,6 +65,7 @@ fn run_line(line: &str) {
     }
 
     let mut typechecker = TypeChecker::new(parser.delta.ast_nodes.len());
+    typechecker.register_fn("print_int", print_int);
     typechecker.typecheck(&parser.delta);
 
     for error in &typechecker.errors {

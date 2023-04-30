@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{any::Any, collections::HashMap};
 
 use crate::{
     delta::EngineDelta,
@@ -21,6 +21,16 @@ impl<'scope> Scope<'scope> {
     }
 }
 
+pub enum Function {
+    ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
+    ExternalFn1(Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
+    ExternalFn2(Box<dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
+    InternalFn,
+}
+
+#[derive(Clone, Copy)]
+pub struct FunctionId(usize);
+
 pub struct TypeChecker<'source> {
     // Used by TypeId
     pub types: Vec<Type>,
@@ -30,6 +40,15 @@ pub struct TypeChecker<'source> {
 
     // Bindings from use to def
     pub variable_def: HashMap<NodeId, NodeId>,
+
+    // List of all registered functions
+    pub functions: Vec<Function>,
+
+    // Call resolution
+    pub call_resolution: HashMap<NodeId, FunctionId>,
+
+    // Externally-registered functions
+    pub external_functions: HashMap<Vec<u8>, FunctionId>,
 
     pub errors: Vec<ScriptError>,
     pub scope: Vec<Scope<'source>>,
@@ -51,6 +70,11 @@ impl<'source> TypeChecker<'source> {
 
             node_types,
             variable_def: HashMap::new(),
+
+            call_resolution: HashMap::new(),
+            external_functions: HashMap::new(),
+
+            functions: vec![],
 
             scope: vec![Scope::new()],
         }
@@ -129,6 +153,7 @@ impl<'source> TypeChecker<'source> {
             AstNode::True => self.node_types[node_id.0] = BOOL_TYPE,
             AstNode::False => self.node_types[node_id.0] = BOOL_TYPE,
             AstNode::Range { lhs, rhs } => self.typecheck_range(*lhs, *rhs, node_id, delta),
+            AstNode::Call { head, args } => self.typecheck_call(*head, args, delta),
             _ => self.error("unsupported ast node in typechecker", node_id),
         }
     }
@@ -323,6 +348,29 @@ impl<'source> TypeChecker<'source> {
         self.node_types[node_id.0] = type_id
     }
 
+    pub fn typecheck_call(&mut self, head: NodeId, args: &[NodeId], delta: &'source EngineDelta) {
+        let call_name = &delta.contents[delta.span_start[head.0]..delta.span_end[head.0]];
+
+        if let Some(def) = self.external_functions.get(call_name) {
+            let def = *def;
+            match &self.functions[def.0] {
+                Function::ExternalFn0(..) => {
+                    if !args.is_empty() {
+                        self.error("unexpected argument", args[0])
+                    }
+                }
+                Function::ExternalFn1(..) => {
+                    if args.len() != 1 {
+                        self.error("expected one argument", head)
+                    }
+                }
+                _ => {}
+            }
+
+            self.call_resolution.insert(head, def);
+        }
+    }
+
     pub fn define_variable(&mut self, variable_name_node_id: NodeId, delta: &'source EngineDelta) {
         let variable_name = &delta.contents
             [delta.span_start[variable_name_node_id.0]..delta.span_end[variable_name_node_id.0]];
@@ -406,6 +454,35 @@ impl<'source> TypeChecker<'source> {
                 _ => "<not yet implemented>".into(),
             }
         }
+    }
+}
+
+pub trait FnRegister<A, RetVal, Args> {
+    fn register_fn(&mut self, name: &str, f: A);
+}
+
+impl<'a, 'source, A, T, U> FnRegister<A, U, &'a T> for TypeChecker<'source>
+where
+    A: 'static + Fn(T) -> U,
+    T: Clone + Any,
+    U: Any,
+{
+    fn register_fn(&mut self, name: &str, fun: A) {
+        let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
+            Box::new(move |arg: &mut Box<dyn Any>| {
+                let inside = (*arg).downcast_mut() as Option<&mut T>;
+                match inside {
+                    Some(b) => Ok(Box::new(fun(b.clone())) as Box<dyn Any>),
+                    None => Err("ErrorFunctionArgMismatch".into()),
+                }
+            });
+
+        self.functions.push(Function::ExternalFn1(wrapped));
+
+        let id = self.functions.len() - 1;
+
+        self.external_functions
+            .insert(name.as_bytes().to_vec(), FunctionId(id));
     }
 }
 

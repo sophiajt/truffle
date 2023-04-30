@@ -331,6 +331,10 @@ impl FunctionCodegen {
             println!("{}: {} ({:?})", idx, value, self.register_types[idx]);
         }
     }
+
+    pub fn next_position(&self) -> usize {
+        self.instructions.len()
+    }
 }
 
 pub struct Translater {
@@ -455,8 +459,6 @@ impl Translater {
         delta: &'source EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
-        //let ty = typechecker.node_types[variable_name.0];
-
         let initializer = self.translate_node(builder, initializer, delta, typechecker);
 
         self.var_lookup.insert(variable_name, initializer);
@@ -494,29 +496,29 @@ impl Translater {
         let output = builder.new_register(ValueType::Unknown);
         let condition = self.translate_node(builder, condition, delta, typechecker);
 
-        let brif_location = builder.instructions.len();
+        let brif_location = builder.next_position();
         builder.brif(output, condition, InstructionId(0), InstructionId(0));
 
-        let then_branch = InstructionId(builder.instructions.len());
+        let then_branch = InstructionId(builder.next_position());
         let then_output = self.translate_node(builder, then_block, delta, typechecker);
         builder.mov(output, then_output);
 
         let else_branch = if let Some(else_expression) = else_expression {
             // Create a jump with a temporary location we'll replace when we know the correct one
             // Remember where it is so we can replace it later
-            let jmp_location = builder.instructions.len();
+            let jmp_location = builder.next_position();
             builder.jmp(InstructionId(0));
 
-            let else_location = builder.instructions.len();
+            let else_location = builder.next_position();
             let else_output = self.translate_node(builder, else_expression, delta, typechecker);
             builder.mov(output, else_output);
 
-            let after_if = builder.instructions.len();
+            let after_if = builder.next_position();
 
             builder.instructions[jmp_location] = Instruction::JMP(InstructionId(after_if));
             InstructionId(else_location)
         } else {
-            InstructionId(builder.instructions.len())
+            InstructionId(builder.next_position())
         };
 
         builder.instructions[brif_location] = Instruction::BRIF {
@@ -537,17 +539,17 @@ impl Translater {
     ) -> RegisterId {
         let output = builder.new_register(ValueType::Void);
 
-        let top = builder.instructions.len();
+        let top = builder.next_position();
         let condition = self.translate_node(builder, condition, delta, typechecker);
 
-        let brif_location = builder.instructions.len();
+        let brif_location = builder.next_position();
         builder.brif(output, condition, InstructionId(0), InstructionId(0));
 
-        let block_begin = InstructionId(builder.instructions.len());
+        let block_begin = InstructionId(builder.next_position());
         self.translate_node(builder, block, delta, typechecker);
         builder.jmp(InstructionId(top));
 
-        let block_end = InstructionId(builder.instructions.len());
+        let block_end = InstructionId(builder.next_position());
 
         builder.instructions[brif_location] = Instruction::BRIF {
             condition,
