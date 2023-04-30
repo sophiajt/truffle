@@ -3,7 +3,7 @@ use std::{any::Any, collections::HashMap};
 use crate::{
     delta::EngineDelta,
     parser::{AstNode, NodeId},
-    typechecker::{Function, FunctionId, TypeChecker, I64_TYPE},
+    typechecker::{Function, FunctionId, TypeChecker},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -17,7 +17,7 @@ pub enum ValueType {
     Unknown,
     Void,
     I64,
-    F64,
+    // F64,
     Bool,
 }
 
@@ -28,16 +28,16 @@ pub struct Value {
 }
 
 impl Value {
-    pub fn new_i64(ty: ValueType, val: i64) -> Value {
-        Value { ty, val }
-    }
+    // pub fn new_i64(ty: ValueType, val: i64) -> Value {
+    //     Value { ty, val }
+    // }
 
-    pub fn unknown() -> Value {
-        Value {
-            ty: ValueType::Unknown,
-            val: 0,
-        }
-    }
+    // pub fn unknown() -> Value {
+    //     Value {
+    //         ty: ValueType::Unknown,
+    //         val: 0,
+    //     }
+    // }
 }
 
 #[derive(Debug)]
@@ -98,7 +98,7 @@ pub enum Instruction {
 
     JMP(InstructionId),
 
-    EXTERNAL_CALL {
+    EXTERNALCALL {
         head: FunctionId,
         args: Vec<RegisterId>,
         target: RegisterId,
@@ -235,7 +235,7 @@ impl FunctionCodegen {
 
     pub fn external_call(&mut self, head: FunctionId, args: Vec<RegisterId>, target: RegisterId) {
         self.instructions
-            .push(Instruction::EXTERNAL_CALL { head, args, target })
+            .push(Instruction::EXTERNALCALL { head, args, target })
     }
 
     pub fn eval(&mut self, functions: &[Function]) -> (i64, ValueType) {
@@ -308,6 +308,7 @@ impl FunctionCodegen {
                 }
                 Instruction::MOV { target, source } => {
                     self.register_values[target.0] = self.register_values[source.0];
+                    self.register_types[target.0] = self.register_types[source.0];
                     instruction_pointer += 1;
                 }
                 Instruction::BRIF {
@@ -326,8 +327,8 @@ impl FunctionCodegen {
                 Instruction::JMP(location) => {
                     instruction_pointer = location.0;
                 }
-                Instruction::EXTERNAL_CALL { head, args, target } => {
-                    let output = self.eval_external_call(*head, args, *target, functions);
+                Instruction::EXTERNALCALL { head, args, target } => {
+                    let output = self.eval_external_call(*head, args, functions);
 
                     self.unbox_to_register(output, *target);
                     instruction_pointer += 1;
@@ -342,11 +343,10 @@ impl FunctionCodegen {
         &self,
         head: FunctionId,
         args: &[RegisterId],
-        target: RegisterId,
         functions: &[Function],
     ) -> Box<dyn Any> {
         match &functions[head.0] {
-            Function::ExternalFn0(fun) => fun().unwrap(),
+            // Function::ExternalFn0(fun) => fun().unwrap(),
             Function::ExternalFn1(fun) => {
                 let mut val = self.box_register(args[0]);
 
@@ -357,8 +357,7 @@ impl FunctionCodegen {
                 let mut arg1 = self.box_register(args[1]);
 
                 fun(&mut arg0, &mut arg1).unwrap()
-            }
-            _ => Box::new(0),
+            } // _ => Box::new(0),
         }
     }
 
@@ -427,7 +426,7 @@ impl Translater {
         typechecker: &TypeChecker,
     ) -> RegisterId {
         match &delta.ast_nodes[node_id.0] {
-            AstNode::Int => self.translate_int(builder, node_id, delta, typechecker),
+            AstNode::Int => self.translate_int(builder, node_id, delta),
             AstNode::BinaryOp { lhs, op, rhs } => {
                 self.translate_binop(builder, *lhs, *op, *rhs, delta, typechecker)
             }
@@ -470,7 +469,6 @@ impl Translater {
         builder: &mut FunctionCodegen,
         node_id: NodeId,
         delta: &'source EngineDelta,
-        typechecker: &TypeChecker,
     ) -> RegisterId {
         let contents = &delta.contents[delta.span_start[node_id.0]..delta.span_end[node_id.0]];
 

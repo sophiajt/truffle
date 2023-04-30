@@ -60,14 +60,14 @@ impl<'a> EngineDelta<'a> {
                     self.print_helper(ty, indent + 2);
                 }
             }
-            AstNode::Closure { params, block } => {
-                println!(
-                    "Closure ({}, {}):",
-                    self.span_start[node_id.0], self.span_end[node_id.0],
-                );
-                self.print_helper(params, indent + 2);
-                self.print_helper(block, indent + 2);
-            }
+            // AstNode::Closure { params, block } => {
+            //     println!(
+            //         "Closure ({}, {}):",
+            //         self.span_start[node_id.0], self.span_end[node_id.0],
+            //     );
+            //     self.print_helper(params, indent + 2);
+            //     self.print_helper(block, indent + 2);
+            // }
             AstNode::Fn {
                 name,
                 params,

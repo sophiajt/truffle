@@ -34,7 +34,7 @@ pub enum AstNode {
     Minus,
     Multiply,
     Divide,
-    Modulo,
+    // Modulo,
     And,
     Or,
     Pow,
@@ -69,10 +69,10 @@ pub enum AstNode {
         ty: Option<NodeId>,
     },
 
-    Closure {
-        params: NodeId,
-        block: NodeId,
-    },
+    // Closure {
+    //     params: NodeId,
+    //     block: NodeId,
+    // },
 
     // Expressions
     Call {
@@ -102,7 +102,8 @@ impl AstNode {
     pub fn precedence(&self) -> usize {
         match self {
             AstNode::Pow => 100,
-            AstNode::Multiply | AstNode::Divide | AstNode::Modulo => 95,
+            AstNode::Multiply | AstNode::Divide => 95,
+            //AstNode::Modulo => 95,
             AstNode::Plus | AstNode::Minus => 90,
             AstNode::LessThan
             | AstNode::LessThanOrEqual
@@ -227,15 +228,15 @@ impl<'source> Parser<'source> {
         )
     }
 
-    pub fn is_lsquare(&mut self) -> bool {
-        matches!(
-            self.lexer.peek(),
-            Some(Token {
-                token_type: TokenType::LSquare,
-                ..
-            })
-        )
-    }
+    // pub fn is_lsquare(&mut self) -> bool {
+    //     matches!(
+    //         self.lexer.peek(),
+    //         Some(Token {
+    //             token_type: TokenType::LSquare,
+    //             ..
+    //         })
+    //     )
+    // }
 
     pub fn is_rsquare(&mut self) -> bool {
         matches!(
@@ -247,25 +248,25 @@ impl<'source> Parser<'source> {
         )
     }
 
-    pub fn is_less_than(&mut self) -> bool {
-        matches!(
-            self.lexer.peek(),
-            Some(Token {
-                token_type: TokenType::LessThan,
-                ..
-            })
-        )
-    }
+    // pub fn is_less_than(&mut self) -> bool {
+    //     matches!(
+    //         self.lexer.peek(),
+    //         Some(Token {
+    //             token_type: TokenType::LessThan,
+    //             ..
+    //         })
+    //     )
+    // }
 
-    pub fn is_greater_than(&mut self) -> bool {
-        matches!(
-            self.lexer.peek(),
-            Some(Token {
-                token_type: TokenType::GreaterThan,
-                ..
-            })
-        )
-    }
+    // pub fn is_greater_than(&mut self) -> bool {
+    //     matches!(
+    //         self.lexer.peek(),
+    //         Some(Token {
+    //             token_type: TokenType::GreaterThan,
+    //             ..
+    //         })
+    //     )
+    // }
 
     pub fn is_pipe(&mut self) -> bool {
         matches!(
@@ -277,35 +278,35 @@ impl<'source> Parser<'source> {
         )
     }
 
-    pub fn is_double_pipe(&mut self) -> bool {
-        matches!(
-            self.lexer.peek(),
-            Some(Token {
-                token_type: TokenType::PipePipe,
-                ..
-            })
-        )
-    }
+    // pub fn is_double_pipe(&mut self) -> bool {
+    //     matches!(
+    //         self.lexer.peek(),
+    //         Some(Token {
+    //             token_type: TokenType::PipePipe,
+    //             ..
+    //         })
+    //     )
+    // }
 
-    pub fn is_double_ampersand(&mut self) -> bool {
-        matches!(
-            self.lexer.peek(),
-            Some(Token {
-                token_type: TokenType::AmpersandAmpersand,
-                ..
-            })
-        )
-    }
+    // pub fn is_double_ampersand(&mut self) -> bool {
+    //     matches!(
+    //         self.lexer.peek(),
+    //         Some(Token {
+    //             token_type: TokenType::AmpersandAmpersand,
+    //             ..
+    //         })
+    //     )
+    // }
 
-    pub fn is_dash(&mut self) -> bool {
-        matches!(
-            self.lexer.peek(),
-            Some(Token {
-                token_type: TokenType::Dash,
-                ..
-            })
-        )
-    }
+    // pub fn is_dash(&mut self) -> bool {
+    //     matches!(
+    //         self.lexer.peek(),
+    //         Some(Token {
+    //             token_type: TokenType::Dash,
+    //             ..
+    //         })
+    //     )
+    // }
 
     pub fn is_colon(&mut self) -> bool {
         matches!(
@@ -327,15 +328,15 @@ impl<'source> Parser<'source> {
         )
     }
 
-    pub fn is_dot(&mut self) -> bool {
-        matches!(
-            self.lexer.peek(),
-            Some(Token {
-                token_type: TokenType::Dot,
-                ..
-            })
-        )
-    }
+    // pub fn is_dot(&mut self) -> bool {
+    //     matches!(
+    //         self.lexer.peek(),
+    //         Some(Token {
+    //             token_type: TokenType::Dot,
+    //             ..
+    //         })
+    //     )
+    // }
 
     pub fn is_dotdot(&mut self) -> bool {
         matches!(
@@ -515,7 +516,7 @@ impl<'source> Parser<'source> {
 
                 if self.is_semicolon() {
                     // This is a statement, not an expression
-                    self.next();
+                    self.lexer.next();
                     code_body.push(self.create_node(
                         AstNode::Statement(expression),
                         span_start,
@@ -684,14 +685,6 @@ impl<'source> Parser<'source> {
         }
     }
 
-    pub fn peek(&mut self) -> Option<Token> {
-        self.lexer.peek()
-    }
-
-    pub fn next(&mut self) -> Option<Token> {
-        self.lexer.next()
-    }
-
     pub fn number(&mut self) -> NodeId {
         match self.lexer.peek() {
             Some(Token {
@@ -740,9 +733,9 @@ impl<'source> Parser<'source> {
         match self.lexer.peek() {
             Some(Token {
                 token_type,
-                contents,
                 span_start,
                 span_end,
+                ..
             }) => match token_type {
                 TokenType::Plus => {
                     self.lexer.next();
@@ -954,7 +947,7 @@ impl<'source> Parser<'source> {
 
         if self.is_keyword(b"mut") {
             is_mutable = true;
-            self.next();
+            self.lexer.next();
         }
 
         let variable_name = self.variable();
@@ -1022,6 +1015,7 @@ impl<'source> Parser<'source> {
     pub fn variable(&mut self) -> NodeId {
         if self.is_name() {
             let name = self
+                .lexer
                 .next()
                 .expect("internal error: missing token that was expected to be there");
             let name_start = name.span_start;
@@ -1037,6 +1031,7 @@ impl<'source> Parser<'source> {
             let span_start = self.position();
 
             let name = self
+                .lexer
                 .next()
                 .expect("internal error: missing token that was expected to be there");
             let name_start = name.span_start;

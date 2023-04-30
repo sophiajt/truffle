@@ -22,10 +22,10 @@ impl<'scope> Scope<'scope> {
 }
 
 pub enum Function {
-    ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
+    // ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
     ExternalFn1(Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
     ExternalFn2(Box<dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
-    InternalFn,
+    // InternalFn,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -134,7 +134,7 @@ impl<'source> TypeChecker<'source> {
                 variable_name,
                 ty,
                 initializer,
-                is_mutable,
+                ..
             } => self.typecheck_let(*variable_name, *ty, *initializer, node_id, delta),
             AstNode::Variable => self.resolve_variable(node_id, delta),
             AstNode::If {
@@ -358,11 +358,11 @@ impl<'source> TypeChecker<'source> {
         if let Some(def) = self.external_functions.get(call_name) {
             let def = *def;
             match &self.functions[def.0] {
-                Function::ExternalFn0(..) => {
-                    if !args.is_empty() {
-                        self.error("unexpected argument", args[0])
-                    }
-                }
+                // Function::ExternalFn0(..) => {
+                //     if !args.is_empty() {
+                //         self.error("unexpected argument", args[0])
+                //     }
+                // }
                 Function::ExternalFn1(..) => {
                     if args.len() != 1 {
                         self.error("expected one argument", head)
@@ -429,13 +429,13 @@ impl<'source> TypeChecker<'source> {
     }
 
     // Debug functionality
-    pub fn print_node_types(&self) {
-        let mut idx = 0;
-        while idx < self.node_types.len() {
-            println!("{}: {}", idx, self.stringify_type(self.node_types[idx]));
-            idx += 1;
-        }
-    }
+    // pub fn print_node_types(&self) {
+    //     let mut idx = 0;
+    //     while idx < self.node_types.len() {
+    //         println!("{}: {}", idx, self.stringify_type(self.node_types[idx]));
+    //         idx += 1;
+    //     }
+    // }
 
     pub fn stringify_type(&self, type_id: TypeId) -> String {
         if type_id == UNKNOWN_TYPE {
@@ -527,5 +527,5 @@ pub enum Type {
     F64,
     Bool,
     Range(TypeId),
-    Fn(Vec<TypeId>, TypeId),
+    // Fn(Vec<TypeId>, TypeId),
 }

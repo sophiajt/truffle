@@ -7,10 +7,10 @@ pub struct ScriptError {
 }
 
 impl ScriptError {
-    pub fn new(message: impl Into<String>, node_id: NodeId) -> ScriptError {
-        ScriptError {
-            message: message.into(),
-            node_id,
-        }
-    }
+    // pub fn new(message: impl Into<String>, node_id: NodeId) -> ScriptError {
+    //     ScriptError {
+    //         message: message.into(),
+    //         node_id,
+    //     }
+    // }
 }
