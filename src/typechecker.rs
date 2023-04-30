@@ -28,8 +28,8 @@ pub enum Function {
     InternalFn,
 }
 
-#[derive(Clone, Copy)]
-pub struct FunctionId(usize);
+#[derive(Debug, Clone, Copy)]
+pub struct FunctionId(pub usize);
 
 pub struct TypeChecker<'source> {
     // Used by TypeId
@@ -351,6 +351,10 @@ impl<'source> TypeChecker<'source> {
     pub fn typecheck_call(&mut self, head: NodeId, args: &[NodeId], delta: &'source EngineDelta) {
         let call_name = &delta.contents[delta.span_start[head.0]..delta.span_end[head.0]];
 
+        for node_id in args {
+            self.typecheck_node(*node_id, delta)
+        }
+
         if let Some(def) = self.external_functions.get(call_name) {
             let def = *def;
             match &self.functions[def.0] {
@@ -478,6 +482,35 @@ where
             });
 
         self.functions.push(Function::ExternalFn1(wrapped));
+
+        let id = self.functions.len() - 1;
+
+        self.external_functions
+            .insert(name.as_bytes().to_vec(), FunctionId(id));
+    }
+}
+
+impl<'a, 'source, A, T, U, V> FnRegister<A, V, (&'a T, U)> for TypeChecker<'source>
+where
+    A: 'static + Fn(T, U) -> V,
+    T: Clone + Any,
+    U: Clone + Any,
+    V: Any,
+{
+    fn register_fn(&mut self, name: &str, fun: A) {
+        let wrapped: Box<
+            dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
+        > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>| {
+            let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
+            let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
+
+            match (inside1, inside2) {
+                (Some(b), Some(c)) => Ok(Box::new(fun(b.clone(), c.clone())) as Box<dyn Any>),
+                _ => Err("ErrorFunctionArgMismatch".into()),
+            }
+        });
+
+        self.functions.push(Function::ExternalFn2(wrapped));
 
         let id = self.functions.len() - 1;
 

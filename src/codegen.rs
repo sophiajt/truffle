@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::{any::Any, collections::HashMap};
 
 use crate::{
     delta::EngineDelta,
     parser::{AstNode, NodeId},
-    typechecker::{TypeChecker, I64_TYPE},
+    typechecker::{Function, FunctionId, TypeChecker, I64_TYPE},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -97,6 +97,12 @@ pub enum Instruction {
     },
 
     JMP(InstructionId),
+
+    EXTERNAL_CALL {
+        head: FunctionId,
+        args: Vec<RegisterId>,
+        target: RegisterId,
+    },
 }
 
 pub struct FunctionCodegen {
@@ -227,7 +233,12 @@ impl FunctionCodegen {
         self.instructions.push(Instruction::JMP(location))
     }
 
-    pub fn eval(&mut self) -> (i64, ValueType) {
+    pub fn external_call(&mut self, head: FunctionId, args: Vec<RegisterId>, target: RegisterId) {
+        self.instructions
+            .push(Instruction::EXTERNAL_CALL { head, args, target })
+    }
+
+    pub fn eval(&mut self, functions: &[Function]) -> (i64, ValueType) {
         let mut instruction_pointer = 0;
         let length = self.instructions.len();
 
@@ -315,10 +326,50 @@ impl FunctionCodegen {
                 Instruction::JMP(location) => {
                     instruction_pointer = location.0;
                 }
+                Instruction::EXTERNAL_CALL { head, args, target } => {
+                    let output = self.eval_external_call(*head, args, *target, functions);
+
+                    self.unbox_to_register(output, *target);
+                    instruction_pointer += 1;
+                }
             }
         }
 
         (self.register_values[0], self.register_types[0])
+    }
+
+    pub fn eval_external_call(
+        &self,
+        head: FunctionId,
+        args: &[RegisterId],
+        target: RegisterId,
+        functions: &[Function],
+    ) -> Box<dyn Any> {
+        match &functions[head.0] {
+            Function::ExternalFn0(fun) => fun().unwrap(),
+            Function::ExternalFn1(fun) => {
+                let mut val = self.box_register(args[0]);
+
+                fun(&mut val).unwrap()
+            }
+            Function::ExternalFn2(fun) => {
+                let mut arg0 = self.box_register(args[0]);
+                let mut arg1 = self.box_register(args[1]);
+
+                fun(&mut arg0, &mut arg1).unwrap()
+            }
+            _ => Box::new(0),
+        }
+    }
+
+    pub fn box_register(&self, register_id: RegisterId) -> Box<dyn Any> {
+        Box::new(self.register_values[register_id.0])
+    }
+
+    pub fn unbox_to_register(&mut self, value: Box<dyn Any>, target: RegisterId) {
+        if let Ok(value) = value.downcast::<i64>() {
+            self.register_values[target.0] = *value;
+        }
     }
 
     pub fn debug_print(&self) {
@@ -405,6 +456,9 @@ impl Translater {
             ),
             AstNode::While { condition, block } => {
                 self.translate_while(builder, *condition, *block, delta, typechecker)
+            }
+            AstNode::Call { head, args } => {
+                self.translate_call(builder, *head, args, delta, typechecker)
             }
             x => panic!("unsupported translation: {:?}", x),
         }
@@ -580,5 +634,31 @@ impl Translater {
                 idx += 1;
             }
         }
+    }
+
+    pub fn translate_call<'source>(
+        &mut self,
+        builder: &mut FunctionCodegen,
+        head: NodeId,
+        args: &[NodeId],
+        delta: &'source EngineDelta,
+        typechecker: &TypeChecker,
+    ) -> RegisterId {
+        let output = builder.new_register(ValueType::Unknown);
+
+        let head = typechecker
+            .call_resolution
+            .get(&head)
+            .expect("internal error: call should be resolved");
+
+        let mut translated_args = vec![];
+
+        for node_id in args {
+            translated_args.push(self.translate_node(builder, *node_id, delta, typechecker));
+        }
+
+        builder.external_call(*head, translated_args, output);
+
+        output
     }
 }

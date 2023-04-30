@@ -17,6 +17,10 @@ fn print_int(value: i64) {
     println!("value: {value}")
 }
 
+fn add_int(lhs: i64, rhs: i64) -> i64 {
+    lhs + rhs
+}
+
 fn main() {
     let args = std::env::args();
 
@@ -66,6 +70,7 @@ fn run_line(line: &str) {
 
     let mut typechecker = TypeChecker::new(parser.delta.ast_nodes.len());
     typechecker.register_fn("print_int", print_int);
+    typechecker.register_fn("add_int", add_int);
     typechecker.typecheck(&parser.delta);
 
     for error in &typechecker.errors {
@@ -90,7 +95,7 @@ fn run_line(line: &str) {
 
     let mut output = translater.translate(&parser.delta, &typechecker);
 
-    println!("output: {:?}", output.eval());
+    println!("output: {:?}", output.eval(&typechecker.functions));
 
     output.debug_print();
 }

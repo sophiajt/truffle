@@ -1,0 +1,5 @@
+let x = 123
+
+let y = add_int(x, 1000)
+
+print_int(y)
