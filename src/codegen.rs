@@ -3,7 +3,9 @@ use std::{any::Any, collections::HashMap};
 use crate::{
     delta::EngineDelta,
     parser::{AstNode, NodeId},
-    typechecker::{Function, FunctionId, TypeChecker},
+    typechecker::{
+        Function, FunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, UNKNOWN_TYPE, VOID_TYPE,
+    },
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -12,18 +14,9 @@ pub struct InstructionId(usize);
 #[derive(Clone, Copy, Debug)]
 pub struct RegisterId(usize);
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum ValueType {
-    Unknown,
-    Void,
-    I64,
-    // F64,
-    Bool,
-}
-
 #[derive(Debug, PartialEq)]
 pub struct Value {
-    ty: ValueType,
+    ty: TypeId,
     val: i64,
 }
 
@@ -108,35 +101,35 @@ pub enum Instruction {
 pub struct FunctionCodegen {
     pub instructions: Vec<Instruction>,
     pub register_values: Vec<i64>,
-    pub register_types: Vec<ValueType>,
+    pub register_types: Vec<TypeId>,
 }
 
 impl FunctionCodegen {
-    pub fn new_register_with_value(&mut self, value: i64, value_type: ValueType) -> RegisterId {
+    pub fn new_register_with_value(&mut self, value: i64, value_type: TypeId) -> RegisterId {
         self.register_values.push(value);
         self.register_types.push(value_type);
 
         RegisterId(self.register_values.len() - 1)
     }
 
-    pub fn new_register(&mut self, ty: ValueType) -> RegisterId {
+    pub fn new_register(&mut self, ty: TypeId) -> RegisterId {
         self.new_register_with_value(0, ty)
     }
 
     pub fn i64_const(&mut self, value: i64) -> RegisterId {
-        self.new_register_with_value(value, ValueType::I64)
+        self.new_register_with_value(value, I64_TYPE)
     }
 
     pub fn bool_const(&mut self, value: bool) -> RegisterId {
         if value {
-            self.new_register_with_value(1, ValueType::Bool)
+            self.new_register_with_value(1, BOOL_TYPE)
         } else {
-            self.new_register_with_value(0, ValueType::Bool)
+            self.new_register_with_value(0, BOOL_TYPE)
         }
     }
 
     pub fn iadd(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
-        let target = self.new_register(ValueType::I64);
+        let target = self.new_register(I64_TYPE);
 
         self.instructions
             .push(Instruction::IADD { lhs, rhs, target });
@@ -145,7 +138,7 @@ impl FunctionCodegen {
     }
 
     pub fn isub(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
-        let target = self.new_register(ValueType::I64);
+        let target = self.new_register(I64_TYPE);
 
         self.instructions
             .push(Instruction::ISUB { lhs, rhs, target });
@@ -154,7 +147,7 @@ impl FunctionCodegen {
     }
 
     pub fn imul(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
-        let target = self.new_register(ValueType::I64);
+        let target = self.new_register(I64_TYPE);
 
         self.instructions
             .push(Instruction::IMUL { lhs, rhs, target });
@@ -163,7 +156,7 @@ impl FunctionCodegen {
     }
 
     pub fn idiv(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
-        let target = self.new_register(ValueType::I64);
+        let target = self.new_register(I64_TYPE);
 
         self.instructions
             .push(Instruction::IDIV { lhs, rhs, target });
@@ -172,7 +165,7 @@ impl FunctionCodegen {
     }
 
     pub fn ilt(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
-        let target = self.new_register(ValueType::Bool);
+        let target = self.new_register(BOOL_TYPE);
 
         self.instructions
             .push(Instruction::ILT { lhs, rhs, target });
@@ -181,7 +174,7 @@ impl FunctionCodegen {
     }
 
     pub fn ilte(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
-        let target = self.new_register(ValueType::Bool);
+        let target = self.new_register(BOOL_TYPE);
 
         self.instructions
             .push(Instruction::ILTE { lhs, rhs, target });
@@ -190,7 +183,7 @@ impl FunctionCodegen {
     }
 
     pub fn igt(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
-        let target = self.new_register(ValueType::Bool);
+        let target = self.new_register(BOOL_TYPE);
 
         self.instructions
             .push(Instruction::IGT { lhs, rhs, target });
@@ -199,7 +192,7 @@ impl FunctionCodegen {
     }
 
     pub fn igte(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
-        let target = self.new_register(ValueType::Bool);
+        let target = self.new_register(BOOL_TYPE);
 
         self.instructions
             .push(Instruction::IGTE { lhs, rhs, target });
@@ -238,7 +231,7 @@ impl FunctionCodegen {
             .push(Instruction::EXTERNALCALL { head, args, target })
     }
 
-    pub fn eval(&mut self, functions: &[Function]) -> (i64, ValueType) {
+    pub fn eval(&mut self, functions: &[Function]) -> (i64, TypeId) {
         let mut instruction_pointer = 0;
         let length = self.instructions.len();
 
@@ -308,7 +301,6 @@ impl FunctionCodegen {
                 }
                 Instruction::MOV { target, source } => {
                     self.register_values[target.0] = self.register_values[source.0];
-                    self.register_types[target.0] = self.register_types[source.0];
                     instruction_pointer += 1;
                 }
                 Instruction::BRIF {
@@ -371,7 +363,7 @@ impl FunctionCodegen {
         }
     }
 
-    pub fn debug_print(&self) {
+    pub fn debug_print(&self, typechecker: &TypeChecker) {
         println!("virtual machine:");
         println!("  instructions:");
         for instr in self.instructions.iter().enumerate() {
@@ -379,7 +371,12 @@ impl FunctionCodegen {
         }
         println!("  registers:");
         for (idx, value) in self.register_values.iter().enumerate() {
-            println!("    {}: {} ({:?})", idx, value, self.register_types[idx]);
+            println!(
+                "    {}: {} ({})",
+                idx,
+                value,
+                typechecker.stringify_type(self.register_types[idx])
+            );
         }
     }
 
@@ -448,6 +445,7 @@ impl Translater {
                 else_expression,
             } => self.translate_if(
                 builder,
+                node_id,
                 *condition,
                 *then_block,
                 *else_expression,
@@ -540,13 +538,14 @@ impl Translater {
     pub fn translate_if<'source>(
         &mut self,
         builder: &mut FunctionCodegen,
+        node_id: NodeId,
         condition: NodeId,
         then_block: NodeId,
         else_expression: Option<NodeId>,
         delta: &'source EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
-        let output = builder.new_register(ValueType::Unknown);
+        let output = builder.new_register(typechecker.node_types[node_id.0]);
         let condition = self.translate_node(builder, condition, delta, typechecker);
 
         let brif_location = builder.next_position();
@@ -590,7 +589,7 @@ impl Translater {
         delta: &'source EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
-        let output = builder.new_register(ValueType::Void);
+        let output = builder.new_register(VOID_TYPE);
 
         let top = builder.next_position();
         let condition = self.translate_node(builder, condition, delta, typechecker);
@@ -621,7 +620,7 @@ impl Translater {
         typechecker: &TypeChecker,
     ) -> RegisterId {
         if nodes.is_empty() {
-            return builder.new_register(ValueType::Void);
+            return builder.new_register(VOID_TYPE);
         } else {
             let mut idx = 0;
 
@@ -643,7 +642,7 @@ impl Translater {
         delta: &'source EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
-        let output = builder.new_register(ValueType::Unknown);
+        let output = builder.new_register(UNKNOWN_TYPE);
 
         let head = typechecker
             .call_resolution

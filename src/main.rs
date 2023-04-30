@@ -117,8 +117,12 @@ fn run_line(line: &str, debug_output: bool) {
     if debug_output {
         println!("============");
         println!();
-        output.debug_print();
+        output.debug_print(&typechecker);
         println!();
     }
-    println!("result -> {:?}", result);
+    println!(
+        "result -> {} ({})",
+        result.0,
+        typechecker.stringify_type(result.1)
+    );
 }
