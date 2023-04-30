@@ -7,3 +7,5 @@ ls benchmarks | get name | each {|file|
     "js" => { {name: node, time: (timeit node $file) } }
   }
 } | sort-by time
+
+    # "py" | "python" => { {name: pypy, time: (timeit pypy $file) } }
