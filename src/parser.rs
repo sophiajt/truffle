@@ -1048,8 +1048,8 @@ impl<'source> Parser<'source> {
                 self.lparen();
                 let mut args = vec![];
                 loop {
-                    if self.is_simple_expression() {
-                        args.push(self.simple_expression());
+                    if self.is_expression() {
+                        args.push(self.expression());
 
                         if self.is_comma() {
                             self.lexer.next();

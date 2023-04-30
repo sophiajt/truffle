@@ -28,13 +28,14 @@ fn main() {
         for arg in args.skip(1) {
             let contents = std::fs::read_to_string(arg).expect("couldn't find file");
 
-            run_line(&contents);
+            run_line(&contents, true);
         }
         return;
     }
 
     let mut line_editor = LineEditor::new();
 
+    let mut debug_output = false;
     loop {
         match line_editor.read_line() {
             Ok(ReadLineOutput::Continue) => {
@@ -46,9 +47,11 @@ fn main() {
             Ok(ReadLineOutput::Success(line)) => {
                 if line == "exit" || line == "quit" {
                     break;
+                } else if line == "debug" {
+                    debug_output = !debug_output;
+                } else {
+                    run_line(&line, debug_output);
                 }
-
-                run_line(&line);
             }
             Err(err) => {
                 println!("{:?}", err);
@@ -57,8 +60,10 @@ fn main() {
     }
 }
 
-fn run_line(line: &str) {
-    println!("line: {line}");
+fn run_line(line: &str, debug_output: bool) {
+    if debug_output {
+        println!("line: {line}");
+    }
 
     let mut parser = Parser::new(line.as_bytes(), 0, 0);
 
@@ -79,36 +84,41 @@ fn run_line(line: &str) {
 
     let result = &parser.delta;
 
-    println!();
-    println!("parse result:");
-    result.print();
-
+    if debug_output {
+        println!();
+        println!("parse result:");
+        result.print();
+    }
     let mut idx = 0;
 
-    println!();
-    println!("typed nodes:");
-    while idx < result.ast_nodes.len() {
-        println!(
-            "  {}: {:?} ({})",
-            idx,
-            result.ast_nodes[idx],
-            typechecker.stringify_type(typechecker.node_types[idx])
-        );
-        idx += 1;
+    if debug_output {
+        println!();
+        println!("typed nodes:");
+        while idx < result.ast_nodes.len() {
+            println!(
+                "  {}: {:?} ({})",
+                idx,
+                result.ast_nodes[idx],
+                typechecker.stringify_type(typechecker.node_types[idx])
+            );
+            idx += 1;
+        }
     }
 
     let mut translater = Translater::new();
 
     let mut output = translater.translate(&parser.delta, &typechecker);
 
-    println!();
-    println!("===stdout===");
+    if debug_output {
+        println!();
+        println!("===stdout===");
+    }
     let result = output.eval(&typechecker.functions);
-    println!("============");
-
-    println!();
-    output.debug_print();
-
-    println!();
+    if debug_output {
+        println!("============");
+        println!();
+        output.debug_print();
+        println!();
+    }
     println!("result -> {:?}", result);
 }
