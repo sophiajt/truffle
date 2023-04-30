@@ -4,5 +4,6 @@ ls benchmarks | get name | each {|file|
     "lua" => { {name: luajit, time: (timeit luajit $file) } }
     "truffle" => { {name: truffle, time: (timeit ./target/release/truffle $file) } }
     "py" | "python" => { {name: python3, time: (timeit python3 $file) } }
+    "js" => { {name: node, time: (timeit node $file) } }
   }
 } | sort-by time
