@@ -201,9 +201,13 @@ impl FunctionCodegen {
     }
 
     pub fn mov(&mut self, target: RegisterId, source: RegisterId) -> RegisterId {
-        self.instructions.push(Instruction::MOV { target, source });
+        if target.0 == source.0 {
+            source
+        } else {
+            self.instructions.push(Instruction::MOV { target, source });
 
-        target
+            target
+        }
     }
 
     pub fn brif(
