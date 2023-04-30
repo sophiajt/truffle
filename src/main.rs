@@ -78,12 +78,18 @@ fn run_line(line: &str) {
     }
 
     let result = &parser.delta;
+
+    println!();
+    println!("parse result:");
     result.print();
 
     let mut idx = 0;
+
+    println!();
+    println!("typed nodes:");
     while idx < result.ast_nodes.len() {
         println!(
-            "{}: {:?} ({})",
+            "  {}: {:?} ({})",
             idx,
             result.ast_nodes[idx],
             typechecker.stringify_type(typechecker.node_types[idx])
@@ -95,7 +101,14 @@ fn run_line(line: &str) {
 
     let mut output = translater.translate(&parser.delta, &typechecker);
 
-    println!("output: {:?}", output.eval(&typechecker.functions));
+    println!();
+    println!("===stdout===");
+    let result = output.eval(&typechecker.functions);
+    println!("============");
 
+    println!();
     output.debug_print();
+
+    println!();
+    println!("result -> {:?}", result);
 }

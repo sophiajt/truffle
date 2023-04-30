@@ -373,13 +373,14 @@ impl FunctionCodegen {
     }
 
     pub fn debug_print(&self) {
-        println!("instructions:");
+        println!("virtual machine:");
+        println!("  instructions:");
         for instr in self.instructions.iter().enumerate() {
-            println!("{:?}", instr);
+            println!("    {:?}", instr);
         }
-        println!("registers:");
+        println!("  registers:");
         for (idx, value) in self.register_values.iter().enumerate() {
-            println!("{}: {} ({:?})", idx, value, self.register_types[idx]);
+            println!("    {}: {} ({:?})", idx, value, self.register_types[idx]);
         }
     }
 
