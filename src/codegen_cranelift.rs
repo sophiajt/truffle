@@ -1,20 +1,15 @@
 use std::collections::HashMap;
 
-use cranelift::{
-    codegen::ir::{Endianness, FuncRef},
-    prelude::*,
-};
+use cranelift::{codegen::ir::FuncRef, prelude::*};
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{FuncId, Linkage, Module};
+use cranelift_module::{Linkage, Module};
 
 use crate::{
     add_int,
     delta::EngineDelta,
     parser::{AstNode, NodeId},
     print_int,
-    typechecker::{
-        Function, FunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, UNKNOWN_TYPE, VOID_TYPE,
-    },
+    typechecker::{Function, TypeChecker, TypeId, I64_TYPE},
 };
 
 pub struct JIT {
@@ -78,13 +73,13 @@ pub struct FunctionCodegen {
 }
 
 impl FunctionCodegen {
-    pub fn eval(&self, functions: &[Function]) -> (i64, TypeId) {
+    pub fn eval(&self, _functions: &[Function]) -> (i64, TypeId) {
         let result = (self.fun)();
 
         (result, I64_TYPE)
     }
 
-    pub fn debug_print(&self, typechecker: &TypeChecker) {
+    pub fn debug_print(&self, _typechecker: &TypeChecker) {
         println!("cranelift implementation does not currently keep debug state")
     }
 }
@@ -428,7 +423,7 @@ impl Translater {
 
         // Body of loop
         builder.switch_to_block(body_block);
-        let result = self.translate_node(builder, block_node_id, delta, typechecker, int);
+        self.translate_node(builder, block_node_id, delta, typechecker, int);
         builder.seal_block(body_block);
         builder.ins().jump(condition_block, &[]);
 
@@ -444,7 +439,7 @@ impl Translater {
     pub fn translate_call<'source>(
         &mut self,
         builder: &mut FunctionBuilder,
-        head: NodeId,
+        _head: NodeId,
         args: &[NodeId],
         delta: &'source EngineDelta,
         typechecker: &TypeChecker,

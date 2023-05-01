@@ -116,6 +116,7 @@ fn run_line(line: &str, debug_output: bool) {
 
     let mut translater = Translater::new();
 
+    #[allow(unused_mut)]
     let mut output = translater.translate(&parser.delta, &typechecker);
 
     if debug_output {
