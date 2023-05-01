@@ -22,11 +22,11 @@ use crate::{
 };
 use line_editor::{LineEditor, ReadLineOutput};
 
-fn print_int(value: i64) {
+pub fn print_int(value: i64) {
     println!("value: {value}")
 }
 
-fn add_int(lhs: i64, rhs: i64) -> i64 {
+pub fn add_int(lhs: i64, rhs: i64) -> i64 {
     lhs + rhs
 }
 
