@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use cranelift::prelude::*;
+use cranelift::{codegen::ir::Endianness, prelude::*};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module};
 
@@ -176,6 +176,28 @@ impl Translater {
                 typechecker,
                 int,
             ),
+            AstNode::Statement(node_id) => {
+                self.translate_node(builder, *node_id, delta, typechecker, int)
+            }
+            AstNode::If {
+                condition,
+                then_block,
+                else_expression,
+            } => self.translate_if(
+                builder,
+                node_id,
+                *condition,
+                *then_block,
+                *else_expression,
+                delta,
+                typechecker,
+                int,
+            ),
+            AstNode::While { condition, block } => {
+                self.translate_while(builder, *condition, *block, delta, typechecker, int)
+            }
+            AstNode::True => builder.ins().iconst(int, 1),
+            AstNode::False => builder.ins().iconst(int, 0),
             AstNode::Variable => self.translate_variable(builder, node_id, typechecker),
             x => panic!("omg: {:?}", x),
         }
@@ -237,32 +259,148 @@ impl Translater {
     pub fn translate_binop<'source>(
         &mut self,
         builder: &mut FunctionBuilder,
-        lhs: NodeId,
+        untranslate_lhs: NodeId,
         op: NodeId,
-        rhs: NodeId,
+        untranslate_rhs: NodeId,
         delta: &'source EngineDelta,
         typechecker: &TypeChecker,
         int: Type,
     ) -> Value {
-        let lhs = self.translate_node(builder, lhs, delta, typechecker, int);
-        let rhs = self.translate_node(builder, rhs, delta, typechecker, int);
+        let lhs = self.translate_node(builder, untranslate_lhs, delta, typechecker, int);
+        let rhs = self.translate_node(builder, untranslate_rhs, delta, typechecker, int);
 
         match delta.ast_nodes[op.0] {
             AstNode::Plus => builder.ins().iadd(lhs, rhs),
             AstNode::Minus => builder.ins().isub(lhs, rhs),
             AstNode::Multiply => builder.ins().imul(lhs, rhs),
-            AstNode::LessThan => builder.ins().icmp(IntCC::UnsignedLessThan, lhs, rhs),
-            AstNode::LessThanOrEqual => {
-                builder.ins().icmp(IntCC::UnsignedLessThanOrEqual, lhs, rhs)
+            AstNode::LessThan => {
+                let result = builder.ins().icmp(IntCC::UnsignedLessThan, lhs, rhs);
+
+                builder.ins().sextend(int, result)
             }
-            AstNode::GreaterThan => builder.ins().icmp(IntCC::UnsignedGreaterThan, lhs, rhs),
+            AstNode::LessThanOrEqual => {
+                let result = builder.ins().icmp(IntCC::UnsignedLessThanOrEqual, lhs, rhs);
+
+                builder.ins().sextend(int, result)
+            }
+            AstNode::GreaterThan => {
+                let result = builder.ins().icmp(IntCC::UnsignedGreaterThan, lhs, rhs);
+
+                builder.ins().sextend(int, result)
+            }
             AstNode::GreaterThanOrEqual => {
-                builder
+                let result = builder
                     .ins()
-                    .icmp(IntCC::UnsignedGreaterThanOrEqual, lhs, rhs)
+                    .icmp(IntCC::UnsignedGreaterThanOrEqual, lhs, rhs);
+
+                builder.ins().sextend(int, result)
+            }
+            AstNode::Assignment => {
+                if let Some(def_node_id) = typechecker.variable_def.get(&untranslate_lhs) {
+                    if let Some(variable) = self.var_lookup.get(&def_node_id) {
+                        builder.def_var(*variable, rhs);
+                    } else {
+                        panic!("unsupported operation: assignment missing variable")
+                    }
+                } else {
+                    panic!("unsupported operation: assignment missing variable")
+                }
+
+                rhs
             }
             _ => panic!("unsupported operation"),
         }
+    }
+
+    pub fn translate_if<'source>(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        if_node_id: NodeId,
+        condition: NodeId,
+        then_node_id: NodeId,
+        else_node_id: Option<NodeId>,
+        delta: &'source EngineDelta,
+        typechecker: &TypeChecker,
+        int: Type,
+    ) -> Value {
+        let condition_block = builder.create_block();
+        let then_block = builder.create_block();
+        let else_block = builder.create_block();
+        let exit_block = builder.create_block();
+
+        let output = Variable::new(self.var_lookup.len());
+        // FIXME: assume i64 for now
+        builder.declare_var(output, int);
+        self.var_lookup.insert(if_node_id, output);
+
+        // Condition
+        builder.ins().jump(condition_block, &[]);
+        builder.switch_to_block(condition_block);
+        builder.seal_block(condition_block);
+
+        let result = self.translate_node(builder, condition, delta, typechecker, int);
+
+        builder.ins().brif(result, then_block, &[], else_block, &[]);
+
+        // Then
+        builder.switch_to_block(then_block);
+        let result = self.translate_node(builder, then_node_id, delta, typechecker, int);
+        builder.def_var(output, result);
+        builder.seal_block(then_block);
+        builder.ins().jump(exit_block, &[]);
+
+        // Else
+        builder.switch_to_block(else_block);
+        if let Some(else_node_id) = else_node_id {
+            let result = self.translate_node(builder, else_node_id, delta, typechecker, int);
+            builder.def_var(output, result);
+        } else {
+            let zero = builder.ins().iconst(int, 0);
+            builder.def_var(output, zero);
+        }
+        builder.seal_block(else_block);
+        builder.ins().jump(exit_block, &[]);
+
+        builder.switch_to_block(exit_block);
+        builder.seal_block(exit_block);
+
+        builder.use_var(output)
+    }
+
+    pub fn translate_while<'source>(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        condition: NodeId,
+        block_node_id: NodeId,
+        delta: &'source EngineDelta,
+        typechecker: &TypeChecker,
+        int: Type,
+    ) -> Value {
+        let condition_block = builder.create_block();
+        let body_block = builder.create_block();
+        let exit_block = builder.create_block();
+
+        // Condition
+        builder.ins().jump(condition_block, &[]);
+        builder.switch_to_block(condition_block);
+
+        let result = self.translate_node(builder, condition, delta, typechecker, int);
+
+        builder.ins().brif(result, body_block, &[], exit_block, &[]);
+
+        // Body of loop
+        builder.switch_to_block(body_block);
+        let result = self.translate_node(builder, block_node_id, delta, typechecker, int);
+        builder.seal_block(body_block);
+        builder.ins().jump(condition_block, &[]);
+
+        // Exit loop
+        builder.switch_to_block(exit_block);
+
+        builder.seal_block(condition_block);
+        builder.seal_block(exit_block);
+
+        builder.ins().iconst(int, 0)
     }
 
     pub fn translate_block<'source>(
