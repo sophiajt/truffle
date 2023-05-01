@@ -438,7 +438,7 @@ impl Translater {
                 variable_name,
                 initializer,
                 ..
-            } => self.translate_var_decl(builder, *variable_name, *initializer, delta, typechecker),
+            } => self.translate_let(builder, *variable_name, *initializer, delta, typechecker),
             AstNode::Variable => self.translate_variable(node_id, typechecker),
             AstNode::Statement(node_id) => {
                 self.translate_node(builder, *node_id, delta, typechecker)
@@ -506,7 +506,7 @@ impl Translater {
         }
     }
 
-    pub fn translate_var_decl<'source>(
+    pub fn translate_let<'source>(
         &mut self,
         builder: &mut FunctionCodegen,
         variable_name: NodeId,

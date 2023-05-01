@@ -1,3 +1,7 @@
+#[cfg(feature = "cranelift")]
+mod codegen_cranelift;
+
+#[cfg(not(feature = "cranelift"))]
 mod codegen;
 mod delta;
 mod errors;
@@ -6,8 +10,13 @@ mod line_editor;
 mod parser;
 mod typechecker;
 
+#[cfg(not(feature = "cranelift"))]
+use crate::codegen::Translater;
+
+#[cfg(feature = "cranelift")]
+use crate::codegen_cranelift::Translater;
+
 use crate::{
-    codegen::Translater,
     parser::Parser,
     typechecker::{FnRegister, TypeChecker},
 };
