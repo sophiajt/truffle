@@ -21,7 +21,7 @@ fn run_file(filename: &str) {
 
 fn parser_benchmark(c: &mut Criterion) {
     c.bench_function("parser_experiment: hot_loop_no_print.truffle", |b| {
-        b.iter(|| run_file(black_box("benchmarks/hot_loop_no_print.truffle")))
+        b.iter(|| run_file(black_box("samples/hot_loop_no_print.truffle")))
     });
 }
 

@@ -302,10 +302,11 @@ impl Translater {
         let lhs = self.translate_node(builder, untranslate_lhs, delta, typechecker, int);
         let rhs = self.translate_node(builder, untranslate_rhs, delta, typechecker, int);
 
-        match delta.ast_nodes[op.0] {
+        match &delta.ast_nodes[op.0] {
             AstNode::Plus => builder.ins().iadd(lhs, rhs),
             AstNode::Minus => builder.ins().isub(lhs, rhs),
             AstNode::Multiply => builder.ins().imul(lhs, rhs),
+            AstNode::Divide => builder.ins().sdiv(lhs, rhs),
             AstNode::LessThan => {
                 let result = builder.ins().icmp(IntCC::UnsignedLessThan, lhs, rhs);
 
@@ -341,7 +342,7 @@ impl Translater {
 
                 rhs
             }
-            _ => panic!("unsupported operation"),
+            x => panic!("unsupported operation: {:?}", x),
         }
     }
 

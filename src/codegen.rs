@@ -248,56 +248,50 @@ impl FunctionCodegen {
                     instruction_pointer += 1;
                 }
                 Instruction::ISUB { lhs, rhs, target } => {
-                    let lhs = &self.register_values[lhs.0];
-                    let rhs = &self.register_values[rhs.0];
-
-                    self.register_values[target.0] = lhs - rhs;
+                    self.register_values[target.0] =
+                        self.register_values[lhs.0] - self.register_values[rhs.0];
 
                     instruction_pointer += 1;
                 }
                 Instruction::IMUL { lhs, rhs, target } => {
-                    let lhs = &self.register_values[lhs.0];
-                    let rhs = &self.register_values[rhs.0];
-
-                    self.register_values[target.0] = lhs * rhs;
+                    self.register_values[target.0] =
+                        self.register_values[lhs.0] * self.register_values[rhs.0];
 
                     instruction_pointer += 1;
                 }
                 Instruction::IDIV { lhs, rhs, target } => {
-                    let lhs = &self.register_values[lhs.0];
-                    let rhs = &self.register_values[rhs.0];
-
-                    self.register_values[target.0] = lhs / rhs;
+                    self.register_values[target.0] =
+                        self.register_values[lhs.0] / self.register_values[rhs.0];
 
                     instruction_pointer += 1
                 }
                 Instruction::ILT { lhs, rhs, target } => {
-                    let lhs = &self.register_values[lhs.0];
-                    let rhs = &self.register_values[rhs.0];
+                    let lhs = self.register_values[lhs.0];
+                    let rhs = self.register_values[rhs.0];
 
                     self.register_values[target.0] = (lhs < rhs) as i64;
 
                     instruction_pointer += 1;
                 }
                 Instruction::ILTE { lhs, rhs, target } => {
-                    let lhs = &self.register_values[lhs.0];
-                    let rhs = &self.register_values[rhs.0];
+                    let lhs = self.register_values[lhs.0];
+                    let rhs = self.register_values[rhs.0];
 
                     self.register_values[target.0] = (lhs <= rhs) as i64;
 
                     instruction_pointer += 1;
                 }
                 Instruction::IGT { lhs, rhs, target } => {
-                    let lhs = &self.register_values[lhs.0];
-                    let rhs = &self.register_values[rhs.0];
+                    let lhs = self.register_values[lhs.0];
+                    let rhs = self.register_values[rhs.0];
 
                     self.register_values[target.0] = (lhs > rhs) as i64;
 
                     instruction_pointer += 1;
                 }
                 Instruction::IGTE { lhs, rhs, target } => {
-                    let lhs = &self.register_values[lhs.0];
-                    let rhs = &self.register_values[rhs.0];
+                    let lhs = self.register_values[lhs.0];
+                    let rhs = self.register_values[rhs.0];
 
                     self.register_values[target.0] = (lhs >= rhs) as i64;
 
