@@ -61,14 +61,12 @@ pub const F64_TYPE: TypeId = TypeId(3);
 pub const BOOL_TYPE: TypeId = TypeId(4);
 
 impl<'source> TypeChecker<'source> {
-    pub fn new(node_count: usize) -> Self {
-        let node_types = vec![UNKNOWN_TYPE; node_count];
-
+    pub fn new() -> Self {
         Self {
             types: vec![Type::Unknown, Type::Void, Type::I64, Type::F64, Type::Bool],
             errors: vec![],
 
-            node_types,
+            node_types: vec![],
             variable_def: HashMap::new(),
 
             call_resolution: HashMap::new(),
@@ -160,6 +158,8 @@ impl<'source> TypeChecker<'source> {
 
     pub fn typecheck(&mut self, delta: &'source EngineDelta) {
         if !delta.ast_nodes.is_empty() {
+            self.node_types = vec![UNKNOWN_TYPE; delta.ast_nodes.len()];
+
             let last = delta.ast_nodes.len() - 1;
             self.typecheck_node(NodeId(last), delta)
         }

@@ -145,7 +145,8 @@ impl Translater {
 
             let last = delta.ast_nodes.len() - 1;
 
-            let result = self.translate_node(&mut builder, NodeId(last), delta, typechecker, int);
+            let result =
+                self.translate_node(&mut builder, NodeId(last as u32), delta, typechecker, int);
             builder.seal_block(block);
 
             let exit_block = builder.create_block();

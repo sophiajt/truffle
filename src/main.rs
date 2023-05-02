@@ -1,34 +1,7 @@
-#[cfg(feature = "cranelift")]
-mod codegen_cranelift;
-
-#[cfg(not(feature = "cranelift"))]
-mod codegen;
-mod delta;
-mod errors;
-mod lexer;
 mod line_editor;
-mod parser;
-mod typechecker;
-
-#[cfg(not(feature = "cranelift"))]
-use crate::codegen::Translater;
-
-#[cfg(feature = "cranelift")]
-use crate::codegen_cranelift::Translater;
-
-use crate::{
-    parser::Parser,
-    typechecker::{FnRegister, TypeChecker},
-};
 use line_editor::{LineEditor, ReadLineOutput};
 
-pub fn print_int(value: i64) {
-    println!("value: {value}")
-}
-
-pub fn add_int(lhs: i64, rhs: i64) -> i64 {
-    lhs + rhs
-}
+use truffle::{add_int, print_int, FnRegister, Parser, Translater, TypeChecker};
 
 fn main() {
     let args = std::env::args();
@@ -82,7 +55,7 @@ fn run_line(line: &str, debug_output: bool) {
         println!("error: {:?}", error);
     }
 
-    let mut typechecker = TypeChecker::new(parser.delta.ast_nodes.len());
+    let mut typechecker = TypeChecker::new();
     typechecker.register_fn("print_int", print_int);
     typechecker.register_fn("add_int", add_int);
     typechecker.typecheck(&parser.delta);
