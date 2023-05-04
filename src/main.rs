@@ -1,7 +1,7 @@
 mod line_editor;
 use line_editor::{LineEditor, ReadLineOutput};
 
-use truffle::{add_int, print_int, FnRegister, Parser, Translater, TypeChecker};
+use truffle::{add_int, print_int, FnRegister, Parser, Translater, TypeChecker, F64_TYPE};
 
 fn main() {
     let args = std::env::args();
@@ -103,9 +103,18 @@ fn run_line(line: &str, debug_output: bool) {
         output.debug_print(&typechecker);
         println!();
     }
-    println!(
-        "result -> {} ({})",
-        result.0,
-        typechecker.stringify_type(result.1)
-    );
+
+    if result.1 == F64_TYPE {
+        println!(
+            "result -> {} ({})",
+            unsafe { std::mem::transmute::<i64, f64>(result.0) },
+            typechecker.stringify_type(result.1)
+        );
+    } else {
+        println!(
+            "result -> {} ({})",
+            result.0,
+            typechecker.stringify_type(result.1)
+        );
+    }
 }

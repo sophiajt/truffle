@@ -90,6 +90,9 @@ impl<'source> TypeChecker<'source> {
             AstNode::Int => {
                 self.node_types[node_id.0] = I64_TYPE;
             }
+            AstNode::Float => {
+                self.node_types[node_id.0] = F64_TYPE;
+            }
             AstNode::BinaryOp { lhs, op, rhs } => {
                 self.typecheck_binop(*lhs, *op, *rhs, node_id, delta);
             }

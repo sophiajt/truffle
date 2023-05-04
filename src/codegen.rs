@@ -6,6 +6,7 @@ use crate::{
     typechecker::{
         Function, FunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, UNKNOWN_TYPE, VOID_TYPE,
     },
+    F64_TYPE,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -78,6 +79,50 @@ pub enum Instruction {
         target: RegisterId,
     },
 
+    // float math
+    FADD {
+        lhs: RegisterId,
+        rhs: RegisterId,
+        target: RegisterId,
+    },
+    FSUB {
+        lhs: RegisterId,
+        rhs: RegisterId,
+        target: RegisterId,
+    },
+    FMUL {
+        lhs: RegisterId,
+        rhs: RegisterId,
+        target: RegisterId,
+    },
+    FDIV {
+        lhs: RegisterId,
+        rhs: RegisterId,
+        target: RegisterId,
+    },
+
+    // float comparisons (e.g., ILT = Integer + LessThan)
+    FLT {
+        lhs: RegisterId,
+        rhs: RegisterId,
+        target: RegisterId,
+    },
+    FLTE {
+        lhs: RegisterId,
+        rhs: RegisterId,
+        target: RegisterId,
+    },
+    FGT {
+        lhs: RegisterId,
+        rhs: RegisterId,
+        target: RegisterId,
+    },
+    FGTE {
+        lhs: RegisterId,
+        rhs: RegisterId,
+        target: RegisterId,
+    },
+
     MOV {
         target: RegisterId,
         source: RegisterId,
@@ -120,6 +165,10 @@ impl FunctionCodegen {
         self.new_register_with_value(value, I64_TYPE)
     }
 
+    pub fn f64_const(&mut self, value: f64) -> RegisterId {
+        self.new_register_with_value(unsafe { std::mem::transmute::<f64, i64>(value) }, F64_TYPE)
+    }
+
     pub fn bool_const(&mut self, value: bool) -> RegisterId {
         if value {
             self.new_register_with_value(1, BOOL_TYPE)
@@ -128,76 +177,156 @@ impl FunctionCodegen {
         }
     }
 
-    pub fn iadd(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
-        let target = self.new_register(I64_TYPE);
+    pub fn add(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
+        if self.register_types[lhs.0] == F64_TYPE {
+            let target = self.new_register(F64_TYPE);
 
-        self.instructions
-            .push(Instruction::IADD { lhs, rhs, target });
+            self.instructions
+                .push(Instruction::FADD { lhs, rhs, target });
 
-        target
+            target
+        } else if self.register_types[lhs.0] == I64_TYPE {
+            let target = self.new_register(I64_TYPE);
+
+            self.instructions
+                .push(Instruction::IADD { lhs, rhs, target });
+
+            target
+        } else {
+            panic!("unsupport add operation")
+        }
     }
 
-    pub fn isub(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
-        let target = self.new_register(I64_TYPE);
+    pub fn sub(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
+        if self.register_types[lhs.0] == F64_TYPE {
+            let target = self.new_register(F64_TYPE);
 
-        self.instructions
-            .push(Instruction::ISUB { lhs, rhs, target });
+            self.instructions
+                .push(Instruction::FSUB { lhs, rhs, target });
 
-        target
+            target
+        } else if self.register_types[lhs.0] == I64_TYPE {
+            let target = self.new_register(I64_TYPE);
+
+            self.instructions
+                .push(Instruction::ISUB { lhs, rhs, target });
+
+            target
+        } else {
+            panic!("unsupport sub operation")
+        }
     }
 
-    pub fn imul(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
-        let target = self.new_register(I64_TYPE);
+    pub fn mul(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
+        if self.register_types[lhs.0] == F64_TYPE {
+            let target = self.new_register(F64_TYPE);
 
-        self.instructions
-            .push(Instruction::IMUL { lhs, rhs, target });
+            self.instructions
+                .push(Instruction::FMUL { lhs, rhs, target });
 
-        target
+            target
+        } else if self.register_types[lhs.0] == I64_TYPE {
+            let target = self.new_register(I64_TYPE);
+
+            self.instructions
+                .push(Instruction::IMUL { lhs, rhs, target });
+
+            target
+        } else {
+            panic!("unsupport mul operation")
+        }
     }
 
-    pub fn idiv(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
-        let target = self.new_register(I64_TYPE);
+    pub fn div(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
+        if self.register_types[lhs.0] == F64_TYPE {
+            let target = self.new_register(F64_TYPE);
 
-        self.instructions
-            .push(Instruction::IDIV { lhs, rhs, target });
+            self.instructions
+                .push(Instruction::FDIV { lhs, rhs, target });
 
-        target
+            target
+        } else if self.register_types[lhs.0] == I64_TYPE {
+            let target = self.new_register(I64_TYPE);
+
+            self.instructions
+                .push(Instruction::IDIV { lhs, rhs, target });
+
+            target
+        } else {
+            panic!("unsupport div operation")
+        }
     }
 
-    pub fn ilt(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
+    pub fn lt(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
         let target = self.new_register(BOOL_TYPE);
 
-        self.instructions
-            .push(Instruction::ILT { lhs, rhs, target });
+        if self.register_types[lhs.0] == F64_TYPE {
+            self.instructions
+                .push(Instruction::FLT { lhs, rhs, target });
 
-        target
+            target
+        } else if self.register_types[lhs.0] == I64_TYPE {
+            self.instructions
+                .push(Instruction::ILT { lhs, rhs, target });
+
+            target
+        } else {
+            panic!("unsupport lt operation")
+        }
     }
 
-    pub fn ilte(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
+    pub fn lte(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
         let target = self.new_register(BOOL_TYPE);
 
-        self.instructions
-            .push(Instruction::ILTE { lhs, rhs, target });
+        if self.register_types[lhs.0] == F64_TYPE {
+            self.instructions
+                .push(Instruction::FLTE { lhs, rhs, target });
 
-        target
+            target
+        } else if self.register_types[lhs.0] == I64_TYPE {
+            self.instructions
+                .push(Instruction::ILTE { lhs, rhs, target });
+
+            target
+        } else {
+            panic!("unsupport lte operation")
+        }
     }
 
-    pub fn igt(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
+    pub fn gt(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
         let target = self.new_register(BOOL_TYPE);
 
-        self.instructions
-            .push(Instruction::IGT { lhs, rhs, target });
+        if self.register_types[lhs.0] == F64_TYPE {
+            self.instructions
+                .push(Instruction::FGT { lhs, rhs, target });
 
-        target
+            target
+        } else if self.register_types[lhs.0] == I64_TYPE {
+            self.instructions
+                .push(Instruction::IGT { lhs, rhs, target });
+
+            target
+        } else {
+            panic!("unsupport gt operation")
+        }
     }
 
-    pub fn igte(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
+    pub fn gte(&mut self, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
         let target = self.new_register(BOOL_TYPE);
 
-        self.instructions
-            .push(Instruction::IGTE { lhs, rhs, target });
+        if self.register_types[lhs.0] == F64_TYPE {
+            self.instructions
+                .push(Instruction::FGTE { lhs, rhs, target });
 
-        target
+            target
+        } else if self.register_types[lhs.0] == I64_TYPE {
+            self.instructions
+                .push(Instruction::IGTE { lhs, rhs, target });
+
+            target
+        } else {
+            panic!("unsupport gte operation")
+        }
     }
 
     pub fn mov(&mut self, target: RegisterId, source: RegisterId) -> RegisterId {
@@ -297,6 +426,90 @@ impl FunctionCodegen {
 
                     instruction_pointer += 1;
                 }
+                Instruction::FADD { lhs, rhs, target } => {
+                    let lhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
+                    let rhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+
+                    self.register_values[target.0] =
+                        unsafe { std::mem::transmute::<f64, i64>(lhs + rhs) };
+
+                    instruction_pointer += 1;
+                }
+                Instruction::FSUB { lhs, rhs, target } => {
+                    let lhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
+                    let rhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+
+                    self.register_values[target.0] =
+                        unsafe { std::mem::transmute::<f64, i64>(lhs - rhs) };
+
+                    instruction_pointer += 1;
+                }
+                Instruction::FMUL { lhs, rhs, target } => {
+                    let lhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
+                    let rhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+
+                    self.register_values[target.0] =
+                        unsafe { std::mem::transmute::<f64, i64>(lhs * rhs) };
+
+                    instruction_pointer += 1;
+                }
+                Instruction::FDIV { lhs, rhs, target } => {
+                    let lhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
+                    let rhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+
+                    self.register_values[target.0] =
+                        unsafe { std::mem::transmute::<f64, i64>(lhs / rhs) };
+
+                    instruction_pointer += 1;
+                }
+                Instruction::FLT { lhs, rhs, target } => {
+                    let lhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
+                    let rhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+
+                    self.register_values[target.0] = (lhs < rhs) as i64;
+
+                    instruction_pointer += 1;
+                }
+                Instruction::FLTE { lhs, rhs, target } => {
+                    let lhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
+                    let rhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+
+                    self.register_values[target.0] = (lhs <= rhs) as i64;
+
+                    instruction_pointer += 1;
+                }
+                Instruction::FGT { lhs, rhs, target } => {
+                    let lhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
+                    let rhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+
+                    self.register_values[target.0] = (lhs > rhs) as i64;
+
+                    instruction_pointer += 1;
+                }
+                Instruction::FGTE { lhs, rhs, target } => {
+                    let lhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
+                    let rhs =
+                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+
+                    self.register_values[target.0] = (lhs >= rhs) as i64;
+
+                    instruction_pointer += 1;
+                }
                 Instruction::MOV { target, source } => {
                     self.register_values[target.0] = self.register_values[source.0];
                     instruction_pointer += 1;
@@ -369,12 +582,21 @@ impl FunctionCodegen {
         }
         println!("  registers:");
         for (idx, value) in self.register_values.iter().enumerate() {
-            println!(
-                "    {}: {} ({})",
-                idx,
-                value,
-                typechecker.stringify_type(self.register_types[idx])
-            );
+            if self.register_types[idx] == F64_TYPE {
+                println!(
+                    "    {}: {} ({})",
+                    idx,
+                    unsafe { std::mem::transmute::<i64, f64>(*value) },
+                    typechecker.stringify_type(self.register_types[idx])
+                );
+            } else {
+                println!(
+                    "    {}: {} ({})",
+                    idx,
+                    *value,
+                    typechecker.stringify_type(self.register_types[idx])
+                );
+            }
         }
     }
 
@@ -422,6 +644,7 @@ impl Translater {
     ) -> RegisterId {
         match &delta.ast_nodes[node_id.0] {
             AstNode::Int => self.translate_int(builder, node_id, delta),
+            AstNode::Float => self.translate_float(builder, node_id, delta),
             AstNode::BinaryOp { lhs, op, rhs } => {
                 self.translate_binop(builder, *lhs, *op, *rhs, delta, typechecker)
             }
@@ -474,6 +697,21 @@ impl Translater {
         builder.i64_const(constant)
     }
 
+    pub fn translate_float<'source>(
+        &mut self,
+        builder: &mut FunctionCodegen,
+        node_id: NodeId,
+        delta: &'source EngineDelta,
+    ) -> RegisterId {
+        let contents = &delta.contents[delta.span_start[node_id.0]..delta.span_end[node_id.0]];
+
+        let constant = String::from_utf8_lossy(contents)
+            .parse::<f64>()
+            .expect("internal error: float constant could not be parsed");
+
+        builder.f64_const(constant)
+    }
+
     pub fn translate_binop<'source>(
         &mut self,
         builder: &mut FunctionCodegen,
@@ -487,14 +725,14 @@ impl Translater {
         let rhs = self.translate_node(builder, rhs, delta, typechecker);
 
         match delta.ast_nodes[op.0] {
-            AstNode::Plus => builder.iadd(lhs, rhs),
-            AstNode::Minus => builder.isub(lhs, rhs),
-            AstNode::Multiply => builder.imul(lhs, rhs),
-            AstNode::Divide => builder.idiv(lhs, rhs),
-            AstNode::LessThan => builder.ilt(lhs, rhs),
-            AstNode::LessThanOrEqual => builder.ilte(lhs, rhs),
-            AstNode::GreaterThan => builder.igt(lhs, rhs),
-            AstNode::GreaterThanOrEqual => builder.igte(lhs, rhs),
+            AstNode::Plus => builder.add(lhs, rhs),
+            AstNode::Minus => builder.sub(lhs, rhs),
+            AstNode::Multiply => builder.mul(lhs, rhs),
+            AstNode::Divide => builder.div(lhs, rhs),
+            AstNode::LessThan => builder.lt(lhs, rhs),
+            AstNode::LessThanOrEqual => builder.lte(lhs, rhs),
+            AstNode::GreaterThan => builder.gt(lhs, rhs),
+            AstNode::GreaterThanOrEqual => builder.gte(lhs, rhs),
             AstNode::Assignment => builder.mov(lhs, rhs),
             _ => panic!("unsupported operation"),
         }
