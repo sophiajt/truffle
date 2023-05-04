@@ -1,6 +1,10 @@
 #[cfg(test)]
 mod tests {
     use truffle::{add_int, FnRegister, Parser, Translater, TypeChecker, TypeId};
+    fn eval_source_into_float(source: &str) -> f64 {
+        unsafe { std::mem::transmute::<i64, f64>(eval_source_with_type(source).0) }
+    }
+
     fn eval_source(source: &str) -> i64 {
         eval_source_with_type(source).0
     }
@@ -32,6 +36,18 @@ mod tests {
         assert_eq!(eval_source("2 <= 2"), 1);
         assert_eq!(eval_source("2 > 3"), 0);
         assert_eq!(eval_source("2 >= 2"), 1);
+    }
+
+    #[test]
+    fn float_math() {
+        assert_eq!(eval_source_into_float("1.2 + 2.3"), 3.5);
+        assert_eq!(eval_source_into_float("1.3 - 0.3"), 1.0);
+        assert_eq!(eval_source_into_float("1.2 * 2.3"), 2.76);
+        assert_eq!(eval_source_into_float("6.0 / 3.0"), 2.0);
+        assert_eq!(eval_source("1.2 < 2.3"), 1);
+        assert_eq!(eval_source("1.2 <= 2.3"), 1);
+        assert_eq!(eval_source("1.2 > 2.3"), 0);
+        assert_eq!(eval_source("1.2 >= 2.3"), 0);
     }
 
     #[test]
