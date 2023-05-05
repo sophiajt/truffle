@@ -677,7 +677,7 @@ impl Translater {
                 self.translate_while(builder, *condition, *block, delta, typechecker)
             }
             AstNode::Call { head, args } => {
-                self.translate_call(builder, *head, args, delta, typechecker)
+                self.translate_call(builder, *head, args, node_id, delta, typechecker)
             }
             x => panic!("unsupported translation: {:?}", x),
         }
@@ -875,10 +875,11 @@ impl Translater {
         builder: &mut FunctionCodegen,
         head: NodeId,
         args: &[NodeId],
+        node_id: NodeId,
         delta: &'source EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
-        let output = builder.new_register(VOID_TYPE);
+        let output = builder.new_register(typechecker.node_types[node_id.0]);
 
         let head = typechecker
             .call_resolution

@@ -55,6 +55,10 @@ fn run_line(line: &str, debug_output: bool) {
         println!("error: {:?}", error);
     }
 
+    if !parser.errors.is_empty() {
+        return;
+    }
+
     let mut typechecker = TypeChecker::new();
     typechecker.register_fn("print_int", print_int);
     typechecker.register_fn("add_int", add_int);
@@ -62,6 +66,10 @@ fn run_line(line: &str, debug_output: bool) {
 
     for error in &typechecker.errors {
         println!("error: {:?}", error);
+    }
+
+    if !typechecker.errors.is_empty() {
+        return;
     }
 
     let result = &parser.delta;

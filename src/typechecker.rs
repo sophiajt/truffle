@@ -397,7 +397,14 @@ impl<'source> TypeChecker<'source> {
                         let arg = args[idx];
 
                         if self.node_types[arg.0] != param {
-                            self.error(format!("expected {} argument(s)", params.len()), head);
+                            self.error(
+                                format!(
+                                    "expect {} found {}",
+                                    self.stringify_type(param),
+                                    self.stringify_type(self.node_types[arg.0])
+                                ),
+                                args[idx],
+                            );
                             return;
                         }
                     }
