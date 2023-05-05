@@ -549,7 +549,6 @@ impl FunctionCodegen {
         functions: &[FnRecord],
     ) -> Box<dyn Any> {
         match &functions[head.0].fun {
-            // Function::ExternalFn0(fun) => fun().unwrap(),
             Function::ExternalFn1(fun) => {
                 let mut val = self.box_register(args[0]);
 
@@ -560,17 +559,35 @@ impl FunctionCodegen {
                 let mut arg1 = self.box_register(args[1]);
 
                 fun(&mut arg0, &mut arg1).unwrap()
-            } // _ => Box::new(0),
+            }
         }
     }
 
     pub fn box_register(&self, register_id: RegisterId) -> Box<dyn Any> {
-        Box::new(self.register_values[register_id.0])
+        if self.register_types[register_id.0] == F64_TYPE {
+            let val =
+                unsafe { std::mem::transmute::<i64, f64>(self.register_values[register_id.0]) };
+            Box::new(val)
+        } else {
+            Box::new(self.register_values[register_id.0])
+        }
     }
 
     pub fn unbox_to_register(&mut self, value: Box<dyn Any>, target: RegisterId) {
-        if let Ok(value) = value.downcast::<i64>() {
-            self.register_values[target.0] = *value;
+        if self.register_types[target.0] == F64_TYPE {
+            if let Ok(value) = value.downcast::<f64>() {
+                let val = unsafe { std::mem::transmute::<f64, i64>(*value) };
+
+                self.register_values[target.0] = val;
+            } else {
+                panic!("internal error: could not properly handle conversion of register to i64")
+            }
+        } else {
+            if let Ok(value) = value.downcast::<i64>() {
+                self.register_values[target.0] = *value;
+            } else {
+                panic!("internal error: could not properly handle conversion of register to i64")
+            }
         }
     }
 

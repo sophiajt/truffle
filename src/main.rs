@@ -62,6 +62,7 @@ fn run_line(line: &str, debug_output: bool) {
     let mut typechecker = TypeChecker::new();
     register_fn!(typechecker, "print_int", print_int);
     register_fn!(typechecker, "add_int", add_int);
+    register_fn!(typechecker, "add_float", add_float);
     typechecker.typecheck(&parser.delta);
 
     for error in &typechecker.errors {
@@ -133,5 +134,9 @@ pub fn print_int(value: i64) {
 }
 
 pub fn add_int(lhs: i64, rhs: i64) -> i64 {
+    lhs + rhs
+}
+
+pub fn add_float(lhs: f64, rhs: f64) -> f64 {
     lhs + rhs
 }

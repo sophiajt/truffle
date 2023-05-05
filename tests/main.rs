@@ -13,12 +13,17 @@ mod tests {
         lhs + rhs
     }
 
+    pub fn add_float(lhs: f64, rhs: f64) -> f64 {
+        lhs + rhs
+    }
+
     fn eval_source_with_type(source: &str) -> (i64, TypeId) {
         let mut parser = Parser::new(source.as_bytes(), 0, 0);
         parser.parse();
 
         let mut typechecker = TypeChecker::new();
         register_fn!(typechecker, "add_int", add_int);
+        register_fn!(typechecker, "add_float", add_float);
 
         typechecker.typecheck(&parser.delta);
 
@@ -79,5 +84,6 @@ mod tests {
     #[test]
     fn external_call() {
         assert_eq!(eval_source("add_int(3, 4)"), 7);
+        assert_eq!(eval_source_into_float("add_float(6.0, 3.0)"), 9.0);
     }
 }
