@@ -51,7 +51,7 @@ pub struct TypeChecker<'source> {
     pub call_resolution: HashMap<NodeId, FunctionId>,
 
     // Externally-registered functions
-    pub external_functions: HashMap<Vec<u8>, FunctionId>,
+    pub external_functions: HashMap<Vec<u8>, Vec<FunctionId>>,
 
     pub errors: Vec<ScriptError>,
     pub scope: Vec<Scope<'source>>,
@@ -377,42 +377,49 @@ impl<'source> TypeChecker<'source> {
             self.typecheck_node(*node_id, delta)
         }
 
-        if let Some(def) = self.external_functions.get(call_name) {
-            let def = *def;
-            match &self.functions[def.0] {
-                // Function::ExternalFn0(..) => {
-                //     if !args.is_empty() {
-                //         self.error("unexpected argument", args[0])
-                //     }
-                // }
-                FnRecord { params, ret, .. } => {
-                    if args.len() != params.len() {
-                        self.error(format!("expected {} argument(s)", params.len()), head);
+        if let Some(defs) = self.external_functions.get(call_name) {
+            'outer: for def in defs {
+                let def = *def;
+                match &self.functions[def.0] {
+                    // Function::ExternalFn0(..) => {
+                    //     if !args.is_empty() {
+                    //         self.error("unexpected argument", args[0])
+                    //     }
+                    // }
+                    FnRecord { params, ret, .. } => {
+                        if args.len() != params.len() {
+                            // self.error(format!("expected {} argument(s)", params.len()), head);
+                            // return;
+                            continue;
+                        }
+
+                        for idx in 0..params.len() {
+                            let param = params[idx];
+                            let arg = args[idx];
+
+                            if self.node_types[arg.0] != param {
+                                // self.error(
+                                //     format!(
+                                //         "expect {} found {}",
+                                //         self.stringify_type(param),
+                                //         self.stringify_type(self.node_types[arg.0])
+                                //     ),
+                                //     args[idx],
+                                // );
+                                // return;
+                                continue 'outer;
+                            }
+                        }
+
+                        self.node_types[node_id.0] = *ret;
+                        self.call_resolution.insert(head, def);
                         return;
                     }
-
-                    for idx in 0..params.len() {
-                        let param = params[idx];
-                        let arg = args[idx];
-
-                        if self.node_types[arg.0] != param {
-                            self.error(
-                                format!(
-                                    "expect {} found {}",
-                                    self.stringify_type(param),
-                                    self.stringify_type(self.node_types[arg.0])
-                                ),
-                                args[idx],
-                            );
-                            return;
-                        }
-                    }
-
-                    self.node_types[node_id.0] = *ret;
                 }
             }
 
-            self.call_resolution.insert(head, def);
+            let name = String::from_utf8_lossy(call_name);
+            self.error(format!("could not resolve call to {}", name), node_id)
         }
     }
 
@@ -503,6 +510,18 @@ impl<'source> TypeChecker<'source> {
     pub fn stringify_type(&self, type_id: TypeId) -> String {
         self.typenames[type_id.0].clone()
     }
+
+    pub fn stringify_function_name(&self, name: &[u8], function_id: FunctionId) -> String {
+        let fun_def = &self.functions[function_id.0];
+
+        let mut fun_name = String::from_utf8_lossy(name).to_string();
+
+        for param in &fun_def.params {
+            fun_name.push_str("__");
+            fun_name.push_str(&self.stringify_type(*param));
+        }
+        fun_name
+    }
 }
 
 pub struct FnRecord {
@@ -553,8 +572,11 @@ where
 
         let id = self.functions.len() - 1;
 
-        self.external_functions
-            .insert(name.as_bytes().to_vec(), FunctionId(id));
+        let ent = self
+            .external_functions
+            .entry(name.as_bytes().to_vec())
+            .or_insert(Vec::new());
+        (*ent).push(FunctionId(id));
     }
 }
 
@@ -606,8 +628,11 @@ where
 
         let id = self.functions.len() - 1;
 
-        self.external_functions
-            .insert(name.as_bytes().to_vec(), FunctionId(id));
+        let ent = self
+            .external_functions
+            .entry(name.as_bytes().to_vec())
+            .or_insert(Vec::new());
+        (*ent).push(FunctionId(id));
     }
 }
 

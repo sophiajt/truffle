@@ -1,7 +1,7 @@
 mod line_editor;
 use line_editor::{LineEditor, ReadLineOutput};
 
-use truffle::{register_fn, FnRegister, Parser, Translater, TypeChecker, F64_TYPE};
+use truffle::{register_fn, FnRegister, Parser, Translater, TypeChecker, BOOL_TYPE, F64_TYPE};
 
 fn main() {
     let args = std::env::args();
@@ -60,9 +60,11 @@ fn run_line(line: &str, debug_output: bool) {
     }
 
     let mut typechecker = TypeChecker::new();
-    register_fn!(typechecker, "print_int", print_int);
-    register_fn!(typechecker, "add_int", add_int);
-    register_fn!(typechecker, "add_float", add_float);
+    register_fn!(typechecker, "print", print::<i64>);
+    register_fn!(typechecker, "print", print::<f64>);
+    register_fn!(typechecker, "print", print::<bool>);
+    register_fn!(typechecker, "add", add::<i64>);
+    register_fn!(typechecker, "add", add::<f64>);
     typechecker.typecheck(&parser.delta);
 
     for error in &typechecker.errors {
@@ -119,6 +121,12 @@ fn run_line(line: &str, debug_output: bool) {
             unsafe { std::mem::transmute::<i64, f64>(result.0) },
             typechecker.stringify_type(result.1)
         );
+    } else if result.1 == BOOL_TYPE {
+        println!(
+            "result -> {} ({})",
+            result.0 != 0,
+            typechecker.stringify_type(result.1)
+        );
     } else {
         println!(
             "result -> {} ({})",
@@ -129,14 +137,10 @@ fn run_line(line: &str, debug_output: bool) {
 }
 
 // FIXME: move these later when we build up cranelift registration
-pub fn print_int(value: i64) {
+pub fn print<T: std::fmt::Display>(value: T) {
     println!("value: {value}")
 }
 
-pub fn add_int(lhs: i64, rhs: i64) -> i64 {
-    lhs + rhs
-}
-
-pub fn add_float(lhs: f64, rhs: f64) -> f64 {
+pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
     lhs + rhs
 }

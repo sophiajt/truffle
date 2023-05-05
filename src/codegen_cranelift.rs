@@ -11,7 +11,7 @@ use crate::{
     delta::EngineDelta,
     parser::{AstNode, NodeId},
     typechecker::{FnRecord, FunctionId, TypeChecker, TypeId, I64_TYPE},
-    F64_TYPE,
+    BOOL_TYPE, F64_TYPE,
 };
 
 pub struct JIT {
@@ -48,12 +48,15 @@ impl JIT {
             .unwrap();
         let mut jit_builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
 
-        for fun in &typechecker.external_functions {
-            let fun_def = &typechecker.functions[fun.1 .0];
+        for external_function_group in &typechecker.external_functions {
+            for external_function in external_function_group.1 {
+                let fun_def = &typechecker.functions[external_function.0];
 
-            if let Some(ptr) = fun_def.raw_ptr {
-                let fun_name = String::from_utf8_lossy(fun.0);
-                jit_builder.symbol(fun_name, ptr);
+                if let Some(ptr) = fun_def.raw_ptr {
+                    let fun_name = typechecker
+                        .stringify_function_name(&external_function_group.0, *external_function);
+                    jit_builder.symbol(fun_name, ptr);
+                }
             }
         }
 
@@ -74,6 +77,7 @@ impl JIT {
 pub enum OutputFunction {
     I64Fun(Box<fn() -> i64>),
     F64Fun(Box<fn() -> f64>),
+    BoolFun(Box<fn() -> bool>),
 }
 
 pub struct FunctionCodegen {
@@ -93,6 +97,11 @@ impl FunctionCodegen {
 
                 let result = unsafe { std::mem::transmute::<f64, i64>(result) };
                 (result, F64_TYPE)
+            }
+            OutputFunction::BoolFun(fun) => {
+                let result = (fun)();
+                let result = result as i64;
+                (result, BOOL_TYPE)
             }
         }
     }
@@ -150,30 +159,33 @@ impl Translater {
 
         let mut builder = FunctionBuilder::new(&mut jit.ctx.func, &mut jit.builder_context);
 
-        for external_function in &typechecker.external_functions {
-            let fun_def = &typechecker.functions[external_function.1 .0];
-            let mut sig = jit.module.make_signature();
-            for param in &fun_def.params {
-                if param == &F64_TYPE {
-                    sig.params.push(AbiParam::new(self.float));
-                } else {
-                    sig.params.push(AbiParam::new(self.int));
+        for external_function_group in &typechecker.external_functions {
+            for external_function in external_function_group.1 {
+                let fun_def = &typechecker.functions[external_function.0];
+                let mut sig = jit.module.make_signature();
+                for param in &fun_def.params {
+                    if param == &F64_TYPE {
+                        sig.params.push(AbiParam::new(self.float));
+                    } else {
+                        sig.params.push(AbiParam::new(self.int));
+                    }
                 }
-            }
-            if fun_def.ret == F64_TYPE {
-                sig.returns.push(AbiParam::new(self.float));
-            } else {
-                sig.returns.push(AbiParam::new(self.int));
-            }
+                if fun_def.ret == F64_TYPE {
+                    sig.returns.push(AbiParam::new(self.float));
+                } else {
+                    sig.returns.push(AbiParam::new(self.int));
+                }
 
-            let name = String::from_utf8_lossy(external_function.0);
+                let fun_name = typechecker
+                    .stringify_function_name(&external_function_group.0, *external_function);
 
-            let callee = jit
-                .module
-                .declare_function(&name, Linkage::Import, &sig)
-                .expect("problem declaring function");
-            let local_callee = jit.module.declare_func_in_func(callee, builder.func);
-            self.func_lookup.insert(*external_function.1, local_callee);
+                let callee = jit
+                    .module
+                    .declare_function(&fun_name, Linkage::Import, &sig)
+                    .expect("problem declaring function");
+                let local_callee = jit.module.declare_func_in_func(callee, builder.func);
+                self.func_lookup.insert(*external_function, local_callee);
+            }
         }
 
         let entry_block = builder.create_block();
@@ -224,6 +236,12 @@ impl Translater {
                 FunctionCodegen {
                     fun: OutputFunction::F64Fun(Box::new(unsafe {
                         std::mem::transmute::<_, fn() -> f64>(code_ptr)
+                    })),
+                }
+            } else if x == &BOOL_TYPE {
+                FunctionCodegen {
+                    fun: OutputFunction::BoolFun(Box::new(unsafe {
+                        std::mem::transmute::<_, fn() -> bool>(code_ptr)
                     })),
                 }
             } else {
@@ -315,8 +333,6 @@ impl Translater {
         let constant = String::from_utf8_lossy(contents)
             .parse::<f64>()
             .expect("internal error: float constant could not be parsed");
-
-        println!("float: {}", constant);
 
         builder.ins().f64const(constant)
     }

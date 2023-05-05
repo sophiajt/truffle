@@ -9,11 +9,7 @@ mod tests {
         eval_source_with_type(source).0
     }
 
-    pub fn add_int(lhs: i64, rhs: i64) -> i64 {
-        lhs + rhs
-    }
-
-    pub fn add_float(lhs: f64, rhs: f64) -> f64 {
+    pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
         lhs + rhs
     }
 
@@ -22,8 +18,8 @@ mod tests {
         parser.parse();
 
         let mut typechecker = TypeChecker::new();
-        register_fn!(typechecker, "add_int", add_int);
-        register_fn!(typechecker, "add_float", add_float);
+        register_fn!(typechecker, "add", add::<i64>);
+        register_fn!(typechecker, "add", add::<f64>);
 
         typechecker.typecheck(&parser.delta);
 
@@ -83,7 +79,7 @@ mod tests {
 
     #[test]
     fn external_call() {
-        assert_eq!(eval_source("add_int(3, 4)"), 7);
-        assert_eq!(eval_source_into_float("add_float(6.0, 3.0)"), 9.0);
+        assert_eq!(eval_source("add(3, 4)"), 7);
+        assert_eq!(eval_source_into_float("add(6.0, 3.0)"), 9.0);
     }
 }

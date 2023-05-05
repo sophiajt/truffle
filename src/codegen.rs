@@ -568,6 +568,9 @@ impl FunctionCodegen {
             let val =
                 unsafe { std::mem::transmute::<i64, f64>(self.register_values[register_id.0]) };
             Box::new(val)
+        } else if self.register_types[register_id.0] == BOOL_TYPE {
+            let val = self.register_values[register_id.0] != 0;
+            Box::new(val)
         } else {
             Box::new(self.register_values[register_id.0])
         }
@@ -582,6 +585,16 @@ impl FunctionCodegen {
             } else {
                 panic!("internal error: could not properly handle conversion of register to i64")
             }
+        } else if self.register_types[target.0] == BOOL_TYPE {
+            if let Ok(value) = value.downcast::<bool>() {
+                let val = *value as i64;
+
+                self.register_values[target.0] = val;
+            } else {
+                panic!("internal error: could not properly handle conversion of register to i64")
+            }
+        } else if self.register_types[target.0] == VOID_TYPE {
+            // Ignore this case, as void creates no changes
         } else {
             if let Ok(value) = value.downcast::<i64>() {
                 self.register_values[target.0] = *value;
@@ -647,6 +660,7 @@ impl Translater {
             let last = delta.ast_nodes.len() - 1;
             let result = self.translate_node(&mut builder, NodeId(last), delta, typechecker);
             builder.mov(RegisterId(0), result);
+            builder.register_types[0] = typechecker.node_types[last];
         }
 
         builder
