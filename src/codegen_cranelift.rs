@@ -12,7 +12,7 @@ use crate::{
     delta::EngineDelta,
     parser::{AstNode, NodeId},
     print_int,
-    typechecker::{Function, TypeChecker, TypeId, I64_TYPE},
+    typechecker::{FnRecord, TypeChecker, TypeId, I64_TYPE},
     F64_TYPE,
 };
 
@@ -82,7 +82,7 @@ pub struct FunctionCodegen {
 }
 
 impl FunctionCodegen {
-    pub fn eval(&self, _functions: &[Function]) -> (i64, TypeId) {
+    pub fn eval(&self, _functions: &[FnRecord]) -> (i64, TypeId) {
         match &self.fun {
             OutputFunction::I64Fun(fun) => {
                 let result = (fun)();

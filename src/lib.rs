@@ -17,9 +17,7 @@ pub use crate::codegen_cranelift::Translater;
 
 pub use crate::{
     parser::Parser,
-    typechecker::{
-        FnRegister, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, UNKNOWN_TYPE, VOID_TYPE,
-    },
+    typechecker::{FnRegister, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, VOID_TYPE},
 };
 
 // FIXME: move these later when we build up cranelift registration

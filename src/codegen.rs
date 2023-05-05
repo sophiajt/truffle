@@ -4,7 +4,7 @@ use crate::{
     delta::EngineDelta,
     parser::{AstNode, NodeId},
     typechecker::{
-        Function, FunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, UNKNOWN_TYPE, VOID_TYPE,
+        FnRecord, Function, FunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, VOID_TYPE,
     },
     F64_TYPE,
 };
@@ -364,7 +364,7 @@ impl FunctionCodegen {
             .push(Instruction::EXTERNALCALL { head, args, target })
     }
 
-    pub fn eval(&mut self, functions: &[Function]) -> (i64, TypeId) {
+    pub fn eval(&mut self, functions: &[FnRecord]) -> (i64, TypeId) {
         let mut instruction_pointer = 0;
         let length = self.instructions.len();
 
@@ -546,9 +546,9 @@ impl FunctionCodegen {
         &self,
         head: FunctionId,
         args: &[RegisterId],
-        functions: &[Function],
+        functions: &[FnRecord],
     ) -> Box<dyn Any> {
-        match &functions[head.0] {
+        match &functions[head.0].fun {
             // Function::ExternalFn0(fun) => fun().unwrap(),
             Function::ExternalFn1(fun) => {
                 let mut val = self.box_register(args[0]);
@@ -878,7 +878,7 @@ impl Translater {
         delta: &'source EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
-        let output = builder.new_register(UNKNOWN_TYPE);
+        let output = builder.new_register(VOID_TYPE);
 
         let head = typechecker
             .call_resolution

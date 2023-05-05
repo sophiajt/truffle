@@ -15,6 +15,7 @@ mod tests {
 
         let mut typechecker = TypeChecker::new();
         typechecker.register_fn("add_int", add_int);
+
         typechecker.typecheck(&parser.delta);
 
         let mut translater = Translater::new();

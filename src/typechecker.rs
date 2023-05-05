@@ -33,7 +33,10 @@ pub struct FunctionId(pub usize);
 
 pub struct TypeChecker<'source> {
     // Used by TypeId
-    pub types: Vec<Type>,
+    pub types: Vec<std::any::TypeId>,
+
+    // Names of each types
+    pub typenames: Vec<String>,
 
     // Based on NodeId
     pub node_types: Vec<TypeId>,
@@ -42,7 +45,7 @@ pub struct TypeChecker<'source> {
     pub variable_def: HashMap<NodeId, NodeId>,
 
     // List of all registered functions
-    pub functions: Vec<Function>,
+    pub functions: Vec<FnRecord>,
 
     // Call resolution
     pub call_resolution: HashMap<NodeId, FunctionId>,
@@ -54,16 +57,27 @@ pub struct TypeChecker<'source> {
     pub scope: Vec<Scope<'source>>,
 }
 
-pub const UNKNOWN_TYPE: TypeId = TypeId(0);
-pub const VOID_TYPE: TypeId = TypeId(1);
-pub const I64_TYPE: TypeId = TypeId(2);
-pub const F64_TYPE: TypeId = TypeId(3);
-pub const BOOL_TYPE: TypeId = TypeId(4);
+// pub const UNKNOWN_TYPE: TypeId = TypeId(0);
+pub const VOID_TYPE: TypeId = TypeId(0);
+pub const I64_TYPE: TypeId = TypeId(1);
+pub const F64_TYPE: TypeId = TypeId(2);
+pub const BOOL_TYPE: TypeId = TypeId(3);
 
 impl<'source> TypeChecker<'source> {
     pub fn new() -> Self {
         Self {
-            types: vec![Type::Unknown, Type::Void, Type::I64, Type::F64, Type::Bool],
+            types: vec![
+                std::any::TypeId::of::<()>(),
+                std::any::TypeId::of::<i64>(),
+                std::any::TypeId::of::<f64>(),
+                std::any::TypeId::of::<bool>(),
+            ],
+            typenames: vec![
+                "void".into(), //std::any::type_name::<()>().to_string(),
+                std::any::type_name::<i64>().to_string(),
+                std::any::type_name::<f64>().to_string(),
+                std::any::type_name::<bool>().to_string(),
+            ],
             errors: vec![],
 
             node_types: vec![],
@@ -106,7 +120,7 @@ impl<'source> TypeChecker<'source> {
                 } else {
                     self.enter_scope();
                     // FIXME: grab the last one if it's an expression
-                    let mut type_id = UNKNOWN_TYPE;
+                    let mut type_id = VOID_TYPE;
                     for node_id in nodes {
                         self.typecheck_node(*node_id, delta);
 
@@ -146,22 +160,22 @@ impl<'source> TypeChecker<'source> {
             AstNode::While { condition, block } => {
                 self.typecheck_while(*condition, *block, node_id, delta)
             }
-            AstNode::For {
-                variable,
-                range,
-                block,
-            } => self.typecheck_for(*variable, *range, *block, node_id, delta),
+            // AstNode::For {
+            //     variable,
+            //     range,
+            //     block,
+            // } => self.typecheck_for(*variable, *range, *block, node_id, delta),
             AstNode::True => self.node_types[node_id.0] = BOOL_TYPE,
             AstNode::False => self.node_types[node_id.0] = BOOL_TYPE,
-            AstNode::Range { lhs, rhs } => self.typecheck_range(*lhs, *rhs, node_id, delta),
-            AstNode::Call { head, args } => self.typecheck_call(*head, args, delta),
+            // AstNode::Range { lhs, rhs } => self.typecheck_range(*lhs, *rhs, node_id, delta),
+            AstNode::Call { head, args } => self.typecheck_call(*head, args, node_id, delta),
             _ => self.error("unsupported ast node in typechecker", node_id),
         }
     }
 
     pub fn typecheck(&mut self, delta: &'source EngineDelta) {
         if !delta.ast_nodes.is_empty() {
-            self.node_types = vec![UNKNOWN_TYPE; delta.ast_nodes.len()];
+            self.node_types = vec![VOID_TYPE; delta.ast_nodes.len()];
 
             let last = delta.ast_nodes.len() - 1;
             self.typecheck_node(NodeId(last), delta)
@@ -242,33 +256,33 @@ impl<'source> TypeChecker<'source> {
         self.node_types[node_id.0] = VOID_TYPE;
     }
 
-    pub fn typecheck_for(
-        &mut self,
-        variable_name: NodeId,
-        range: NodeId,
-        block: NodeId,
-        node_id: NodeId,
-        delta: &'source EngineDelta,
-    ) {
-        self.typecheck_node(range, delta);
-        let range_ty = self.node_types[range.0];
+    // pub fn typecheck_for(
+    //     &mut self,
+    //     variable_name: NodeId,
+    //     range: NodeId,
+    //     block: NodeId,
+    //     node_id: NodeId,
+    //     delta: &'source EngineDelta,
+    // ) {
+    //     self.typecheck_node(range, delta);
+    //     let range_ty = self.node_types[range.0];
 
-        let range_inner_ty = match &self.types[range_ty.0] {
-            Type::Range(range_inner_ty) => *range_inner_ty,
-            _ => {
-                self.error("expected range value in for loop", range);
-                UNKNOWN_TYPE
-            }
-        };
+    //     let range_inner_ty = match &self.types[range_ty.0] {
+    //         Type::Range(range_inner_ty) => *range_inner_ty,
+    //         _ => {
+    //             self.error("expected range value in for loop", range);
+    //             UNKNOWN_TYPE
+    //         }
+    //     };
 
-        self.typecheck_node(block, delta);
+    //     self.typecheck_node(block, delta);
 
-        self.define_variable(variable_name, delta);
+    //     self.define_variable(variable_name, delta);
 
-        self.node_types[variable_name.0] = range_inner_ty;
+    //     self.node_types[variable_name.0] = range_inner_ty;
 
-        self.node_types[node_id.0] = VOID_TYPE;
-    }
+    //     self.node_types[node_id.0] = VOID_TYPE;
+    // }
 
     pub fn typecheck_binop(
         &mut self,
@@ -324,34 +338,40 @@ impl<'source> TypeChecker<'source> {
         }
     }
 
-    pub fn typecheck_range(
+    // pub fn typecheck_range(
+    //     &mut self,
+    //     lhs: NodeId,
+    //     rhs: NodeId,
+    //     node_id: NodeId,
+    //     delta: &'source EngineDelta,
+    // ) {
+    //     self.typecheck_node(lhs, delta);
+    //     self.typecheck_node(rhs, delta);
+
+    //     let lhs_ty = self.node_types[lhs.0];
+    //     let rhs_ty = self.node_types[rhs.0];
+
+    //     // For now, require both sides to be i64
+    //     if lhs_ty != I64_TYPE {
+    //         self.error("expected i64 for range", lhs)
+    //     }
+
+    //     if rhs_ty != I64_TYPE {
+    //         self.error("expected i64 for range", rhs)
+    //     }
+
+    //     let type_id = self.create_or_find_type(Type::Range(I64_TYPE));
+
+    //     self.node_types[node_id.0] = type_id
+    // }
+
+    pub fn typecheck_call(
         &mut self,
-        lhs: NodeId,
-        rhs: NodeId,
+        head: NodeId,
+        args: &[NodeId],
         node_id: NodeId,
         delta: &'source EngineDelta,
     ) {
-        self.typecheck_node(lhs, delta);
-        self.typecheck_node(rhs, delta);
-
-        let lhs_ty = self.node_types[lhs.0];
-        let rhs_ty = self.node_types[rhs.0];
-
-        // For now, require both sides to be i64
-        if lhs_ty != I64_TYPE {
-            self.error("expected i64 for range", lhs)
-        }
-
-        if rhs_ty != I64_TYPE {
-            self.error("expected i64 for range", rhs)
-        }
-
-        let type_id = self.create_or_find_type(Type::Range(I64_TYPE));
-
-        self.node_types[node_id.0] = type_id
-    }
-
-    pub fn typecheck_call(&mut self, head: NodeId, args: &[NodeId], delta: &'source EngineDelta) {
         let call_name = &delta.contents[delta.span_start[head.0]..delta.span_end[head.0]];
 
         for node_id in args {
@@ -366,12 +386,24 @@ impl<'source> TypeChecker<'source> {
                 //         self.error("unexpected argument", args[0])
                 //     }
                 // }
-                Function::ExternalFn1(..) => {
-                    if args.len() != 1 {
-                        self.error("expected one argument", head)
+                FnRecord { params, ret, .. } => {
+                    if args.len() != params.len() {
+                        self.error(format!("expected {} argument(s)", params.len()), head);
+                        return;
                     }
+
+                    for idx in 0..params.len() {
+                        let param = params[idx];
+                        let arg = args[idx];
+
+                        if self.node_types[arg.0] != param {
+                            self.error(format!("expected {} argument(s)", params.len()), head);
+                            return;
+                        }
+                    }
+
+                    self.node_types[node_id.0] = *ret;
                 }
-                _ => {}
             }
 
             self.call_resolution.insert(head, def);
@@ -410,7 +442,7 @@ impl<'source> TypeChecker<'source> {
         None
     }
 
-    pub fn create_or_find_type(&mut self, ty: Type) -> TypeId {
+    pub fn create_or_find_type(&mut self, ty: std::any::TypeId) -> TypeId {
         let mut idx = 0;
         while idx < self.types.len() {
             if self.types[idx] == ty {
@@ -440,28 +472,58 @@ impl<'source> TypeChecker<'source> {
     //     }
     // }
 
-    pub fn stringify_type(&self, type_id: TypeId) -> String {
-        if type_id == UNKNOWN_TYPE {
-            "unknown".into()
-        } else if type_id == VOID_TYPE {
-            "void".into()
-        } else if type_id == I64_TYPE {
-            "i64".into()
-        } else if type_id == F64_TYPE {
-            "f64".into()
-        } else if type_id == BOOL_TYPE {
-            "bool".into()
-        } else {
-            match self.types[type_id.0] {
-                Type::Range(ty) => {
-                    let inner_type = self.stringify_type(ty);
+    pub fn register_type<T>(&mut self) -> TypeId
+    where
+        T: Any,
+    {
+        self.types.push(std::any::TypeId::of::<T>());
 
-                    format!("Range<{}>", inner_type)
-                }
-                _ => "<not yet implemented>".into(),
+        TypeId(self.types.len() - 1)
+    }
+
+    pub fn get_type<T>(&self) -> Option<TypeId>
+    where
+        T: Any,
+    {
+        for (idx, tid) in self.types.iter().enumerate() {
+            if tid == &std::any::TypeId::of::<T>() {
+                return Some(TypeId(idx));
             }
         }
+
+        None
     }
+
+    pub fn stringify_type(&self, type_id: TypeId) -> String {
+        // // if type_id == UNKNOWN_TYPE {
+        // //     "unknown".into()
+        // if type_id == VOID_TYPE {
+        //     "void".into()
+        // } else if type_id == I64_TYPE {
+        //     "i64".into()
+        // } else if type_id == F64_TYPE {
+        //     "f64".into()
+        // } else if type_id == BOOL_TYPE {
+        //     "bool".into()
+        // } else {
+        //     match self.types[type_id.0] {
+        //         // Type::Range(ty) => {
+        //         //     let inner_type = self.stringify_type(ty);
+
+        //         //     format!("Range<{}>", inner_type)
+        //         // }
+        //         _ => "<not yet implemented>".into(),
+        //     }
+        // }
+
+        self.typenames[type_id.0].clone()
+    }
+}
+
+pub struct FnRecord {
+    pub params: Vec<TypeId>,
+    pub ret: TypeId,
+    pub fun: Function,
 }
 
 pub trait FnRegister<A, RetVal, Args> {
@@ -484,7 +546,23 @@ where
                 }
             });
 
-        self.functions.push(Function::ExternalFn1(wrapped));
+        let param1 = if let Some(id) = self.get_type::<T>() {
+            id
+        } else {
+            self.register_type::<T>()
+        };
+
+        let ret = if let Some(id) = self.get_type::<U>() {
+            id
+        } else {
+            self.register_type::<U>()
+        };
+
+        self.functions.push(FnRecord {
+            params: vec![param1],
+            ret,
+            fun: Function::ExternalFn1(wrapped),
+        });
 
         let id = self.functions.len() - 1;
 
@@ -513,7 +591,30 @@ where
             }
         });
 
-        self.functions.push(Function::ExternalFn2(wrapped));
+        let param1 = if let Some(id) = self.get_type::<T>() {
+            id
+        } else {
+            self.register_type::<T>()
+        };
+
+        let param2 = if let Some(id) = self.get_type::<U>() {
+            id
+        } else {
+            self.register_type::<U>()
+        };
+
+        let ret = if let Some(id) = self.get_type::<V>() {
+            id
+        } else {
+            self.register_type::<V>()
+        };
+
+        let fn_record = FnRecord {
+            params: vec![param1, param2],
+            ret,
+            fun: Function::ExternalFn2(wrapped),
+        };
+        self.functions.push(fn_record);
 
         let id = self.functions.len() - 1;
 
@@ -522,13 +623,13 @@ where
     }
 }
 
-#[derive(PartialEq)]
-pub enum Type {
-    Unknown,
-    Void,
-    I64,
-    F64,
-    Bool,
-    Range(TypeId),
-    // Fn(Vec<TypeId>, TypeId),
-}
+// #[derive(PartialEq)]
+// pub enum Type {
+//     Unknown,
+//     Void,
+//     I64,
+//     F64,
+//     Bool,
+//     Range(TypeId),
+//     // Fn(Vec<TypeId>, TypeId),
+// }
