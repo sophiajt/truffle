@@ -8,11 +8,9 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module};
 
 use crate::{
-    add_int,
     delta::EngineDelta,
     parser::{AstNode, NodeId},
-    print_int,
-    typechecker::{FnRecord, TypeChecker, TypeId, I64_TYPE},
+    typechecker::{FnRecord, FunctionId, TypeChecker, TypeId, I64_TYPE},
     F64_TYPE,
 };
 
@@ -35,7 +33,7 @@ pub struct JIT {
 }
 
 impl JIT {
-    pub fn init() -> Self {
+    pub fn init(typechecker: &TypeChecker) -> Self {
         // We have to do this longer version on aarch64 currently
         let mut flag_builder = settings::builder();
         flag_builder.set("use_colocated_libcalls", "false").unwrap();
@@ -50,13 +48,14 @@ impl JIT {
             .unwrap();
         let mut jit_builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
 
-        // jit_builder.symbol("push_val", push_val as *const u8);
+        for fun in &typechecker.external_functions {
+            let fun_def = &typechecker.functions[fun.1 .0];
 
-        // FIXME: I don't yet know how to register functions in the
-        // rhai style for cranelift. We'll need to explore with the
-        // cranelift team if we decide to go with cranelift
-        jit_builder.symbol("print_int", print_int as *const u8);
-        jit_builder.symbol("add_int", add_int as *const u8);
+            if let Some(ptr) = fun_def.raw_ptr {
+                let fun_name = String::from_utf8_lossy(fun.0);
+                jit_builder.symbol(fun_name, ptr);
+            }
+        }
 
         let jit_module = JITModule::new(jit_builder);
 
@@ -105,7 +104,7 @@ impl FunctionCodegen {
 
 pub struct Translater {
     var_lookup: HashMap<NodeId, Variable>,
-    func_loopup: HashMap<String, FuncRef>,
+    func_lookup: HashMap<FunctionId, FuncRef>,
 
     int: Type,
     float: Type,
@@ -115,7 +114,7 @@ impl Translater {
     pub fn new() -> Translater {
         Self {
             var_lookup: HashMap::new(),
-            func_loopup: HashMap::new(),
+            func_lookup: HashMap::new(),
             int: Type::default(),
             float: Type::default(),
         }
@@ -126,7 +125,7 @@ impl Translater {
         delta: &'source EngineDelta,
         typechecker: &TypeChecker,
     ) -> FunctionCodegen {
-        let mut jit = JIT::init();
+        let mut jit = JIT::init(typechecker);
 
         self.int = jit.module.target_config().pointer_type();
         self.float = F64;
@@ -151,27 +150,31 @@ impl Translater {
 
         let mut builder = FunctionBuilder::new(&mut jit.ctx.func, &mut jit.builder_context);
 
-        // FIXME: until we can get lambda registration working for
-        // cranelift, use direct registration
-        let mut sig = jit.module.make_signature();
-        sig.params.push(AbiParam::new(self.int));
-        let callee = jit
-            .module
-            .declare_function("print_int", Linkage::Import, &sig)
-            .expect("problem declaring function");
-        let local_callee = jit.module.declare_func_in_func(callee, builder.func);
-        self.func_loopup.insert("print_int".into(), local_callee);
+        for external_function in &typechecker.external_functions {
+            let fun_def = &typechecker.functions[external_function.1 .0];
+            let mut sig = jit.module.make_signature();
+            for param in &fun_def.params {
+                if param == &F64_TYPE {
+                    sig.params.push(AbiParam::new(self.float));
+                } else {
+                    sig.params.push(AbiParam::new(self.int));
+                }
+            }
+            if fun_def.ret == F64_TYPE {
+                sig.returns.push(AbiParam::new(self.float));
+            } else {
+                sig.returns.push(AbiParam::new(self.int));
+            }
 
-        let mut sig = jit.module.make_signature();
-        sig.params.push(AbiParam::new(self.int));
-        sig.params.push(AbiParam::new(self.int));
-        sig.returns.push(AbiParam::new(self.int));
-        let callee = jit
-            .module
-            .declare_function("add_int", Linkage::Import, &sig)
-            .expect("problem declaring function");
-        let local_callee = jit.module.declare_func_in_func(callee, builder.func);
-        self.func_loopup.insert("add_int".into(), local_callee);
+            let name = String::from_utf8_lossy(external_function.0);
+
+            let callee = jit
+                .module
+                .declare_function(&name, Linkage::Import, &sig)
+                .expect("problem declaring function");
+            let local_callee = jit.module.declare_func_in_func(callee, builder.func);
+            self.func_lookup.insert(*external_function.1, local_callee);
+        }
 
         let entry_block = builder.create_block();
 
@@ -559,7 +562,7 @@ impl Translater {
     pub fn translate_call<'source>(
         &mut self,
         builder: &mut FunctionBuilder,
-        _head: NodeId,
+        head: NodeId,
         args: &[NodeId],
         delta: &'source EngineDelta,
         typechecker: &TypeChecker,
@@ -574,20 +577,15 @@ impl Translater {
 
         // FIXME: Hack resolution for the time being. This will be replaced
         // once we have function registration working for cranelift.
-        if args.len() == 1 {
-            let print_int = self.func_loopup.get("print_int").unwrap();
-            let call = builder.ins().call(*print_int, &translated_args);
-            let _ = builder.inst_results(call);
 
-            // For now, return this in place of void
-            builder.ins().iconst(self.int, 0)
-        } else if args.len() == 2 {
-            let print_int = self.func_loopup.get("add_int").unwrap();
-            let call = builder.ins().call(*print_int, &translated_args);
-            builder.inst_results(call)[0]
-        } else {
-            panic!("cranelift function resolution incomplete");
-        }
+        let resolved_function_id = typechecker
+            .call_resolution
+            .get(&head)
+            .expect("internal error: resolved call missing definition");
+
+        let func = self.func_lookup.get(resolved_function_id).unwrap();
+        let call = builder.ins().call(*func, &translated_args);
+        builder.inst_results(call)[0]
     }
 
     pub fn translate_block<'source>(

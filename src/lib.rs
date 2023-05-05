@@ -19,12 +19,3 @@ pub use crate::{
     parser::Parser,
     typechecker::{FnRegister, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, VOID_TYPE},
 };
-
-// FIXME: move these later when we build up cranelift registration
-pub fn print_int(value: i64) {
-    println!("value: {value}")
-}
-
-pub fn add_int(lhs: i64, rhs: i64) -> i64 {
-    lhs + rhs
-}

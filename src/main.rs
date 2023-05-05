@@ -1,7 +1,7 @@
 mod line_editor;
 use line_editor::{LineEditor, ReadLineOutput};
 
-use truffle::{add_int, print_int, FnRegister, Parser, Translater, TypeChecker, F64_TYPE};
+use truffle::{register_fn, FnRegister, Parser, Translater, TypeChecker, F64_TYPE};
 
 fn main() {
     let args = std::env::args();
@@ -60,8 +60,8 @@ fn run_line(line: &str, debug_output: bool) {
     }
 
     let mut typechecker = TypeChecker::new();
-    typechecker.register_fn("print_int", print_int);
-    typechecker.register_fn("add_int", add_int);
+    register_fn!(typechecker, "print_int", print_int);
+    register_fn!(typechecker, "add_int", add_int);
     typechecker.typecheck(&parser.delta);
 
     for error in &typechecker.errors {
@@ -125,4 +125,13 @@ fn run_line(line: &str, debug_output: bool) {
             typechecker.stringify_type(result.1)
         );
     }
+}
+
+// FIXME: move these later when we build up cranelift registration
+pub fn print_int(value: i64) {
+    println!("value: {value}")
+}
+
+pub fn add_int(lhs: i64, rhs: i64) -> i64 {
+    lhs + rhs
 }

@@ -28,7 +28,7 @@ pub enum Function {
     // InternalFn,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FunctionId(pub usize);
 
 pub struct TypeChecker<'source> {
@@ -57,7 +57,6 @@ pub struct TypeChecker<'source> {
     pub scope: Vec<Scope<'source>>,
 }
 
-// pub const UNKNOWN_TYPE: TypeId = TypeId(0);
 pub const VOID_TYPE: TypeId = TypeId(0);
 pub const I64_TYPE: TypeId = TypeId(1);
 pub const F64_TYPE: TypeId = TypeId(2);
@@ -471,13 +470,13 @@ impl<'source> TypeChecker<'source> {
     }
 
     // Debug functionality
-    // pub fn print_node_types(&self) {
-    //     let mut idx = 0;
-    //     while idx < self.node_types.len() {
-    //         println!("{}: {}", idx, self.stringify_type(self.node_types[idx]));
-    //         idx += 1;
-    //     }
-    // }
+    pub fn print_node_types(&self) {
+        let mut idx = 0;
+        while idx < self.node_types.len() {
+            println!("{}: {}", idx, self.stringify_type(self.node_types[idx]));
+            idx += 1;
+        }
+    }
 
     pub fn register_type<T>(&mut self) -> TypeId
     where
@@ -502,27 +501,6 @@ impl<'source> TypeChecker<'source> {
     }
 
     pub fn stringify_type(&self, type_id: TypeId) -> String {
-        // // if type_id == UNKNOWN_TYPE {
-        // //     "unknown".into()
-        // if type_id == VOID_TYPE {
-        //     "void".into()
-        // } else if type_id == I64_TYPE {
-        //     "i64".into()
-        // } else if type_id == F64_TYPE {
-        //     "f64".into()
-        // } else if type_id == BOOL_TYPE {
-        //     "bool".into()
-        // } else {
-        //     match self.types[type_id.0] {
-        //         // Type::Range(ty) => {
-        //         //     let inner_type = self.stringify_type(ty);
-
-        //         //     format!("Range<{}>", inner_type)
-        //         // }
-        //         _ => "<not yet implemented>".into(),
-        //     }
-        // }
-
         self.typenames[type_id.0].clone()
     }
 }
@@ -531,10 +509,11 @@ pub struct FnRecord {
     pub params: Vec<TypeId>,
     pub ret: TypeId,
     pub fun: Function,
+    pub raw_ptr: Option<*const u8>,
 }
 
 pub trait FnRegister<A, RetVal, Args> {
-    fn register_fn(&mut self, name: &str, f: A);
+    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8);
 }
 
 impl<'a, 'source, A, T, U> FnRegister<A, U, &'a T> for TypeChecker<'source>
@@ -543,7 +522,7 @@ where
     T: Clone + Any,
     U: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A) {
+    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
         let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
             Box::new(move |arg: &mut Box<dyn Any>| {
                 let inside = (*arg).downcast_mut() as Option<&mut T>;
@@ -569,6 +548,7 @@ where
             params: vec![param1],
             ret,
             fun: Function::ExternalFn1(wrapped),
+            raw_ptr: Some(fun_ptr),
         });
 
         let id = self.functions.len() - 1;
@@ -585,7 +565,7 @@ where
     U: Clone + Any,
     V: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A) {
+    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
         let wrapped: Box<
             dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
         > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>| {
@@ -620,6 +600,7 @@ where
             params: vec![param1, param2],
             ret,
             fun: Function::ExternalFn2(wrapped),
+            raw_ptr: Some(fun_ptr),
         };
         self.functions.push(fn_record);
 
@@ -640,3 +621,10 @@ where
 //     Range(TypeId),
 //     // Fn(Vec<TypeId>, TypeId),
 // }
+
+#[macro_export]
+macro_rules! register_fn {
+    ( $typechecker:expr, $name: expr, $fun:expr ) => {{
+        $typechecker.register_fn($name, $fun, $fun as *const u8)
+    }};
+}

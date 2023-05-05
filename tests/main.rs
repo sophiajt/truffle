@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use truffle::{add_int, FnRegister, Parser, Translater, TypeChecker, TypeId};
+    use truffle::{register_fn, FnRegister, Parser, Translater, TypeChecker, TypeId};
     fn eval_source_into_float(source: &str) -> f64 {
         unsafe { std::mem::transmute::<i64, f64>(eval_source_with_type(source).0) }
     }
@@ -9,12 +9,16 @@ mod tests {
         eval_source_with_type(source).0
     }
 
+    pub fn add_int(lhs: i64, rhs: i64) -> i64 {
+        lhs + rhs
+    }
+
     fn eval_source_with_type(source: &str) -> (i64, TypeId) {
         let mut parser = Parser::new(source.as_bytes(), 0, 0);
         parser.parse();
 
         let mut typechecker = TypeChecker::new();
-        typechecker.register_fn("add_int", add_int);
+        register_fn!(typechecker, "add_int", add_int);
 
         typechecker.typecheck(&parser.delta);
 
