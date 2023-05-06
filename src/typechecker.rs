@@ -420,6 +420,9 @@ impl<'source> TypeChecker<'source> {
 
             let name = String::from_utf8_lossy(call_name);
             self.error(format!("could not resolve call to {}", name), node_id)
+        } else {
+            let name = String::from_utf8_lossy(call_name);
+            self.error(format!("unknown function '{}'", name), node_id)
         }
     }
 
