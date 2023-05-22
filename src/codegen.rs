@@ -549,6 +549,9 @@ impl FunctionCodegen {
         functions: &[FnRecord],
     ) -> Box<dyn Any> {
         match &functions[head.0].fun {
+            Function::ExternalFn0(fun) => {
+                fun().unwrap()
+            }
             Function::ExternalFn1(fun) => {
                 let mut val = self.box_register(args[0]);
 
@@ -559,6 +562,13 @@ impl FunctionCodegen {
                 let mut arg1 = self.box_register(args[1]);
 
                 fun(&mut arg0, &mut arg1).unwrap()
+            }
+            Function::ExternalFn3(fun) => {
+                let mut arg0 = self.box_register(args[0]);
+                let mut arg1 = self.box_register(args[1]);
+                let mut arg2 = self.box_register(args[2]);
+
+                fun(&mut arg0, &mut arg1, &mut arg2).unwrap()
             }
         }
     }

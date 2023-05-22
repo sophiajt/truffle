@@ -492,6 +492,7 @@ impl<'source> Lexer<'source> {
         output
     }
 
+    /// Extract and return the next token from the source
     pub fn next(&mut self) -> Option<Token<'source>> {
         loop {
             if self.source.is_empty() {

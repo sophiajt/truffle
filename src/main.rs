@@ -1,4 +1,6 @@
 mod line_editor;
+use std::collections::HashMap;
+
 use line_editor::{LineEditor, ReadLineOutput};
 
 use truffle::{register_fn, FnRegister, Parser, Translater, TypeChecker, BOOL_TYPE, F64_TYPE};
@@ -59,12 +61,23 @@ fn run_line(line: &str, debug_output: bool) {
         return;
     }
 
+    let result = &parser.delta;
+
+    if debug_output {
+        println!();
+        println!("parse result:");
+        result.print();
+    }
+
     let mut typechecker = TypeChecker::new();
     register_fn!(typechecker, "print", print::<i64>);
     register_fn!(typechecker, "print", print::<f64>);
     register_fn!(typechecker, "print", print::<bool>);
     register_fn!(typechecker, "add", add::<i64>);
     register_fn!(typechecker, "add", add::<f64>);
+    register_fn!(typechecker, "new_env", Env::new_env);
+    register_fn!(typechecker, "set_var", Env::set_var);
+    register_fn!(typechecker, "read_var", Env::read_var);
     typechecker.typecheck(&parser.delta);
 
     for error in &typechecker.errors {
@@ -143,4 +156,22 @@ pub fn print<T: std::fmt::Display>(value: T) {
 
 pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
     lhs + rhs
+}
+
+pub struct Env {
+    vars: HashMap<i64, i64>,
+}
+
+impl Env {
+    pub fn new_env() -> Env {
+        Env { vars: HashMap::new() }
+    }
+
+    pub fn set_var(&self, var: i64, value: i64) {
+        todo!()
+    }
+
+    pub fn read_var(&self, var: i64) -> i64 {
+        todo!()
+    }
 }
