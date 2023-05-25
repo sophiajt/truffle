@@ -327,15 +327,15 @@ impl<'source> Parser<'source> {
         )
     }
 
-    // pub fn is_dot(&mut self) -> bool {
-    //     matches!(
-    //         self.lexer.peek(),
-    //         Some(Token {
-    //             token_type: TokenType::Dot,
-    //             ..
-    //         })
-    //     )
-    // }
+    pub fn is_dot(&mut self) -> bool {
+        matches!(
+            self.lexer.peek(),
+            Some(Token {
+                token_type: TokenType::Dot,
+                ..
+            })
+        )
+    }
 
     pub fn is_dotdot(&mut self) -> bool {
         matches!(
@@ -554,6 +554,27 @@ impl<'source> Parser<'source> {
         )
     }
 
+    pub fn method_call(&mut self, span_start: usize, receiver: NodeId) -> NodeId {
+        // Skip the dot
+        self.lexer.next();
+
+        let method_name = self
+            .lexer
+            .next()
+            .expect("internal error: missing token that was expected to be there");
+        let name_start = method_name.span_start;
+        let name_end = method_name.span_end;
+        let head = self.create_node(AstNode::Name, name_start, name_end);
+
+        self.lparen();
+        let mut args = self.args_list();
+        args.insert(0, receiver);
+        self.rparen();
+
+        let span_end = self.position();
+        self.create_node(AstNode::Call { head, args }, span_start, span_end)
+    }
+
     pub fn expression(&mut self) -> NodeId {
         let mut expr_stack = vec![];
 
@@ -563,9 +584,6 @@ impl<'source> Parser<'source> {
         if self.is_keyword(b"if") {
             return self.if_expression();
         }
-        // } else if self.is_keyword(b"where") {
-        //     return self.where_expression();
-        // }
 
         // Otherwise assume a math expression
         let lhs = if self.is_simple_expression() {
@@ -679,6 +697,8 @@ impl<'source> Parser<'source> {
             let span_end = self.position();
 
             self.create_node(AstNode::Range { lhs: expr, rhs }, span_start, span_end)
+        } else if self.is_dot() {
+            self.method_call(span_start, expr)
         } else {
             expr
         }
@@ -911,6 +931,30 @@ impl<'source> Parser<'source> {
         params
     }
 
+    pub fn args_list(&mut self) -> Vec<NodeId> {
+        let mut args = vec![];
+        loop {
+            if self.is_expression() {
+                args.push(self.expression());
+
+                if self.is_comma() {
+                    self.lexer.next();
+                    continue;
+                } else if self.is_rparen() {
+                    break;
+                } else {
+                    args.push(self.error("unexpected value in call arguments"));
+                }
+            } else {
+                break;
+            }
+        }
+        args
+    }
+
+    /// Parse an if expression, consuming tokens within the lexer, saves an
+    /// AstNode for the parsed expression and yields a new NodeID for the parsed
+    /// expression.
     pub fn if_expression(&mut self) -> NodeId {
         let span_start = self.position();
         self.keyword(b"if");
@@ -1040,23 +1084,7 @@ impl<'source> Parser<'source> {
                 let head = self.create_node(AstNode::Name, name_start, name_end);
                 // We're a call
                 self.lparen();
-                let mut args = vec![];
-                loop {
-                    if self.is_expression() {
-                        args.push(self.expression());
-
-                        if self.is_comma() {
-                            self.lexer.next();
-                            continue;
-                        } else if self.is_rparen() {
-                            break;
-                        } else {
-                            args.push(self.error("unexpected value in call arguments"));
-                        }
-                    } else {
-                        break;
-                    }
-                }
+                let args = self.args_list();
                 self.rparen();
 
                 let span_end = self.position();

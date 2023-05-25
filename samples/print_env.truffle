@@ -1,0 +1,4 @@
+let env = new_env()
+env.set_var(4, 3)
+let a = env.read_var(4)
+print(a) // should print 3

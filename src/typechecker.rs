@@ -24,9 +24,10 @@ impl<'scope> Scope<'scope> {
 
 #[allow(clippy::type_complexity)]
 pub enum Function {
-    // ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
+    ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
     ExternalFn1(Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
     ExternalFn2(Box<dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
+    ExternalFn3(Box<dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
     // InternalFn,
 }
 
@@ -381,31 +382,33 @@ impl<'source> TypeChecker<'source> {
         }
 
         if let Some(defs) = self.external_functions.get(call_name) {
-            'outer: for def in defs {
-                let def = *def;
-                let FnRecord { params, ret, .. } = &self.functions[def.0];
-                {
-                    if args.len() != params.len() {
-                        // self.error(format!("expected {} argument(s)", params.len()), head);
-                        // return;
-                        continue;
-                    }
-
-                    for idx in 0..params.len() {
-                        let param = params[idx];
-                        let arg = args[idx];
-
-                        if self.node_types[arg.0] != param {
-                            // self.error(
-                            //     format!(
-                            //         "expect {} found {}",
-                            //         self.stringify_type(param),
-                            //         self.stringify_type(self.node_types[arg.0])
-                            //     ),
-                            //     args[idx],
-                            // );
+            'outer: for &def in defs {
+                match &self.functions[def.0] {
+                    FnRecord { params, ret, .. } => {
+                        if args.len() != params.len() {
+                            // self.error(format!("expected {} argument(s)", params.len()), head);
                             // return;
-                            continue 'outer;
+                            dbg!();
+                            continue;
+                        }
+
+                        for idx in 0..params.len() {
+                            let param = params[idx];
+                            let arg = args[idx];
+
+                            if self.node_types[arg.0] != param {
+                                // self.error(
+                                //     format!(
+                                //         "expect {} found {}",
+                                //         self.stringify_type(param),
+                                //         self.stringify_type(self.node_types[arg.0])
+                                //     ),
+                                //     args[idx],
+                                // );
+                                // return;
+                                dbg!(self.stringify_type(param), self.stringify_type(self.node_types[arg.0]));
+                                continue 'outer;
+                            }
                         }
                     }
 
@@ -490,6 +493,7 @@ impl<'source> TypeChecker<'source> {
         T: Any,
     {
         self.types.push(std::any::TypeId::of::<T>());
+        self.typenames.push(std::any::type_name::<T>().to_string());
 
         TypeId(self.types.len() - 1)
     }
@@ -535,7 +539,41 @@ pub trait FnRegister<A, RetVal, Args> {
     fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8);
 }
 
-impl<'a, 'source, A, T, U> FnRegister<A, U, &'a T> for TypeChecker<'source>
+impl<'a, 'source, A, U> FnRegister<A, U, ()> for TypeChecker<'source>
+where
+    A: 'static + Fn() -> U,
+    U: Any,
+{
+    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
+        let wrapped: Box<dyn Fn() -> Result<Box<dyn Any>, String>> =
+            Box::new(move || {
+                    Ok(Box::new(fun()) as Box<dyn Any>)
+            });
+
+        let ret = if let Some(id) = self.get_type::<U>() {
+            id
+        } else {
+            self.register_type::<U>()
+        };
+
+        self.functions.push(FnRecord {
+            params: vec![],
+            ret,
+            fun: Function::ExternalFn0(wrapped),
+            raw_ptr: Some(fun_ptr),
+        });
+
+        let id = self.functions.len() - 1;
+
+        let ent = self
+            .external_functions
+            .entry(name.as_bytes().to_vec())
+            .or_insert(Vec::new());
+        (*ent).push(FunctionId(id));
+    }
+}
+
+impl<'a, 'source, A, T, U> FnRegister<A, U, (T,)> for TypeChecker<'source>
 where
     A: 'static + Fn(T) -> U,
     T: Clone + Any,
@@ -581,7 +619,7 @@ where
     }
 }
 
-impl<'a, 'source, A, T, U, V> FnRegister<A, V, (&'a T, U)> for TypeChecker<'source>
+impl<'a, 'source, A, T, U, V> FnRegister<A, V, (T, U)> for TypeChecker<'source>
 where
     A: 'static + Fn(T, U) -> V,
     T: Clone + Any,
@@ -624,6 +662,71 @@ where
             params: vec![param1, param2],
             ret,
             fun: Function::ExternalFn2(wrapped),
+            raw_ptr: Some(fun_ptr),
+        };
+        self.functions.push(fn_record);
+
+        let id = self.functions.len() - 1;
+
+        let ent = self
+            .external_functions
+            .entry(name.as_bytes().to_vec())
+            .or_insert(Vec::new());
+        (*ent).push(FunctionId(id));
+    }
+}
+
+impl<'a, 'source, A, T, U, V, W> FnRegister<A, V, (T, U, W)> for TypeChecker<'source>
+where
+    A: 'static + Fn(T, U, W) -> V,
+    T: Clone + Any,
+    U: Clone + Any,
+    W: Clone + Any,
+    V: Any,
+{
+    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
+        let wrapped: Box<
+            dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
+        > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>, arg3: &mut Box<dyn Any>| {
+            let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
+            let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
+            let inside3= (*arg3).downcast_mut() as Option<&mut W>;
+
+            match (inside1, inside2, inside3) {
+                (Some(b), Some(c), Some(d)) => Ok(Box::new(fun(b.clone(), c.clone(), d.clone())) as Box<dyn Any>),
+                _ => Err("ErrorFunctionArgMismatch".into()),
+            }
+        });
+
+        let param1 = if let Some(id) = self.get_type::<T>() {
+            id
+        } else {
+            self.register_type::<T>()
+        };
+
+        let param2 = if let Some(id) = self.get_type::<U>() {
+            id
+        } else {
+            self.register_type::<U>()
+        };
+
+        let param3 = if let Some(id) = self.get_type::<W>() {
+            id
+        } else {
+            self.register_type::<W>()
+        };
+
+
+        let ret = if let Some(id) = self.get_type::<V>() {
+            id
+        } else {
+            self.register_type::<V>()
+        };
+
+        let fn_record = FnRecord {
+            params: vec![param1, param2, param3],
+            ret,
+            fun: Function::ExternalFn3(wrapped),
             raw_ptr: Some(fun_ptr),
         };
         self.functions.push(fn_record);
