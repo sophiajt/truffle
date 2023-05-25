@@ -27,7 +27,15 @@ pub enum Function {
     ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
     ExternalFn1(Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
     ExternalFn2(Box<dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
-    ExternalFn3(Box<dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
+    ExternalFn3(
+        Box<
+            dyn Fn(
+                &mut Box<dyn Any>,
+                &mut Box<dyn Any>,
+                &mut Box<dyn Any>,
+            ) -> Result<Box<dyn Any>, String>,
+        >,
+    ),
     // InternalFn,
 }
 
@@ -383,35 +391,36 @@ impl<'source> TypeChecker<'source> {
 
         if let Some(defs) = self.external_functions.get(call_name) {
             'outer: for &def in defs {
-                match &self.functions[def.0] {
-                    FnRecord { params, ret, .. } => {
-                        if args.len() != params.len() {
-                            // self.error(format!("expected {} argument(s)", params.len()), head);
-                            // return;
-                            dbg!();
-                            continue;
-                        }
-
-                        for idx in 0..params.len() {
-                            let param = params[idx];
-                            let arg = args[idx];
-
-                            if self.node_types[arg.0] != param {
-                                // self.error(
-                                //     format!(
-                                //         "expect {} found {}",
-                                //         self.stringify_type(param),
-                                //         self.stringify_type(self.node_types[arg.0])
-                                //     ),
-                                //     args[idx],
-                                // );
-                                // return;
-                                dbg!(self.stringify_type(param), self.stringify_type(self.node_types[arg.0]));
-                                continue 'outer;
-                            }
-                        }
+                let FnRecord { params, ret, .. } = &self.functions[def.0];
+                {
+                    if args.len() != params.len() {
+                        // self.error(format!("expected {} argument(s)", params.len()), head);
+                        // return;
+                        dbg!();
+                        continue;
                     }
 
+                    for idx in 0..params.len() {
+                        let param = params[idx];
+                        let arg = args[idx];
+
+                        if self.node_types[arg.0] != param {
+                            // self.error(
+                            //     format!(
+                            //         "expect {} found {}",
+                            //         self.stringify_type(param),
+                            //         self.stringify_type(self.node_types[arg.0])
+                            //     ),
+                            //     args[idx],
+                            // );
+                            // return;
+                            dbg!(
+                                self.stringify_type(param),
+                                self.stringify_type(self.node_types[arg.0])
+                            );
+                            continue 'outer;
+                        }
+                    }
                     self.node_types[node_id.0] = *ret;
                     self.call_resolution.insert(head, def);
                     return;
@@ -546,9 +555,7 @@ where
 {
     fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
         let wrapped: Box<dyn Fn() -> Result<Box<dyn Any>, String>> =
-            Box::new(move || {
-                    Ok(Box::new(fun()) as Box<dyn Any>)
-            });
+            Box::new(move || Ok(Box::new(fun()) as Box<dyn Any>));
 
         let ret = if let Some(id) = self.get_type::<U>() {
             id
@@ -686,17 +693,25 @@ where
 {
     fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
         let wrapped: Box<
-            dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
-        > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>, arg3: &mut Box<dyn Any>| {
-            let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
-            let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
-            let inside3= (*arg3).downcast_mut() as Option<&mut W>;
+            dyn Fn(
+                &mut Box<dyn Any>,
+                &mut Box<dyn Any>,
+                &mut Box<dyn Any>,
+            ) -> Result<Box<dyn Any>, String>,
+        > = Box::new(
+            move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>, arg3: &mut Box<dyn Any>| {
+                let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
+                let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
+                let inside3 = (*arg3).downcast_mut() as Option<&mut W>;
 
-            match (inside1, inside2, inside3) {
-                (Some(b), Some(c), Some(d)) => Ok(Box::new(fun(b.clone(), c.clone(), d.clone())) as Box<dyn Any>),
-                _ => Err("ErrorFunctionArgMismatch".into()),
-            }
-        });
+                match (inside1, inside2, inside3) {
+                    (Some(b), Some(c), Some(d)) => {
+                        Ok(Box::new(fun(b.clone(), c.clone(), d.clone())) as Box<dyn Any>)
+                    }
+                    _ => Err("ErrorFunctionArgMismatch".into()),
+                }
+            },
+        );
 
         let param1 = if let Some(id) = self.get_type::<T>() {
             id
@@ -715,7 +730,6 @@ where
         } else {
             self.register_type::<W>()
         };
-
 
         let ret = if let Some(id) = self.get_type::<V>() {
             id
