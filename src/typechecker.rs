@@ -9,6 +9,7 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TypeId(pub usize);
 
+#[derive(Default)]
 pub struct Scope<'source> {
     pub variables: HashMap<&'source [u8], NodeId>,
 }
@@ -21,6 +22,7 @@ impl<'scope> Scope<'scope> {
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub enum Function {
     ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
     ExternalFn1(Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
@@ -32,6 +34,7 @@ pub enum Function {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FunctionId(pub usize);
 
+#[derive(Default)]
 pub struct TypeChecker<'source> {
     // Used by TypeId
     pub types: Vec<std::any::TypeId>,
@@ -407,11 +410,11 @@ impl<'source> TypeChecker<'source> {
                                 continue 'outer;
                             }
                         }
-
-                        self.node_types[node_id.0] = *ret;
-                        self.call_resolution.insert(head, def);
-                        return;
                     }
+
+                    self.node_types[node_id.0] = *ret;
+                    self.call_resolution.insert(head, def);
+                    return;
                 }
             }
 
@@ -577,6 +580,7 @@ where
     U: Any,
 {
     fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
+        #[allow(clippy::type_complexity)]
         let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
             Box::new(move |arg: &mut Box<dyn Any>| {
                 let inside = (*arg).downcast_mut() as Option<&mut T>;
@@ -623,6 +627,7 @@ where
     V: Any,
 {
     fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
+        #[allow(clippy::type_complexity)]
         let wrapped: Box<
             dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
         > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>| {

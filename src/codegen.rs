@@ -34,6 +34,7 @@ impl Value {
     // }
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
 pub enum Instruction {
     IADD {
@@ -166,7 +167,7 @@ impl FunctionCodegen {
     }
 
     pub fn f64_const(&mut self, value: f64) -> RegisterId {
-        self.new_register_with_value(unsafe { std::mem::transmute::<f64, i64>(value) }, F64_TYPE)
+        self.new_register_with_value(value.to_bits() as i64, F64_TYPE)
     }
 
     pub fn bool_const(&mut self, value: bool) -> RegisterId {
@@ -427,84 +428,64 @@ impl FunctionCodegen {
                     instruction_pointer += 1;
                 }
                 Instruction::FADD { lhs, rhs, target } => {
-                    let lhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
-                    let rhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
+                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
 
-                    self.register_values[target.0] =
-                        unsafe { std::mem::transmute::<f64, i64>(lhs + rhs) };
+                    self.register_values[target.0] = (lhs + rhs).to_bits() as i64;
 
                     instruction_pointer += 1;
                 }
                 Instruction::FSUB { lhs, rhs, target } => {
-                    let lhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
-                    let rhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
+                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
 
-                    self.register_values[target.0] =
-                        unsafe { std::mem::transmute::<f64, i64>(lhs - rhs) };
+                    self.register_values[target.0] = (lhs - rhs).to_bits() as i64;
 
                     instruction_pointer += 1;
                 }
                 Instruction::FMUL { lhs, rhs, target } => {
-                    let lhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
-                    let rhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
+                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
 
-                    self.register_values[target.0] =
-                        unsafe { std::mem::transmute::<f64, i64>(lhs * rhs) };
+                    self.register_values[target.0] = (lhs * rhs).to_bits() as i64;
 
                     instruction_pointer += 1;
                 }
                 Instruction::FDIV { lhs, rhs, target } => {
-                    let lhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
-                    let rhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
+                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
 
-                    self.register_values[target.0] =
-                        unsafe { std::mem::transmute::<f64, i64>(lhs / rhs) };
+                    self.register_values[target.0] = (lhs / rhs).to_bits() as i64;
 
                     instruction_pointer += 1;
                 }
                 Instruction::FLT { lhs, rhs, target } => {
-                    let lhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
-                    let rhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
+                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
 
                     self.register_values[target.0] = (lhs < rhs) as i64;
 
                     instruction_pointer += 1;
                 }
                 Instruction::FLTE { lhs, rhs, target } => {
-                    let lhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
-                    let rhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
+                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
 
                     self.register_values[target.0] = (lhs <= rhs) as i64;
 
                     instruction_pointer += 1;
                 }
                 Instruction::FGT { lhs, rhs, target } => {
-                    let lhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
-                    let rhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
+                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
 
                     self.register_values[target.0] = (lhs > rhs) as i64;
 
                     instruction_pointer += 1;
                 }
                 Instruction::FGTE { lhs, rhs, target } => {
-                    let lhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[lhs.0]) };
-                    let rhs =
-                        unsafe { std::mem::transmute::<i64, f64>(self.register_values[rhs.0]) };
+                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
+                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
 
                     self.register_values[target.0] = (lhs >= rhs) as i64;
 
@@ -575,8 +556,7 @@ impl FunctionCodegen {
 
     pub fn box_register(&self, register_id: RegisterId) -> Box<dyn Any> {
         if self.register_types[register_id.0] == F64_TYPE {
-            let val =
-                unsafe { std::mem::transmute::<i64, f64>(self.register_values[register_id.0]) };
+            let val = f64::from_bits(self.register_values[register_id.0] as u64);
             Box::new(val)
         } else if self.register_types[register_id.0] == BOOL_TYPE {
             let val = self.register_values[register_id.0] != 0;
@@ -589,7 +569,7 @@ impl FunctionCodegen {
     pub fn unbox_to_register(&mut self, value: Box<dyn Any>, target: RegisterId) {
         if self.register_types[target.0] == F64_TYPE {
             if let Ok(value) = value.downcast::<f64>() {
-                let val = unsafe { std::mem::transmute::<f64, i64>(*value) };
+                let val = (*value).to_bits() as i64;
 
                 self.register_values[target.0] = val;
             } else {
@@ -605,12 +585,10 @@ impl FunctionCodegen {
             }
         } else if self.register_types[target.0] == VOID_TYPE {
             // Ignore this case, as void creates no changes
+        } else if let Ok(value) = value.downcast::<i64>() {
+            self.register_values[target.0] = *value;
         } else {
-            if let Ok(value) = value.downcast::<i64>() {
-                self.register_values[target.0] = *value;
-            } else {
-                panic!("internal error: could not properly handle conversion of register to i64")
-            }
+            panic!("internal error: could not properly handle conversion of register to i64")
         }
     }
 
@@ -626,7 +604,7 @@ impl FunctionCodegen {
                 println!(
                     "    {}: {} ({})",
                     idx,
-                    unsafe { std::mem::transmute::<i64, f64>(*value) },
+                    f64::from_bits(*value as u64),
                     typechecker.stringify_type(self.register_types[idx])
                 );
             } else {
@@ -645,6 +623,7 @@ impl FunctionCodegen {
     }
 }
 
+#[derive(Default)]
 pub struct Translater {
     var_lookup: HashMap<NodeId, RegisterId>,
 }
@@ -656,11 +635,7 @@ impl Translater {
         }
     }
 
-    pub fn translate<'source>(
-        &mut self,
-        delta: &'source EngineDelta,
-        typechecker: &TypeChecker,
-    ) -> FunctionCodegen {
+    pub fn translate(&mut self, delta: &EngineDelta, typechecker: &TypeChecker) -> FunctionCodegen {
         let mut builder = FunctionCodegen {
             instructions: vec![],
             register_values: vec![],
@@ -676,11 +651,11 @@ impl Translater {
         builder
     }
 
-    pub fn translate_node<'source>(
+    pub fn translate_node(
         &mut self,
         builder: &mut FunctionCodegen,
         node_id: NodeId,
-        delta: &'source EngineDelta,
+        delta: &EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
         match &delta.ast_nodes[node_id.0] {
@@ -724,25 +699,26 @@ impl Translater {
         }
     }
 
-    pub fn translate_int<'source>(
+    pub fn translate_int(
         &mut self,
         builder: &mut FunctionCodegen,
         node_id: NodeId,
-        delta: &'source EngineDelta,
+        delta: &EngineDelta,
     ) -> RegisterId {
         let contents = &delta.contents[delta.span_start[node_id.0]..delta.span_end[node_id.0]];
 
-        let constant = i64::from_str_radix(&String::from_utf8_lossy(contents), 10)
+        let constant = String::from_utf8_lossy(contents)
+            .parse::<i64>()
             .expect("internal error: int constant could not be parsed");
 
         builder.i64_const(constant)
     }
 
-    pub fn translate_float<'source>(
+    pub fn translate_float(
         &mut self,
         builder: &mut FunctionCodegen,
         node_id: NodeId,
-        delta: &'source EngineDelta,
+        delta: &EngineDelta,
     ) -> RegisterId {
         let contents = &delta.contents[delta.span_start[node_id.0]..delta.span_end[node_id.0]];
 
@@ -753,13 +729,13 @@ impl Translater {
         builder.f64_const(constant)
     }
 
-    pub fn translate_binop<'source>(
+    pub fn translate_binop(
         &mut self,
         builder: &mut FunctionCodegen,
         lhs: NodeId,
         op: NodeId,
         rhs: NodeId,
-        delta: &'source EngineDelta,
+        delta: &EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
         let lhs = self.translate_node(builder, lhs, delta, typechecker);
@@ -779,12 +755,12 @@ impl Translater {
         }
     }
 
-    pub fn translate_let<'source>(
+    pub fn translate_let(
         &mut self,
         builder: &mut FunctionCodegen,
         variable_name: NodeId,
         initializer: NodeId,
-        delta: &'source EngineDelta,
+        delta: &EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
         let initializer = self.translate_node(builder, initializer, delta, typechecker);
@@ -794,7 +770,7 @@ impl Translater {
         initializer
     }
 
-    pub fn translate_variable<'source>(
+    pub fn translate_variable(
         &mut self,
         variable_name: NodeId,
         typechecker: &TypeChecker,
@@ -812,14 +788,15 @@ impl Translater {
         *register_id
     }
 
-    pub fn translate_if<'source>(
+    #[allow(clippy::too_many_arguments)]
+    pub fn translate_if(
         &mut self,
         builder: &mut FunctionCodegen,
         node_id: NodeId,
         condition: NodeId,
         then_block: NodeId,
         else_expression: Option<NodeId>,
-        delta: &'source EngineDelta,
+        delta: &EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
         let output = builder.new_register(typechecker.node_types[node_id.0]);
@@ -858,12 +835,12 @@ impl Translater {
         output
     }
 
-    pub fn translate_while<'source>(
+    pub fn translate_while(
         &mut self,
         builder: &mut FunctionCodegen,
         condition: NodeId,
         block: NodeId,
-        delta: &'source EngineDelta,
+        delta: &EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
         let output = builder.new_register(VOID_TYPE);
@@ -889,15 +866,15 @@ impl Translater {
         output
     }
 
-    pub fn translate_block<'source>(
+    pub fn translate_block(
         &mut self,
         builder: &mut FunctionCodegen,
         nodes: &[NodeId],
-        delta: &'source EngineDelta,
+        delta: &EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
         if nodes.is_empty() {
-            return builder.new_register(VOID_TYPE);
+            builder.new_register(VOID_TYPE)
         } else {
             let mut idx = 0;
 
@@ -911,13 +888,13 @@ impl Translater {
         }
     }
 
-    pub fn translate_call<'source>(
+    pub fn translate_call(
         &mut self,
         builder: &mut FunctionCodegen,
         head: NodeId,
         args: &[NodeId],
         node_id: NodeId,
-        delta: &'source EngineDelta,
+        delta: &EngineDelta,
         typechecker: &TypeChecker,
     ) -> RegisterId {
         let output = builder.new_register(typechecker.node_types[node_id.0]);
