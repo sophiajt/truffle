@@ -156,24 +156,23 @@ impl<'source> Parser<'source> {
 
     pub fn is_operator(&mut self) -> bool {
         match self.lexer.peek() {
-            Some(Token { token_type, .. }) => match token_type {
+            Some(Token { token_type, .. }) => matches!(
+                token_type,
                 TokenType::Asterisk
-                | TokenType::AsteriskAsterisk
-                | TokenType::Dash
-                | TokenType::EqualsEquals
-                | TokenType::ExclamationEquals
-                | TokenType::ForwardSlash
-                | TokenType::LessThan
-                | TokenType::LessThanEqual
-                | TokenType::Plus
-                | TokenType::GreaterThan
-                | TokenType::GreaterThanEqual
-                | TokenType::AmpersandAmpersand
-                | TokenType::PipePipe
-                | TokenType::Equals => true,
-
-                _ => false,
-            },
+                    | TokenType::AsteriskAsterisk
+                    | TokenType::Dash
+                    | TokenType::EqualsEquals
+                    | TokenType::ExclamationEquals
+                    | TokenType::ForwardSlash
+                    | TokenType::LessThan
+                    | TokenType::LessThanEqual
+                    | TokenType::Plus
+                    | TokenType::GreaterThan
+                    | TokenType::GreaterThanEqual
+                    | TokenType::AmpersandAmpersand
+                    | TokenType::PipePipe
+                    | TokenType::Equals
+            ),
             _ => false,
         }
     }

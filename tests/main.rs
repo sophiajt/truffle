@@ -2,7 +2,7 @@
 mod tests {
     use truffle::{register_fn, FnRegister, Parser, Translater, TypeChecker, TypeId};
     fn eval_source_into_float(source: &str) -> f64 {
-        unsafe { std::mem::transmute::<i64, f64>(eval_source_with_type(source).0) }
+        f64::from_bits(eval_source_with_type(source).0 as u64)
     }
 
     fn eval_source(source: &str) -> i64 {

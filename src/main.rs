@@ -118,7 +118,7 @@ fn run_line(line: &str, debug_output: bool) {
     if result.1 == F64_TYPE {
         println!(
             "result -> {} ({})",
-            unsafe { std::mem::transmute::<i64, f64>(result.0) },
+            f64::from_bits(result.0 as u64),
             typechecker.stringify_type(result.1)
         );
     } else if result.1 == BOOL_TYPE {
