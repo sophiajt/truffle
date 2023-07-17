@@ -164,14 +164,16 @@ pub struct Env {
 
 impl Env {
     pub fn new_env() -> Env {
-        Env { vars: HashMap::new() }
+        Env {
+            vars: HashMap::new(),
+        }
     }
 
-    pub fn set_var(&self, var: i64, value: i64) {
-        todo!()
+    pub fn set_var(&mut self, var: i64, value: i64) {
+        self.vars.insert(var, value);
     }
 
     pub fn read_var(&self, var: i64) -> i64 {
-        todo!()
+        *self.vars.get(&var).unwrap()
     }
 }

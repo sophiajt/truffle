@@ -365,6 +365,10 @@ impl FunctionCodegen {
             .push(Instruction::EXTERNALCALL { head, args, target })
     }
 
+    pub fn is_user_type(&self, register_id: RegisterId) -> bool {
+        self.register_types[register_id.0].0 > BOOL_TYPE.0
+    }
+
     pub fn eval(&mut self, functions: &[FnRecord]) -> (i64, TypeId) {
         let mut instruction_pointer = 0;
         let length = self.instructions.len();
@@ -512,9 +516,13 @@ impl FunctionCodegen {
                     instruction_pointer = location.0;
                 }
                 Instruction::EXTERNALCALL { head, args, target } => {
+                    let target = *target;
                     let output = self.eval_external_call(*head, args, functions);
 
-                    self.unbox_to_register(output, *target);
+                    println!("external call into: {:?}", target);
+                    println!("target is: {:?}", self.register_types[target.0]);
+                    self.unbox_to_register(output, target);
+                    println!("register is now: {}", self.register_values[target.0]);
                     instruction_pointer += 1;
                 }
             }
@@ -530,26 +538,57 @@ impl FunctionCodegen {
         functions: &[FnRecord],
     ) -> Box<dyn Any> {
         match &functions[head.0].fun {
-            Function::ExternalFn0(fun) => {
-                fun().unwrap()
-            }
+            Function::ExternalFn0(fun) => fun().unwrap(),
             Function::ExternalFn1(fun) => {
-                let mut val = self.box_register(args[0]);
+                let mut arg0 = self.box_register(args[0]);
 
-                fun(&mut val).unwrap()
+                let result = fun(&mut arg0).unwrap();
+
+                if self.is_user_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+
+                result
             }
             Function::ExternalFn2(fun) => {
                 let mut arg0 = self.box_register(args[0]);
                 let mut arg1 = self.box_register(args[1]);
 
-                fun(&mut arg0, &mut arg1).unwrap()
+                let result = fun(&mut arg0, &mut arg1).unwrap();
+
+                if self.is_user_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+                if self.is_user_type(args[1]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg1);
+                }
+
+                result
             }
             Function::ExternalFn3(fun) => {
                 let mut arg0 = self.box_register(args[0]);
                 let mut arg1 = self.box_register(args[1]);
                 let mut arg2 = self.box_register(args[2]);
 
-                fun(&mut arg0, &mut arg1, &mut arg2).unwrap()
+                let result = fun(&mut arg0, &mut arg1, &mut arg2).unwrap();
+
+                if self.is_user_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+                if self.is_user_type(args[1]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg1);
+                }
+                if self.is_user_type(args[2]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg2);
+                }
+
+                result
             }
         }
     }
@@ -561,8 +600,22 @@ impl FunctionCodegen {
         } else if self.register_types[register_id.0] == BOOL_TYPE {
             let val = self.register_values[register_id.0] != 0;
             Box::new(val)
-        } else {
+        } else if self.register_types[register_id.0] == I64_TYPE {
             Box::new(self.register_values[register_id.0])
+        } else {
+            println!(
+                "transmuting: {} with {}",
+                register_id.0, self.register_values[register_id.0]
+            );
+            let boxed = unsafe {
+                std::mem::transmute::<i64, Box<Box<dyn Any>>>(self.register_values[register_id.0])
+            };
+
+            let boxed = Box::leak(boxed);
+
+            let leaked = &mut **boxed as *mut dyn Any;
+
+            unsafe { Box::from_raw(leaked) }
         }
     }
 
@@ -585,10 +638,20 @@ impl FunctionCodegen {
             }
         } else if self.register_types[target.0] == VOID_TYPE {
             // Ignore this case, as void creates no changes
-        } else if let Ok(value) = value.downcast::<i64>() {
-            self.register_values[target.0] = *value;
+        } else if self.register_types[target.0] == I64_TYPE {
+            if let Ok(value) = value.downcast::<i64>() {
+                self.register_values[target.0] = *value;
+            } else {
+                panic!("internal error: could not properly handle conversion of register to i64")
+            }
         } else {
-            panic!("internal error: could not properly handle conversion of register to i64")
+            self.register_values[target.0] =
+                unsafe { std::mem::transmute::<Box<Box<dyn Any>>, i64>(Box::new(value)) };
+
+            println!(
+                "setting {} into {}",
+                target.0, self.register_values[target.0]
+            )
         }
     }
 
@@ -638,8 +701,8 @@ impl Translater {
     pub fn translate(&mut self, delta: &EngineDelta, typechecker: &TypeChecker) -> FunctionCodegen {
         let mut builder = FunctionCodegen {
             instructions: vec![],
-            register_values: vec![],
-            register_types: vec![],
+            register_values: vec![0],
+            register_types: vec![TypeId(0)],
         };
         if !delta.ast_nodes.is_empty() {
             let last = delta.ast_nodes.len() - 1;

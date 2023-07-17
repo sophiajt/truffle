@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 #[cfg(feature = "cranelift")]
 mod codegen_cranelift;
 
