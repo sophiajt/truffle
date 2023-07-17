@@ -3,7 +3,10 @@ use std::collections::HashMap;
 
 use line_editor::{LineEditor, ReadLineOutput};
 
-use truffle::{register_fn, FnRegister, Parser, Translater, TypeChecker, BOOL_TYPE, F64_TYPE};
+use truffle::{
+    register_fn, Evaluator, FnRegister, FunctionId, Parser, Translater, TypeChecker, BOOL_TYPE,
+    F64_TYPE,
+};
 
 fn main() {
     let args = std::env::args();
@@ -120,11 +123,15 @@ fn run_line(line: &str, debug_output: bool) {
         println!();
         println!("===stdout===");
     }
-    let result = output.eval(&typechecker.functions);
+
+    let mut evaluator = Evaluator::default();
+    evaluator.add_function(output);
+
+    let result = evaluator.eval(FunctionId(0), &typechecker.functions);
     if debug_output {
         println!("============");
         println!();
-        output.debug_print(&typechecker);
+        evaluator.debug_print(&typechecker);
         println!();
     }
 

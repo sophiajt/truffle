@@ -39,6 +39,9 @@ pub enum Function {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ExternalFunctionId(pub usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FunctionId(pub usize);
 
 #[derive(Default)]
@@ -59,13 +62,13 @@ pub struct TypeChecker<'source> {
     pub variable_def: HashMap<NodeId, NodeId>,
 
     // List of all registered functions
-    pub functions: Vec<FnRecord>,
+    pub functions: Vec<ExternalFnRecord>,
 
     // Call resolution
-    pub call_resolution: HashMap<NodeId, FunctionId>,
+    pub call_resolution: HashMap<NodeId, ExternalFunctionId>,
 
     // Externally-registered functions
-    pub external_functions: HashMap<Vec<u8>, Vec<FunctionId>>,
+    pub external_functions: HashMap<Vec<u8>, Vec<ExternalFunctionId>>,
 
     pub errors: Vec<ScriptError>,
     pub scope: Vec<Scope<'source>>,
@@ -404,7 +407,7 @@ impl<'source> TypeChecker<'source> {
 
         if let Some(defs) = self.external_functions.get(call_name) {
             'outer: for &def in defs {
-                let FnRecord { params, ret, .. } = &self.functions[def.0];
+                let ExternalFnRecord { params, ret, .. } = &self.functions[def.0];
                 {
                     if args.len() != params.len() {
                         // self.error(format!("expected {} argument(s)", params.len()), head);
@@ -554,7 +557,7 @@ impl<'source> TypeChecker<'source> {
         self.typenames[type_id.0].clone()
     }
 
-    pub fn stringify_function_name(&self, name: &[u8], function_id: FunctionId) -> String {
+    pub fn stringify_function_name(&self, name: &[u8], function_id: ExternalFunctionId) -> String {
         let fun_def = &self.functions[function_id.0];
 
         let mut fun_name = String::from_utf8_lossy(name).to_string();
@@ -567,7 +570,7 @@ impl<'source> TypeChecker<'source> {
     }
 }
 
-pub struct FnRecord {
+pub struct ExternalFnRecord {
     pub params: Vec<TypeId>,
     pub ret: TypeId,
     pub fun: Function,
@@ -593,7 +596,7 @@ where
             self.register_type::<U>()
         };
 
-        self.functions.push(FnRecord {
+        self.functions.push(ExternalFnRecord {
             params: vec![],
             ret,
             fun: Function::ExternalFn0(wrapped),
@@ -606,7 +609,7 @@ where
             .external_functions
             .entry(name.as_bytes().to_vec())
             .or_insert(Vec::new());
-        (*ent).push(FunctionId(id));
+        (*ent).push(ExternalFunctionId(id));
     }
 }
 
@@ -638,7 +641,7 @@ where
             self.register_type::<U>()
         };
 
-        self.functions.push(FnRecord {
+        self.functions.push(ExternalFnRecord {
             params: vec![param1],
             ret,
             fun: Function::ExternalFn1(wrapped),
@@ -651,7 +654,7 @@ where
             .external_functions
             .entry(name.as_bytes().to_vec())
             .or_insert(Vec::new());
-        (*ent).push(FunctionId(id));
+        (*ent).push(ExternalFunctionId(id));
     }
 }
 
@@ -693,7 +696,7 @@ where
             self.register_type::<V>()
         };
 
-        let fn_record = FnRecord {
+        let fn_record = ExternalFnRecord {
             params: vec![param1, param2],
             ret,
             fun: Function::ExternalFn2(wrapped),
@@ -707,7 +710,7 @@ where
             .external_functions
             .entry(name.as_bytes().to_vec())
             .or_insert(Vec::new());
-        (*ent).push(FunctionId(id));
+        (*ent).push(ExternalFunctionId(id));
     }
 }
 
@@ -765,7 +768,7 @@ where
             self.register_type::<V>()
         };
 
-        let fn_record = FnRecord {
+        let fn_record = ExternalFnRecord {
             params: vec![param1, param2, param3],
             ret,
             fun: Function::ExternalFn3(wrapped),
@@ -779,7 +782,7 @@ where
             .external_functions
             .entry(name.as_bytes().to_vec())
             .or_insert(Vec::new());
-        (*ent).push(FunctionId(id));
+        (*ent).push(ExternalFunctionId(id));
     }
 }
 
@@ -837,7 +840,7 @@ where
             self.register_type::<V>()
         };
 
-        let fn_record = FnRecord {
+        let fn_record = ExternalFnRecord {
             params: vec![param1, param2, param3],
             ret,
             fun: Function::ExternalFn3(wrapped),
@@ -851,7 +854,7 @@ where
             .external_functions
             .entry(name.as_bytes().to_vec())
             .or_insert(Vec::new());
-        (*ent).push(FunctionId(id));
+        (*ent).push(ExternalFunctionId(id));
     }
 }
 

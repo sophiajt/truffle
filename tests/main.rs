@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use truffle::{register_fn, FnRegister, Parser, Translater, TypeChecker, TypeId};
+    use truffle::{
+        register_fn, Evaluator, FnRegister, FunctionId, Parser, Translater, TypeChecker, TypeId,
+    };
     fn eval_source_into_float(source: &str) -> f64 {
         f64::from_bits(eval_source_with_type(source).0 as u64)
     }
@@ -28,7 +30,10 @@ mod tests {
         #[allow(unused_mut)]
         let mut output = translater.translate(&parser.delta, &typechecker);
 
-        output.eval(&typechecker.functions)
+        let mut evaluator = Evaluator::default();
+        evaluator.add_function(output);
+
+        evaluator.eval(FunctionId(0), &typechecker.functions)
     }
 
     #[test]
