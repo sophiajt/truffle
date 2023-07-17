@@ -1,19 +1,17 @@
-use std::{any::Any, collections::HashMap};
+use std::collections::HashMap;
 
 use crate::{
     delta::EngineDelta,
     parser::{AstNode, NodeId},
-    typechecker::{
-        FnRecord, Function, FunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, VOID_TYPE,
-    },
+    typechecker::{ExternalFunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, VOID_TYPE},
     F64_TYPE,
 };
 
 #[derive(Clone, Copy, Debug)]
-pub struct InstructionId(usize);
+pub struct InstructionId(pub usize);
 
 #[derive(Clone, Copy, Debug)]
-pub struct RegisterId(usize);
+pub struct RegisterId(pub usize);
 
 #[derive(Debug, PartialEq)]
 pub struct Value {
@@ -138,10 +136,12 @@ pub enum Instruction {
     JMP(InstructionId),
 
     EXTERNALCALL {
-        head: FunctionId,
+        head: ExternalFunctionId,
         args: Vec<RegisterId>,
         target: RegisterId,
     },
+
+    RET,
 }
 
 pub struct FunctionCodegen {
@@ -360,266 +360,43 @@ impl FunctionCodegen {
         self.instructions.push(Instruction::JMP(location))
     }
 
-    pub fn external_call(&mut self, head: FunctionId, args: Vec<RegisterId>, target: RegisterId) {
+    pub fn ret(&mut self) {
+        self.instructions.push(Instruction::RET)
+    }
+
+    pub fn external_call(
+        &mut self,
+        head: ExternalFunctionId,
+        args: Vec<RegisterId>,
+        target: RegisterId,
+    ) {
         self.instructions
             .push(Instruction::EXTERNALCALL { head, args, target })
     }
 
-    pub fn eval(&mut self, functions: &[FnRecord]) -> (i64, TypeId) {
-        let mut instruction_pointer = 0;
-        let length = self.instructions.len();
-
-        while instruction_pointer < length {
-            match &self.instructions[instruction_pointer] {
-                Instruction::IADD { lhs, rhs, target } => {
-                    self.register_values[target.0] =
-                        self.register_values[lhs.0] + self.register_values[rhs.0];
-
-                    instruction_pointer += 1;
-                }
-                Instruction::ISUB { lhs, rhs, target } => {
-                    self.register_values[target.0] =
-                        self.register_values[lhs.0] - self.register_values[rhs.0];
-
-                    instruction_pointer += 1;
-                }
-                Instruction::IMUL { lhs, rhs, target } => {
-                    self.register_values[target.0] =
-                        self.register_values[lhs.0] * self.register_values[rhs.0];
-
-                    instruction_pointer += 1;
-                }
-                Instruction::IDIV { lhs, rhs, target } => {
-                    self.register_values[target.0] =
-                        self.register_values[lhs.0] / self.register_values[rhs.0];
-
-                    instruction_pointer += 1
-                }
-                Instruction::ILT { lhs, rhs, target } => {
-                    let lhs = self.register_values[lhs.0];
-                    let rhs = self.register_values[rhs.0];
-
-                    self.register_values[target.0] = (lhs < rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::ILTE { lhs, rhs, target } => {
-                    let lhs = self.register_values[lhs.0];
-                    let rhs = self.register_values[rhs.0];
-
-                    self.register_values[target.0] = (lhs <= rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::IGT { lhs, rhs, target } => {
-                    let lhs = self.register_values[lhs.0];
-                    let rhs = self.register_values[rhs.0];
-
-                    self.register_values[target.0] = (lhs > rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::IGTE { lhs, rhs, target } => {
-                    let lhs = self.register_values[lhs.0];
-                    let rhs = self.register_values[rhs.0];
-
-                    self.register_values[target.0] = (lhs >= rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FADD { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
-                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
-
-                    self.register_values[target.0] = (lhs + rhs).to_bits() as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FSUB { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
-                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
-
-                    self.register_values[target.0] = (lhs - rhs).to_bits() as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FMUL { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
-                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
-
-                    self.register_values[target.0] = (lhs * rhs).to_bits() as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FDIV { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
-                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
-
-                    self.register_values[target.0] = (lhs / rhs).to_bits() as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FLT { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
-                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
-
-                    self.register_values[target.0] = (lhs < rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FLTE { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
-                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
-
-                    self.register_values[target.0] = (lhs <= rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FGT { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
-                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
-
-                    self.register_values[target.0] = (lhs > rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FGTE { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(self.register_values[lhs.0] as u64);
-                    let rhs = f64::from_bits(self.register_values[rhs.0] as u64);
-
-                    self.register_values[target.0] = (lhs >= rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::MOV { target, source } => {
-                    self.register_values[target.0] = self.register_values[source.0];
-                    instruction_pointer += 1;
-                }
-                Instruction::BRIF {
-                    condition,
-                    then_branch,
-                    else_branch,
-                } => {
-                    let condition = self.register_values[condition.0];
-
-                    if condition == 0 {
-                        instruction_pointer = else_branch.0;
-                    } else {
-                        instruction_pointer = then_branch.0;
-                    }
-                }
-                Instruction::JMP(location) => {
-                    instruction_pointer = location.0;
-                }
-                Instruction::EXTERNALCALL { head, args, target } => {
-                    let output = self.eval_external_call(*head, args, functions);
-
-                    self.unbox_to_register(output, *target);
-                    instruction_pointer += 1;
-                }
-            }
-        }
-
-        (self.register_values[0], self.register_types[0])
-    }
-
-    pub fn eval_external_call(
-        &self,
-        head: FunctionId,
-        args: &[RegisterId],
-        functions: &[FnRecord],
-    ) -> Box<dyn Any> {
-        match &functions[head.0].fun {
-            Function::ExternalFn0(fun) => {
-                fun().unwrap()
-            }
-            Function::ExternalFn1(fun) => {
-                let mut val = self.box_register(args[0]);
-
-                fun(&mut val).unwrap()
-            }
-            Function::ExternalFn2(fun) => {
-                let mut arg0 = self.box_register(args[0]);
-                let mut arg1 = self.box_register(args[1]);
-
-                fun(&mut arg0, &mut arg1).unwrap()
-            }
-            Function::ExternalFn3(fun) => {
-                let mut arg0 = self.box_register(args[0]);
-                let mut arg1 = self.box_register(args[1]);
-                let mut arg2 = self.box_register(args[2]);
-
-                fun(&mut arg0, &mut arg1, &mut arg2).unwrap()
-            }
-        }
-    }
-
-    pub fn box_register(&self, register_id: RegisterId) -> Box<dyn Any> {
-        if self.register_types[register_id.0] == F64_TYPE {
-            let val = f64::from_bits(self.register_values[register_id.0] as u64);
-            Box::new(val)
-        } else if self.register_types[register_id.0] == BOOL_TYPE {
-            let val = self.register_values[register_id.0] != 0;
-            Box::new(val)
-        } else {
-            Box::new(self.register_values[register_id.0])
-        }
-    }
-
-    pub fn unbox_to_register(&mut self, value: Box<dyn Any>, target: RegisterId) {
-        if self.register_types[target.0] == F64_TYPE {
-            if let Ok(value) = value.downcast::<f64>() {
-                let val = (*value).to_bits() as i64;
-
-                self.register_values[target.0] = val;
-            } else {
-                panic!("internal error: could not properly handle conversion of register to i64")
-            }
-        } else if self.register_types[target.0] == BOOL_TYPE {
-            if let Ok(value) = value.downcast::<bool>() {
-                let val = *value as i64;
-
-                self.register_values[target.0] = val;
-            } else {
-                panic!("internal error: could not properly handle conversion of register to i64")
-            }
-        } else if self.register_types[target.0] == VOID_TYPE {
-            // Ignore this case, as void creates no changes
-        } else if let Ok(value) = value.downcast::<i64>() {
-            self.register_values[target.0] = *value;
-        } else {
-            panic!("internal error: could not properly handle conversion of register to i64")
-        }
-    }
-
-    pub fn debug_print(&self, typechecker: &TypeChecker) {
-        println!("virtual machine:");
-        println!("  instructions:");
-        for instr in self.instructions.iter().enumerate() {
-            println!("    {:?}", instr);
-        }
-        println!("  registers:");
-        for (idx, value) in self.register_values.iter().enumerate() {
-            if self.register_types[idx] == F64_TYPE {
-                println!(
-                    "    {}: {} ({})",
-                    idx,
-                    f64::from_bits(*value as u64),
-                    typechecker.stringify_type(self.register_types[idx])
-                );
-            } else {
-                println!(
-                    "    {}: {} ({})",
-                    idx,
-                    *value,
-                    typechecker.stringify_type(self.register_types[idx])
-                );
-            }
-        }
-    }
-
     pub fn next_position(&self) -> usize {
         self.instructions.len()
+    }
+
+    pub fn offset_instruction_addresses(&mut self, offset_amount: usize) {
+        // This moves all our jump addresses by some offset to allow for linking with other
+        // codegen'd functions (think: single vector with all instructions after codegen
+        // is complete and before evaluation begins)
+
+        for instr in &mut self.instructions {
+            match instr {
+                Instruction::BRIF {
+                    then_branch,
+                    else_branch,
+                    ..
+                } => {
+                    *then_branch = InstructionId(then_branch.0 + offset_amount);
+                    *else_branch = InstructionId(else_branch.0 + offset_amount);
+                }
+                Instruction::JMP(addr) => *addr = InstructionId(addr.0 + offset_amount),
+                _ => {}
+            }
+        }
     }
 }
 
@@ -638,8 +415,8 @@ impl Translater {
     pub fn translate(&mut self, delta: &EngineDelta, typechecker: &TypeChecker) -> FunctionCodegen {
         let mut builder = FunctionCodegen {
             instructions: vec![],
-            register_values: vec![],
-            register_types: vec![],
+            register_values: vec![0],
+            register_types: vec![TypeId(0)],
         };
         if !delta.ast_nodes.is_empty() {
             let last = delta.ast_nodes.len() - 1;
@@ -648,6 +425,8 @@ impl Translater {
             builder.register_types[0] = typechecker.node_types[last];
         }
 
+        // FIXME: for now assume a RET at the end, though this should be inferred earlier in compilation
+        builder.ret();
         builder
     }
 

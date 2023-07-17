@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use truffle::{Parser, Translater, TypeChecker};
+use truffle::{Evaluator, FunctionId, Parser, Translater, TypeChecker};
 
 fn run_file(filename: &str) {
     let contents = std::fs::read(filename).expect("couldn't find file");
@@ -16,7 +16,10 @@ fn run_file(filename: &str) {
     #[allow(unused_mut)]
     let mut output = translater.translate(&parser.delta, &typechecker);
 
-    let _ = output.eval(&typechecker.functions);
+    let mut evaluator = Evaluator::default();
+    evaluator.add_function(output);
+
+    let _ = evaluator.eval(FunctionId(0), &typechecker.functions);
 }
 
 fn parser_benchmark(c: &mut Criterion) {
