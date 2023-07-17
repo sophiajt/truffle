@@ -4,7 +4,7 @@ Truffle is an experimental (application) embedding scripting languages that offe
 
 The experiment offers the follow optional features:
 * **reedline** - a readline-like interactive line editor
-* **cranelift** - an efficient JIT engine
+* **async** - async version of Truffle
 
 ## Before going public
 
