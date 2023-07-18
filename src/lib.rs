@@ -19,6 +19,7 @@ pub use crate::codegen::Translater;
 pub use crate::codegen_cranelift::Translater;
 
 pub use crate::{
+    codegen::FunctionCodegen,
     eval::Evaluator,
     parser::Parser,
     typechecker::{

@@ -15,6 +15,31 @@ mod tests {
         lhs + rhs
     }
 
+    #[cfg(feature = "async")]
+    fn eval_source_with_type(source: &str) -> (i64, TypeId) {
+        use futures::executor::block_on;
+
+        let mut parser = Parser::new(source.as_bytes(), 0, 0);
+        parser.parse();
+
+        let mut typechecker = TypeChecker::new();
+        register_fn!(typechecker, "add", add::<i64>);
+        register_fn!(typechecker, "add", add::<f64>);
+
+        typechecker.typecheck(&parser.delta);
+
+        let mut translater = Translater::new();
+
+        #[allow(unused_mut)]
+        let mut output = translater.translate(&parser.delta, &typechecker);
+
+        let mut evaluator = Evaluator::default();
+        evaluator.add_function(output);
+
+        block_on(evaluator.eval(FunctionId(0), &typechecker.functions))
+    }
+
+    #[cfg(not(feature = "async"))]
     fn eval_source_with_type(source: &str) -> (i64, TypeId) {
         let mut parser = Parser::new(source.as_bytes(), 0, 0);
         parser.parse();

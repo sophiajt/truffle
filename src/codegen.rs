@@ -141,6 +141,10 @@ pub enum Instruction {
         target: RegisterId,
     },
 
+    ASYNCCALL {
+        target: RegisterId,
+    },
+
     RET,
 }
 
@@ -424,6 +428,11 @@ impl Translater {
             builder.mov(RegisterId(0), result);
             builder.register_types[0] = typechecker.node_types[last];
         }
+
+        // TEST: uncomment the below to test the async function calls
+        // builder.instructions.push(Instruction::ASYNCCALL {
+        //     target: RegisterId(0),
+        // });
 
         // FIXME: for now assume a RET at the end, though this should be inferred earlier in compilation
         builder.ret();

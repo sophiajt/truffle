@@ -38,6 +38,7 @@ impl Evaluator {
         self.functions.push(stack_frame);
     }
 
+    #[cfg(not(feature = "async"))]
     pub fn eval(
         &mut self,
         starting_function: FunctionId,
@@ -49,229 +50,276 @@ impl Evaluator {
         let mut instruction_pointer = self.stack_frames[self.current_frame].instruction_pointer.0;
 
         loop {
-            println!("{:?}", self.instructions[instruction_pointer]);
+            if let Some(ret_val) = self.eval_helper(&mut instruction_pointer, external_functions) {
+                return ret_val;
+            }
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn eval(
+        &mut self,
+        starting_function: FunctionId,
+        external_functions: &[ExternalFnRecord],
+    ) -> (i64, TypeId) {
+        self.current_frame = self.stack_frames.len();
+        self.stack_frames
+            .push(self.functions[starting_function.0].clone());
+        let mut instruction_pointer = self.stack_frames[self.current_frame].instruction_pointer.0;
+
+        loop {
             match &self.instructions[instruction_pointer] {
-                Instruction::IADD { lhs, rhs, target } => {
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        self.stack_frames[self.current_frame].register_values[lhs.0]
-                            + self.stack_frames[self.current_frame].register_values[rhs.0];
+                Instruction::ASYNCCALL { target } => {
+                    // TODO: for now, this will just be a test function we run
+                    let result = test_async_fn().await;
+                    self.stack_frames[self.current_frame].register_values[target.0] = result;
 
                     instruction_pointer += 1;
                 }
-                Instruction::ISUB { lhs, rhs, target } => {
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        self.stack_frames[self.current_frame].register_values[lhs.0]
-                            - self.stack_frames[self.current_frame].register_values[rhs.0];
-
-                    instruction_pointer += 1;
-                }
-                Instruction::IMUL { lhs, rhs, target } => {
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        self.stack_frames[self.current_frame].register_values[lhs.0]
-                            * self.stack_frames[self.current_frame].register_values[rhs.0];
-
-                    instruction_pointer += 1;
-                }
-                Instruction::IDIV { lhs, rhs, target } => {
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        self.stack_frames[self.current_frame].register_values[lhs.0]
-                            / self.stack_frames[self.current_frame].register_values[rhs.0];
-
-                    instruction_pointer += 1
-                }
-                Instruction::ILT { lhs, rhs, target } => {
-                    let lhs = self.stack_frames[self.current_frame].register_values[lhs.0];
-                    let rhs = self.stack_frames[self.current_frame].register_values[rhs.0];
-
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        (lhs < rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::ILTE { lhs, rhs, target } => {
-                    let lhs = self.stack_frames[self.current_frame].register_values[lhs.0];
-                    let rhs = self.stack_frames[self.current_frame].register_values[rhs.0];
-
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        (lhs <= rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::IGT { lhs, rhs, target } => {
-                    let lhs = self.stack_frames[self.current_frame].register_values[lhs.0];
-                    let rhs = self.stack_frames[self.current_frame].register_values[rhs.0];
-
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        (lhs > rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::IGTE { lhs, rhs, target } => {
-                    let lhs = self.stack_frames[self.current_frame].register_values[lhs.0];
-                    let rhs = self.stack_frames[self.current_frame].register_values[rhs.0];
-
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        (lhs >= rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FADD { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                    );
-                    let rhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                    );
-
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        (lhs + rhs).to_bits() as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FSUB { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                    );
-                    let rhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                    );
-
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        (lhs - rhs).to_bits() as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FMUL { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                    );
-                    let rhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                    );
-
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        (lhs * rhs).to_bits() as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FDIV { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                    );
-                    let rhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                    );
-
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        (lhs / rhs).to_bits() as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FLT { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                    );
-                    let rhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                    );
-
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        (lhs < rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FLTE { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                    );
-                    let rhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                    );
-
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        (lhs <= rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FGT { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                    );
-                    let rhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                    );
-
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        (lhs > rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::FGTE { lhs, rhs, target } => {
-                    let lhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                    );
-                    let rhs = f64::from_bits(
-                        self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                    );
-
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        (lhs >= rhs) as i64;
-
-                    instruction_pointer += 1;
-                }
-                Instruction::MOV { target, source } => {
-                    self.stack_frames[self.current_frame].register_values[target.0] =
-                        self.stack_frames[self.current_frame].register_values[source.0];
-                    instruction_pointer += 1;
-                }
-                Instruction::BRIF {
-                    condition,
-                    then_branch,
-                    else_branch,
-                } => {
-                    let condition =
-                        self.stack_frames[self.current_frame].register_values[condition.0];
-
-                    if condition == 0 {
-                        instruction_pointer = else_branch.0;
-                    } else {
-                        instruction_pointer = then_branch.0;
-                    }
-                }
-                Instruction::JMP(location) => {
-                    instruction_pointer = location.0;
-                }
-                Instruction::EXTERNALCALL { head, args, target } => {
-                    let target = *target;
-                    let output = self.eval_external_call(*head, args, external_functions);
-
-                    println!("external call into: {:?}", target);
-                    println!(
-                        "target is: {:?}",
-                        self.stack_frames[self.current_frame].register_types[target.0]
-                    );
-                    self.unbox_to_register(output, target);
-                    println!(
-                        "register is now: {}",
-                        self.stack_frames[self.current_frame].register_values[target.0]
-                    );
-                    instruction_pointer += 1;
-                }
-                Instruction::RET => {
-                    if self.stack_frames.len() > 1 {
-                        self.stack_frames.pop();
-                        self.current_frame -= 1;
-                        instruction_pointer =
-                            self.stack_frames[self.current_frame].instruction_pointer.0;
-                    } else {
-                        return (
-                            self.stack_frames[self.current_frame].register_values[0],
-                            self.stack_frames[self.current_frame].register_types[0],
-                        );
+                _ => {
+                    if let Some(ret_val) =
+                        self.eval_helper(&mut instruction_pointer, external_functions)
+                    {
+                        return ret_val;
                     }
                 }
             }
         }
+    }
+
+    fn eval_helper(
+        &mut self,
+        instruction_pointer: &mut usize,
+        external_functions: &[ExternalFnRecord],
+    ) -> Option<(i64, TypeId)> {
+        match &self.instructions[*instruction_pointer] {
+            Instruction::IADD { lhs, rhs, target } => {
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    self.stack_frames[self.current_frame].register_values[lhs.0]
+                        + self.stack_frames[self.current_frame].register_values[rhs.0];
+
+                *instruction_pointer += 1;
+            }
+            Instruction::ISUB { lhs, rhs, target } => {
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    self.stack_frames[self.current_frame].register_values[lhs.0]
+                        - self.stack_frames[self.current_frame].register_values[rhs.0];
+
+                *instruction_pointer += 1;
+            }
+            Instruction::IMUL { lhs, rhs, target } => {
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    self.stack_frames[self.current_frame].register_values[lhs.0]
+                        * self.stack_frames[self.current_frame].register_values[rhs.0];
+
+                *instruction_pointer += 1;
+            }
+            Instruction::IDIV { lhs, rhs, target } => {
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    self.stack_frames[self.current_frame].register_values[lhs.0]
+                        / self.stack_frames[self.current_frame].register_values[rhs.0];
+
+                *instruction_pointer += 1
+            }
+            Instruction::ILT { lhs, rhs, target } => {
+                let lhs = self.stack_frames[self.current_frame].register_values[lhs.0];
+                let rhs = self.stack_frames[self.current_frame].register_values[rhs.0];
+
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    (lhs < rhs) as i64;
+
+                *instruction_pointer += 1;
+            }
+            Instruction::ILTE { lhs, rhs, target } => {
+                let lhs = self.stack_frames[self.current_frame].register_values[lhs.0];
+                let rhs = self.stack_frames[self.current_frame].register_values[rhs.0];
+
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    (lhs <= rhs) as i64;
+
+                *instruction_pointer += 1;
+            }
+            Instruction::IGT { lhs, rhs, target } => {
+                let lhs = self.stack_frames[self.current_frame].register_values[lhs.0];
+                let rhs = self.stack_frames[self.current_frame].register_values[rhs.0];
+
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    (lhs > rhs) as i64;
+
+                *instruction_pointer += 1;
+            }
+            Instruction::IGTE { lhs, rhs, target } => {
+                let lhs = self.stack_frames[self.current_frame].register_values[lhs.0];
+                let rhs = self.stack_frames[self.current_frame].register_values[rhs.0];
+
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    (lhs >= rhs) as i64;
+
+                *instruction_pointer += 1;
+            }
+            Instruction::FADD { lhs, rhs, target } => {
+                let lhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
+                );
+                let rhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
+                );
+
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    (lhs + rhs).to_bits() as i64;
+
+                *instruction_pointer += 1;
+            }
+            Instruction::FSUB { lhs, rhs, target } => {
+                let lhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
+                );
+                let rhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
+                );
+
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    (lhs - rhs).to_bits() as i64;
+
+                *instruction_pointer += 1;
+            }
+            Instruction::FMUL { lhs, rhs, target } => {
+                let lhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
+                );
+                let rhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
+                );
+
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    (lhs * rhs).to_bits() as i64;
+
+                *instruction_pointer += 1;
+            }
+            Instruction::FDIV { lhs, rhs, target } => {
+                let lhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
+                );
+                let rhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
+                );
+
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    (lhs / rhs).to_bits() as i64;
+
+                *instruction_pointer += 1;
+            }
+            Instruction::FLT { lhs, rhs, target } => {
+                let lhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
+                );
+                let rhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
+                );
+
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    (lhs < rhs) as i64;
+
+                *instruction_pointer += 1;
+            }
+            Instruction::FLTE { lhs, rhs, target } => {
+                let lhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
+                );
+                let rhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
+                );
+
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    (lhs <= rhs) as i64;
+
+                *instruction_pointer += 1;
+            }
+            Instruction::FGT { lhs, rhs, target } => {
+                let lhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
+                );
+                let rhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
+                );
+
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    (lhs > rhs) as i64;
+
+                *instruction_pointer += 1;
+            }
+            Instruction::FGTE { lhs, rhs, target } => {
+                let lhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
+                );
+                let rhs = f64::from_bits(
+                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
+                );
+
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    (lhs >= rhs) as i64;
+
+                *instruction_pointer += 1;
+            }
+            Instruction::MOV { target, source } => {
+                self.stack_frames[self.current_frame].register_values[target.0] =
+                    self.stack_frames[self.current_frame].register_values[source.0];
+                *instruction_pointer += 1;
+            }
+            Instruction::BRIF {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let condition = self.stack_frames[self.current_frame].register_values[condition.0];
+
+                if condition == 0 {
+                    *instruction_pointer = else_branch.0;
+                } else {
+                    *instruction_pointer = then_branch.0;
+                }
+            }
+            Instruction::JMP(location) => {
+                *instruction_pointer = location.0;
+            }
+            Instruction::EXTERNALCALL { head, args, target } => {
+                let target = *target;
+                let output = self.eval_external_call(*head, args, external_functions);
+
+                println!("external call into: {:?}", target);
+                println!(
+                    "target is: {:?}",
+                    self.stack_frames[self.current_frame].register_types[target.0]
+                );
+                self.unbox_to_register(output, target);
+                println!(
+                    "register is now: {}",
+                    self.stack_frames[self.current_frame].register_values[target.0]
+                );
+                *instruction_pointer += 1;
+            }
+            Instruction::RET => {
+                if self.stack_frames.len() > 1 {
+                    self.stack_frames.pop();
+                    self.current_frame -= 1;
+                    *instruction_pointer =
+                        self.stack_frames[self.current_frame].instruction_pointer.0;
+                } else {
+                    return Some((
+                        self.stack_frames[self.current_frame].register_values[0],
+                        self.stack_frames[self.current_frame].register_types[0],
+                    ));
+                }
+            }
+            _ => {
+                panic!(
+                    "Unsupported opcode: {:?}",
+                    self.instructions[*instruction_pointer]
+                )
+            }
+        }
+
+        None
     }
 
     pub fn eval_external_call(
@@ -437,4 +485,9 @@ impl Evaluator {
     pub fn is_user_type(&self, register_id: RegisterId) -> bool {
         self.stack_frames[self.current_frame].register_types[register_id.0].0 > BOOL_TYPE.0
     }
+}
+
+// Test function for async until we build out full support
+async fn test_async_fn() -> i64 {
+    42
 }
