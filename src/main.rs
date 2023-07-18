@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use line_editor::{LineEditor, ReadLineOutput};
 
 use truffle::{
-    register_fn, Evaluator, FnRegister, FunctionId, Parser, Translater, TypeChecker, BOOL_TYPE,
-    F64_TYPE,
+    register_fn, Evaluator, FnRegister, FunctionCodegen, FunctionId, Parser, Translater,
+    TypeChecker, TypeId, BOOL_TYPE, F64_TYPE,
 };
 
 fn main() {
@@ -47,30 +47,8 @@ fn main() {
     }
 }
 
-fn run_line(line: &str, debug_output: bool) {
-    if debug_output {
-        println!("line: {line}");
-    }
-
+fn parse_line(line: &str, debug_output: bool) -> Option<FunctionCodegen> {
     let mut parser = Parser::new(line.as_bytes(), 0, 0);
-
-    parser.parse();
-
-    for error in &parser.errors {
-        println!("error: {:?}", error);
-    }
-
-    if !parser.errors.is_empty() {
-        return;
-    }
-
-    let result = &parser.delta;
-
-    if debug_output {
-        println!();
-        println!("parse result:");
-        result.print();
-    }
 
     let mut typechecker = TypeChecker::new();
     register_fn!(typechecker, "print", print::<i64>);
@@ -81,6 +59,32 @@ fn run_line(line: &str, debug_output: bool) {
     register_fn!(typechecker, "new_env", Env::new_env);
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
+
+    if debug_output {
+        println!("line: {line}");
+    }
+
+    parser.parse();
+
+    for error in &parser.errors {
+        println!("error: {:?}", error);
+    }
+
+    if !parser.errors.is_empty() {
+        for err in &parser.errors {
+            println!("{:?}", err);
+        }
+        return None;
+    }
+
+    let result = &parser.delta;
+
+    if debug_output {
+        println!();
+        println!("parse result:");
+        result.print();
+    }
+
     typechecker.typecheck(&parser.delta);
 
     for error in &typechecker.errors {
@@ -88,7 +92,10 @@ fn run_line(line: &str, debug_output: bool) {
     }
 
     if !typechecker.errors.is_empty() {
-        return;
+        for err in &typechecker.errors {
+            println!("{:?}", err);
+        }
+        return None;
     }
 
     let result = &parser.delta;
@@ -124,17 +131,10 @@ fn run_line(line: &str, debug_output: bool) {
         println!("===stdout===");
     }
 
-    let mut evaluator = Evaluator::default();
-    evaluator.add_function(output);
+    Some(output)
+}
 
-    let result = evaluator.eval(FunctionId(0), &typechecker.functions);
-    if debug_output {
-        println!("============");
-        println!();
-        evaluator.debug_print(&typechecker);
-        println!();
-    }
-
+fn print_result(typechecker: &TypeChecker, result: (i64, TypeId)) {
     if result.1 == F64_TYPE {
         println!(
             "result -> {} ({})",
@@ -153,6 +153,72 @@ fn run_line(line: &str, debug_output: bool) {
             result.0,
             typechecker.stringify_type(result.1)
         );
+    }
+}
+
+async fn foo(i: i64) -> i64 {
+    i + 10
+}
+
+#[cfg(feature = "async")]
+fn run_line(line: &str, debug_output: bool) {
+    use futures::executor::block_on;
+
+    let mut typechecker = TypeChecker::new();
+    register_fn!(typechecker, "print", print::<i64>);
+    register_fn!(typechecker, "print", print::<f64>);
+    register_fn!(typechecker, "print", print::<bool>);
+    register_fn!(typechecker, "add", add::<i64>);
+    register_fn!(typechecker, "add", add::<f64>);
+    register_fn!(typechecker, "new_env", Env::new_env);
+    register_fn!(typechecker, "set_var", Env::set_var);
+    register_fn!(typechecker, "read_var", Env::read_var);
+
+    let output = parse_line(line, debug_output);
+
+    if let Some(output) = output {
+        let mut evaluator = Evaluator::default();
+        evaluator.add_function(output);
+
+        let result = block_on(evaluator.eval(FunctionId(0), &typechecker.functions));
+        if debug_output {
+            println!("============");
+            println!();
+            evaluator.debug_print(&typechecker);
+            println!();
+        }
+
+        print_result(&typechecker, result);
+    }
+}
+
+#[cfg(not(feature = "async"))]
+fn run_line(line: &str, debug_output: bool) {
+    let mut typechecker = TypeChecker::new();
+    register_fn!(typechecker, "print", print::<i64>);
+    register_fn!(typechecker, "print", print::<f64>);
+    register_fn!(typechecker, "print", print::<bool>);
+    register_fn!(typechecker, "add", add::<i64>);
+    register_fn!(typechecker, "add", add::<f64>);
+    register_fn!(typechecker, "new_env", Env::new_env);
+    register_fn!(typechecker, "set_var", Env::set_var);
+    register_fn!(typechecker, "read_var", Env::read_var);
+
+    let output = parse_line(line, debug_output);
+
+    if let Some(output) = output {
+        let mut evaluator = Evaluator::default();
+        evaluator.add_function(output);
+
+        let result = evaluator.eval(FunctionId(0), &typechecker.functions);
+        if debug_output {
+            println!("============");
+            println!();
+            evaluator.debug_print(&typechecker);
+            println!();
+        }
+
+        print_result(&typechecker, result);
     }
 }
 
