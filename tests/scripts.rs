@@ -33,8 +33,7 @@ fn collect_tests() -> eyre::Result<Vec<Trial>> {
                         .display()
                         .to_string();
 
-                    let test = Trial::test(name, move || eval_source_runner(&path))
-                        .with_kind("tidy");
+                    let test = Trial::test(name, move || eval_source_runner(&path));
                     tests.push(test);
                 }
             } else if file_type.is_dir() {
