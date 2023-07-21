@@ -17,7 +17,14 @@ async = ["dep:futures"]
 
 [dev-dependencies]
 criterion = "0.5.1"
+eyre = "0.6.8"
+libtest-mimic = "0.6.1"
 
 [[bench]]
 name = "benchmarks"
+harness = false
+
+[[test]]
+name = "scripts"
+path = "tests/scripts.rs"
 harness = false
