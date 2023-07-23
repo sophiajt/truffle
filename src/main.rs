@@ -76,7 +76,7 @@ fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCod
         return None;
     }
 
-    let result = &parser.delta;
+    let result = &parser.results;
 
     if debug_output {
         println!();
@@ -84,7 +84,7 @@ fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCod
         result.print();
     }
 
-    typechecker.typecheck(&parser.delta);
+    typechecker.typecheck(&parser.results);
 
     if !typechecker.errors.is_empty() {
         for err in &typechecker.errors {
@@ -93,7 +93,7 @@ fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCod
         return None;
     }
 
-    let result = &parser.delta;
+    let result = &parser.results;
 
     if debug_output {
         println!();
@@ -119,7 +119,7 @@ fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCod
     let mut translater = Translater::new();
 
     #[allow(unused_mut)]
-    let mut output = translater.translate(&parser.delta, &typechecker);
+    let mut output = translater.translate(&parser.results, &typechecker);
 
     if debug_output {
         println!();

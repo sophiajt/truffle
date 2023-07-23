@@ -25,12 +25,12 @@ pub fn eval_source_with_type(source: &str) -> (i64, TypeId) {
     register_fn!(typechecker, "add", add::<i64>);
     register_fn!(typechecker, "add", add::<f64>);
 
-    typechecker.typecheck(&parser.delta);
+    typechecker.typecheck(&parser.results);
 
     let mut translater = Translater::new();
 
     #[allow(unused_mut)]
-    let mut output = translater.translate(&parser.delta, &typechecker);
+    let mut output = translater.translate(&parser.results, &typechecker);
 
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
@@ -53,12 +53,12 @@ pub fn eval_source_with_type(source: &str) -> (i64, TypeId) {
     register_fn!(typechecker, "add", add::<i64>);
     register_fn!(typechecker, "add", add::<f64>);
 
-    typechecker.typecheck(&parser.delta);
+    typechecker.typecheck(&parser.results);
 
     let mut translater = Translater::new();
 
     #[allow(unused_mut)]
-    let mut output = translater.translate(&parser.delta, &typechecker);
+    let mut output = translater.translate(&parser.results, &typechecker);
 
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);

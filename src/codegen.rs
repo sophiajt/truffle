@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    delta::EngineDelta,
-    parser::{AstNode, NodeId},
+    parser::{AstNode, NodeId, ParseResults},
     typechecker::{ExternalFunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, VOID_TYPE},
     F64_TYPE,
 };
@@ -416,15 +415,20 @@ impl Translater {
         }
     }
 
-    pub fn translate(&mut self, delta: &EngineDelta, typechecker: &TypeChecker) -> FunctionCodegen {
+    pub fn translate(
+        &mut self,
+        parse_results: &ParseResults,
+        typechecker: &TypeChecker,
+    ) -> FunctionCodegen {
         let mut builder = FunctionCodegen {
             instructions: vec![],
             register_values: vec![0],
             register_types: vec![TypeId(0)],
         };
-        if !delta.ast_nodes.is_empty() {
-            let last = delta.ast_nodes.len() - 1;
-            let result = self.translate_node(&mut builder, NodeId(last), delta, typechecker);
+        if !parse_results.ast_nodes.is_empty() {
+            let last = parse_results.ast_nodes.len() - 1;
+            let result =
+                self.translate_node(&mut builder, NodeId(last), parse_results, typechecker);
             builder.mov(RegisterId(0), result);
             builder.register_types[0] = typechecker.node_types[last];
         }
@@ -443,26 +447,34 @@ impl Translater {
         &mut self,
         builder: &mut FunctionCodegen,
         node_id: NodeId,
-        delta: &EngineDelta,
+        parse_results: &ParseResults,
         typechecker: &TypeChecker,
     ) -> RegisterId {
-        match &delta.ast_nodes[node_id.0] {
-            AstNode::Int => self.translate_int(builder, node_id, delta),
-            AstNode::Float => self.translate_float(builder, node_id, delta),
+        match &parse_results.ast_nodes[node_id.0] {
+            AstNode::Int => self.translate_int(builder, node_id, parse_results),
+            AstNode::Float => self.translate_float(builder, node_id, parse_results),
             AstNode::BinaryOp { lhs, op, rhs } => {
-                self.translate_binop(builder, *lhs, *op, *rhs, delta, typechecker)
+                self.translate_binop(builder, *lhs, *op, *rhs, parse_results, typechecker)
             }
-            AstNode::Block(nodes) => self.translate_block(builder, nodes, delta, typechecker),
+            AstNode::Block(nodes) => {
+                self.translate_block(builder, nodes, parse_results, typechecker)
+            }
             AstNode::True => builder.bool_const(true),
             AstNode::False => builder.bool_const(false),
             AstNode::Let {
                 variable_name,
                 initializer,
                 ..
-            } => self.translate_let(builder, *variable_name, *initializer, delta, typechecker),
+            } => self.translate_let(
+                builder,
+                *variable_name,
+                *initializer,
+                parse_results,
+                typechecker,
+            ),
             AstNode::Variable => self.translate_variable(node_id, typechecker),
             AstNode::Statement(node_id) => {
-                self.translate_node(builder, *node_id, delta, typechecker)
+                self.translate_node(builder, *node_id, parse_results, typechecker)
             }
             AstNode::If {
                 condition,
@@ -474,14 +486,14 @@ impl Translater {
                 *condition,
                 *then_block,
                 *else_expression,
-                delta,
+                parse_results,
                 typechecker,
             ),
             AstNode::While { condition, block } => {
-                self.translate_while(builder, *condition, *block, delta, typechecker)
+                self.translate_while(builder, *condition, *block, parse_results, typechecker)
             }
             AstNode::Call { head, args } => {
-                self.translate_call(builder, *head, args, node_id, delta, typechecker)
+                self.translate_call(builder, *head, args, node_id, parse_results, typechecker)
             }
             x => panic!("unsupported translation: {:?}", x),
         }
@@ -491,9 +503,10 @@ impl Translater {
         &mut self,
         builder: &mut FunctionCodegen,
         node_id: NodeId,
-        delta: &EngineDelta,
+        parse_results: &ParseResults,
     ) -> RegisterId {
-        let contents = &delta.contents[delta.span_start[node_id.0]..delta.span_end[node_id.0]];
+        let contents = &parse_results.contents
+            [parse_results.span_start[node_id.0]..parse_results.span_end[node_id.0]];
 
         let constant = String::from_utf8_lossy(contents)
             .parse::<i64>()
@@ -506,9 +519,10 @@ impl Translater {
         &mut self,
         builder: &mut FunctionCodegen,
         node_id: NodeId,
-        delta: &EngineDelta,
+        parse_results: &ParseResults,
     ) -> RegisterId {
-        let contents = &delta.contents[delta.span_start[node_id.0]..delta.span_end[node_id.0]];
+        let contents = &parse_results.contents
+            [parse_results.span_start[node_id.0]..parse_results.span_end[node_id.0]];
 
         let constant = String::from_utf8_lossy(contents)
             .parse::<f64>()
@@ -523,13 +537,13 @@ impl Translater {
         lhs: NodeId,
         op: NodeId,
         rhs: NodeId,
-        delta: &EngineDelta,
+        parse_results: &ParseResults,
         typechecker: &TypeChecker,
     ) -> RegisterId {
-        let lhs = self.translate_node(builder, lhs, delta, typechecker);
-        let rhs = self.translate_node(builder, rhs, delta, typechecker);
+        let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
+        let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
 
-        match delta.ast_nodes[op.0] {
+        match parse_results.ast_nodes[op.0] {
             AstNode::Plus => builder.add(lhs, rhs),
             AstNode::Minus => builder.sub(lhs, rhs),
             AstNode::Multiply => builder.mul(lhs, rhs),
@@ -548,10 +562,10 @@ impl Translater {
         builder: &mut FunctionCodegen,
         variable_name: NodeId,
         initializer: NodeId,
-        delta: &EngineDelta,
+        parse_results: &ParseResults,
         typechecker: &TypeChecker,
     ) -> RegisterId {
-        let initializer = self.translate_node(builder, initializer, delta, typechecker);
+        let initializer = self.translate_node(builder, initializer, parse_results, typechecker);
 
         self.var_lookup.insert(variable_name, initializer);
 
@@ -584,17 +598,17 @@ impl Translater {
         condition: NodeId,
         then_block: NodeId,
         else_expression: Option<NodeId>,
-        delta: &EngineDelta,
+        parse_results: &ParseResults,
         typechecker: &TypeChecker,
     ) -> RegisterId {
         let output = builder.new_register(typechecker.node_types[node_id.0]);
-        let condition = self.translate_node(builder, condition, delta, typechecker);
+        let condition = self.translate_node(builder, condition, parse_results, typechecker);
 
         let brif_location = builder.next_position();
         builder.brif(output, condition, InstructionId(0), InstructionId(0));
 
         let then_branch = InstructionId(builder.next_position());
-        let then_output = self.translate_node(builder, then_block, delta, typechecker);
+        let then_output = self.translate_node(builder, then_block, parse_results, typechecker);
         builder.mov(output, then_output);
 
         let else_branch = if let Some(else_expression) = else_expression {
@@ -604,7 +618,8 @@ impl Translater {
             builder.jmp(InstructionId(0));
 
             let else_location = builder.next_position();
-            let else_output = self.translate_node(builder, else_expression, delta, typechecker);
+            let else_output =
+                self.translate_node(builder, else_expression, parse_results, typechecker);
             builder.mov(output, else_output);
 
             let after_if = builder.next_position();
@@ -628,19 +643,19 @@ impl Translater {
         builder: &mut FunctionCodegen,
         condition: NodeId,
         block: NodeId,
-        delta: &EngineDelta,
+        parse_results: &ParseResults,
         typechecker: &TypeChecker,
     ) -> RegisterId {
         let output = builder.new_register(VOID_TYPE);
 
         let top = builder.next_position();
-        let condition = self.translate_node(builder, condition, delta, typechecker);
+        let condition = self.translate_node(builder, condition, parse_results, typechecker);
 
         let brif_location = builder.next_position();
         builder.brif(output, condition, InstructionId(0), InstructionId(0));
 
         let block_begin = InstructionId(builder.next_position());
-        self.translate_node(builder, block, delta, typechecker);
+        self.translate_node(builder, block, parse_results, typechecker);
         builder.jmp(InstructionId(top));
 
         let block_end = InstructionId(builder.next_position());
@@ -658,7 +673,7 @@ impl Translater {
         &mut self,
         builder: &mut FunctionCodegen,
         nodes: &[NodeId],
-        delta: &EngineDelta,
+        parse_results: &ParseResults,
         typechecker: &TypeChecker,
     ) -> RegisterId {
         if nodes.is_empty() {
@@ -667,7 +682,7 @@ impl Translater {
             let mut idx = 0;
 
             loop {
-                let output = self.translate_node(builder, nodes[idx], delta, typechecker);
+                let output = self.translate_node(builder, nodes[idx], parse_results, typechecker);
                 if idx == (nodes.len() - 1) {
                     return output;
                 }
@@ -682,7 +697,7 @@ impl Translater {
         head: NodeId,
         args: &[NodeId],
         node_id: NodeId,
-        delta: &EngineDelta,
+        parse_results: &ParseResults,
         typechecker: &TypeChecker,
     ) -> RegisterId {
         let output = builder.new_register(typechecker.node_types[node_id.0]);
@@ -695,7 +710,12 @@ impl Translater {
         let mut translated_args = vec![];
 
         for node_id in args {
-            translated_args.push(self.translate_node(builder, *node_id, delta, typechecker));
+            translated_args.push(self.translate_node(
+                builder,
+                *node_id,
+                parse_results,
+                typechecker,
+            ));
         }
 
         builder.external_call(*head, translated_args, output);

@@ -1,7 +1,6 @@
 #![allow(clippy::type_complexity)]
 
 mod codegen;
-mod delta;
 mod errors;
 mod eval;
 mod lexer;

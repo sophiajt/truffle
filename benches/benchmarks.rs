@@ -16,12 +16,12 @@ fn run_file(filename: &str) {
     parser.parse();
 
     let mut typechecker = TypeChecker::new();
-    typechecker.typecheck(&parser.delta);
+    typechecker.typecheck(&parser.results);
 
     let mut translater = Translater::new();
 
     #[allow(unused_mut)]
-    let mut output = translater.translate(&parser.delta, &typechecker);
+    let mut output = translater.translate(&parser.results, &typechecker);
 
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
@@ -37,12 +37,12 @@ fn run_file(filename: &str) {
     parser.parse();
 
     let mut typechecker = TypeChecker::new();
-    typechecker.typecheck(&parser.delta);
+    typechecker.typecheck(&parser.results);
 
     let mut translater = Translater::new();
 
     #[allow(unused_mut)]
-    let mut output = translater.translate(&parser.delta, &typechecker);
+    let mut output = translater.translate(&parser.results, &typechecker);
 
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
