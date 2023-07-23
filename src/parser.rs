@@ -135,18 +135,18 @@ impl Parser {
         }
     }
 
-    fn peek(&self) -> Option<&Token> {
+    fn peek(&self) -> Option<Token> {
         if self.current_token < self.tokens.len() {
-            Some(&self.tokens[self.current_token])
+            Some(self.tokens[self.current_token])
         } else {
             None
         }
     }
 
-    fn next(&mut self) -> Option<&Token> {
+    fn next(&mut self) -> Option<Token> {
         if self.current_token < self.tokens.len() {
             self.current_token += 1;
-            Some(&self.tokens[self.current_token - 1])
+            Some(self.tokens[self.current_token - 1])
         } else {
             None
         }
@@ -154,7 +154,7 @@ impl Parser {
 
     fn position(&mut self) -> usize {
         if let Some(Token { span_start, .. }) = self.peek() {
-            *span_start
+            span_start
         } else {
             self.content_length
         }
@@ -392,7 +392,7 @@ impl Parser {
             span_end,
         }) = self.peek()
         {
-            if keyword == &self.delta.contents[*span_start..*span_end] {
+            if keyword == &self.delta.contents[span_start..span_end] {
                 return true;
             }
         }
@@ -459,9 +459,6 @@ impl Parser {
             ..
         }) = self.next()
         {
-            let span_start = *span_start;
-            let span_end = *span_end;
-
             let node_id = self.create_node(AstNode::Garbage, span_start, span_end);
             self.errors.push(ScriptError {
                 message: message.into(),
@@ -733,9 +730,6 @@ impl Parser {
                 span_start,
                 span_end,
             }) => {
-                let span_start = *span_start;
-                let span_end = *span_end;
-
                 let contents = &self.delta.contents[span_start..span_end];
                 let is_float = contents.contains(&b'.');
 
@@ -758,9 +752,6 @@ impl Parser {
                 span_start,
                 span_end,
             }) => {
-                let span_start = *span_start;
-                let span_end = *span_end;
-
                 let contents = &self.delta.contents[span_start..span_end];
 
                 if contents == b"true" {
@@ -784,73 +775,69 @@ impl Parser {
                 span_start,
                 span_end,
                 ..
-            }) => {
-                let span_start = *span_start;
-                let span_end = *span_end;
-                match token_type {
-                    TokenType::Plus => {
-                        self.next();
-                        self.create_node(AstNode::Plus, span_start, span_end)
-                    }
-                    TokenType::PlusPlus => {
-                        self.next();
-                        self.create_node(AstNode::Append, span_start, span_end)
-                    }
-                    TokenType::Dash => {
-                        self.next();
-                        self.create_node(AstNode::Minus, span_start, span_end)
-                    }
-                    TokenType::Asterisk => {
-                        self.next();
-                        self.create_node(AstNode::Multiply, span_start, span_end)
-                    }
-                    TokenType::ForwardSlash => {
-                        self.next();
-                        self.create_node(AstNode::Divide, span_start, span_end)
-                    }
-                    TokenType::LessThan => {
-                        self.next();
-                        self.create_node(AstNode::LessThan, span_start, span_end)
-                    }
-                    TokenType::LessThanEqual => {
-                        self.next();
-                        self.create_node(AstNode::LessThanOrEqual, span_start, span_end)
-                    }
-                    TokenType::GreaterThan => {
-                        self.next();
-                        self.create_node(AstNode::GreaterThan, span_start, span_end)
-                    }
-                    TokenType::GreaterThanEqual => {
-                        self.next();
-                        self.create_node(AstNode::GreaterThanOrEqual, span_start, span_end)
-                    }
-                    TokenType::EqualsEquals => {
-                        self.next();
-                        self.create_node(AstNode::Equal, span_start, span_end)
-                    }
-                    TokenType::ExclamationEquals => {
-                        self.next();
-                        self.create_node(AstNode::NotEqual, span_start, span_end)
-                    }
-                    TokenType::AsteriskAsterisk => {
-                        self.next();
-                        self.create_node(AstNode::Pow, span_start, span_end)
-                    }
-                    TokenType::AmpersandAmpersand => {
-                        self.next();
-                        self.create_node(AstNode::And, span_start, span_end)
-                    }
-                    TokenType::PipePipe => {
-                        self.next();
-                        self.create_node(AstNode::Or, span_start, span_end)
-                    }
-                    TokenType::Equals => {
-                        self.next();
-                        self.create_node(AstNode::Assignment, span_start, span_end)
-                    }
-                    _ => self.error("expected: operator"),
+            }) => match token_type {
+                TokenType::Plus => {
+                    self.next();
+                    self.create_node(AstNode::Plus, span_start, span_end)
                 }
-            }
+                TokenType::PlusPlus => {
+                    self.next();
+                    self.create_node(AstNode::Append, span_start, span_end)
+                }
+                TokenType::Dash => {
+                    self.next();
+                    self.create_node(AstNode::Minus, span_start, span_end)
+                }
+                TokenType::Asterisk => {
+                    self.next();
+                    self.create_node(AstNode::Multiply, span_start, span_end)
+                }
+                TokenType::ForwardSlash => {
+                    self.next();
+                    self.create_node(AstNode::Divide, span_start, span_end)
+                }
+                TokenType::LessThan => {
+                    self.next();
+                    self.create_node(AstNode::LessThan, span_start, span_end)
+                }
+                TokenType::LessThanEqual => {
+                    self.next();
+                    self.create_node(AstNode::LessThanOrEqual, span_start, span_end)
+                }
+                TokenType::GreaterThan => {
+                    self.next();
+                    self.create_node(AstNode::GreaterThan, span_start, span_end)
+                }
+                TokenType::GreaterThanEqual => {
+                    self.next();
+                    self.create_node(AstNode::GreaterThanOrEqual, span_start, span_end)
+                }
+                TokenType::EqualsEquals => {
+                    self.next();
+                    self.create_node(AstNode::Equal, span_start, span_end)
+                }
+                TokenType::ExclamationEquals => {
+                    self.next();
+                    self.create_node(AstNode::NotEqual, span_start, span_end)
+                }
+                TokenType::AsteriskAsterisk => {
+                    self.next();
+                    self.create_node(AstNode::Pow, span_start, span_end)
+                }
+                TokenType::AmpersandAmpersand => {
+                    self.next();
+                    self.create_node(AstNode::And, span_start, span_end)
+                }
+                TokenType::PipePipe => {
+                    self.next();
+                    self.create_node(AstNode::Or, span_start, span_end)
+                }
+                TokenType::Equals => {
+                    self.next();
+                    self.create_node(AstNode::Assignment, span_start, span_end)
+                }
+                _ => self.error("expected: operator"),
+            },
             _ => self.error("expected: operator"),
         }
     }
@@ -871,9 +858,6 @@ impl Parser {
                 span_end,
                 ..
             }) => {
-                let span_start = *span_start;
-                let span_end = *span_end;
-
                 self.next();
                 self.create_node(AstNode::String, span_start, span_end)
             }
@@ -889,9 +873,6 @@ impl Parser {
                 span_end,
                 ..
             }) => {
-                let span_start = *span_start;
-                let span_end = *span_end;
-
                 self.next();
                 self.create_node(AstNode::Name, span_start, span_end)
             }
@@ -907,9 +888,6 @@ impl Parser {
                 span_end,
                 ..
             }) => {
-                let span_start = *span_start;
-                let span_end = *span_end;
-
                 self.next();
                 self.create_node(AstNode::Type, span_start, span_end)
             }
@@ -1145,9 +1123,6 @@ impl Parser {
             span_end,
         }) = self.peek()
         {
-            let span_start = *span_start;
-            let span_end = *span_end;
-
             let contents = &self.delta.contents[span_start..span_end];
 
             if contents == keyword {

@@ -3,7 +3,7 @@ pub struct Lexer {
     span_offset: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum TokenType {
     Number,
     Comma,
@@ -42,7 +42,7 @@ pub enum TokenType {
     AmpersandAmpersand,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Token {
     pub token_type: TokenType,
     pub span_start: usize,
