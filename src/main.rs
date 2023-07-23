@@ -47,21 +47,16 @@ fn main() {
     }
 }
 
-fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCodegen> {
+fn compile_line(
+    fname: &str,
+    line: &str,
+    typechecker: &mut TypeChecker,
+    debug_output: bool,
+) -> Option<FunctionCodegen> {
     let mut lexer = Lexer::new(line.as_bytes().to_vec(), 0);
 
     let tokens = lexer.lex();
     let mut parser = Parser::new(tokens, line.as_bytes().to_vec(), 0);
-
-    let mut typechecker = TypeChecker::new();
-    register_fn!(typechecker, "print", print::<i64>);
-    register_fn!(typechecker, "print", print::<f64>);
-    register_fn!(typechecker, "print", print::<bool>);
-    register_fn!(typechecker, "add", add::<i64>);
-    register_fn!(typechecker, "add", add::<f64>);
-    register_fn!(typechecker, "new_env", Env::new_env);
-    register_fn!(typechecker, "set_var", Env::set_var);
-    register_fn!(typechecker, "read_var", Env::read_var);
 
     if debug_output {
         println!("line: {line}");
@@ -119,7 +114,7 @@ fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCod
     let mut translater = Translater::new();
 
     #[allow(unused_mut)]
-    let mut output = translater.translate(&parser.results, &typechecker);
+    let mut output = translater.translate(&parser.results, typechecker);
 
     if debug_output {
         println!();
@@ -165,7 +160,7 @@ fn run_line(fname: &str, line: &str, debug_output: bool) {
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
 
-    let output = parse_line(fname, line, debug_output);
+    let output = compile_line(fname, line, &mut typechecker, debug_output);
 
     if let Some(output) = output {
         let mut evaluator = Evaluator::default();
@@ -195,7 +190,7 @@ fn run_line(fname: &str, line: &str, debug_output: bool) {
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
 
-    let output = parse_line(fname, line, debug_output);
+    let output = compile_line(fname, line, &mut typechecker, debug_output);
 
     if let Some(output) = output {
         let mut evaluator = Evaluator::default();
