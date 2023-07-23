@@ -210,7 +210,6 @@ fn run_line(fname: &str, line: &str, debug_output: bool) {
     }
 }
 
-// FIXME: move these later when we build up cranelift registration
 pub fn print<T: std::fmt::Display>(value: T) {
     println!("value: {value}")
 }
