@@ -18,12 +18,12 @@ impl ScriptError {
 pub fn print_error(fname: &str, script_error: &ScriptError, parser: &Parser) {
     let ScriptError { node_id, message } = script_error;
 
-    let span_start = parser.delta.span_start[node_id.0];
-    let span_end = parser.delta.span_end[node_id.0];
+    let span_start = parser.results.span_start[node_id.0];
+    let span_end = parser.results.span_end[node_id.0];
 
     let filename = fname.to_string();
     let file_span_start = 0;
-    let file_span_end = parser.delta.contents.len();
+    let file_span_end = parser.results.contents.len();
 
     let (line_number, line_start, line_end) =
         line_extents(parser, span_start, file_span_start, file_span_end);
@@ -61,7 +61,7 @@ pub fn print_error(fname: &str, script_error: &ScriptError, parser: &Parser) {
         eprintln!(
             " {} │ {}",
             prev_line_number_str,
-            String::from_utf8_lossy(&parser.delta.contents[prev_line_start..prev_line_end])
+            String::from_utf8_lossy(&parser.results.contents[prev_line_start..prev_line_end])
         );
     }
 
@@ -73,7 +73,7 @@ pub fn print_error(fname: &str, script_error: &ScriptError, parser: &Parser) {
     eprintln!(
         " {} │ {}",
         line_number,
-        String::from_utf8_lossy(&parser.delta.contents[line_start..line_end])
+        String::from_utf8_lossy(&parser.results.contents[line_start..line_end])
     );
 
     for _ in 0..(max_number_width + 2) {
@@ -99,7 +99,7 @@ pub fn print_error(fname: &str, script_error: &ScriptError, parser: &Parser) {
         eprintln!(
             " {} │ {}",
             next_line_number,
-            String::from_utf8_lossy(&parser.delta.contents[next_line_start..next_line_end])
+            String::from_utf8_lossy(&parser.results.contents[next_line_start..next_line_end])
         );
     }
 
@@ -116,7 +116,7 @@ pub fn line_extents(
     file_span_start: usize,
     file_span_end: usize,
 ) -> (usize, usize, usize) {
-    let contents = &parser.delta.contents;
+    let contents = &parser.results.contents;
 
     let line_number = contents[0..span_position].split(|x| *x == b'\n').count();
 

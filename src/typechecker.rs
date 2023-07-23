@@ -1,20 +1,19 @@
 use std::{any::Any, collections::HashMap};
 
 use crate::{
-    delta::EngineDelta,
     errors::ScriptError,
-    parser::{AstNode, NodeId},
+    parser::{AstNode, NodeId, ParseResults},
 };
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct TypeId(pub usize);
 
 #[derive(Default)]
-pub struct Scope<'source> {
-    pub variables: HashMap<&'source [u8], NodeId>,
+pub struct Scope {
+    pub variables: HashMap<Vec<u8>, NodeId>,
 }
 
-impl<'scope> Scope<'scope> {
+impl Scope {
     pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
@@ -45,7 +44,7 @@ pub struct ExternalFunctionId(pub usize);
 pub struct FunctionId(pub usize);
 
 #[derive(Default)]
-pub struct TypeChecker<'source> {
+pub struct TypeChecker {
     // Used by TypeId
     pub types: Vec<std::any::TypeId>,
 
@@ -71,7 +70,7 @@ pub struct TypeChecker<'source> {
     pub external_functions: HashMap<Vec<u8>, Vec<ExternalFunctionId>>,
 
     pub errors: Vec<ScriptError>,
-    pub scope: Vec<Scope<'source>>,
+    pub scope: Vec<Scope>,
 }
 
 pub const VOID_TYPE: TypeId = TypeId(0);
@@ -80,7 +79,7 @@ pub const F64_TYPE: TypeId = TypeId(2);
 pub const BOOL_TYPE: TypeId = TypeId(3);
 // PLEASE NOTE: BOOL_TYPE is considered last and any type after this is considered a user-defined datatype
 
-impl<'source> TypeChecker<'source> {
+impl TypeChecker {
     pub fn new() -> Self {
         Self {
             types: vec![
@@ -125,8 +124,8 @@ impl<'source> TypeChecker<'source> {
         }
     }
 
-    pub fn typecheck_node(&mut self, node_id: NodeId, delta: &'source EngineDelta) {
-        match &delta.ast_nodes[node_id.0] {
+    pub fn typecheck_node(&mut self, node_id: NodeId, parse_results: &ParseResults) {
+        match &parse_results.ast_nodes[node_id.0] {
             AstNode::Int => {
                 self.node_types[node_id.0] = I64_TYPE;
             }
@@ -134,10 +133,10 @@ impl<'source> TypeChecker<'source> {
                 self.node_types[node_id.0] = F64_TYPE;
             }
             AstNode::BinaryOp { lhs, op, rhs } => {
-                self.typecheck_binop(*lhs, *op, *rhs, node_id, delta);
+                self.typecheck_binop(*lhs, *op, *rhs, node_id, parse_results);
             }
             AstNode::Statement(node) => {
-                self.typecheck_node(*node, delta);
+                self.typecheck_node(*node, parse_results);
                 self.node_types[node_id.0] = VOID_TYPE;
             }
 
@@ -149,7 +148,7 @@ impl<'source> TypeChecker<'source> {
                     // FIXME: grab the last one if it's an expression
                     let mut type_id = VOID_TYPE;
                     for node_id in nodes {
-                        self.typecheck_node(*node_id, delta);
+                        self.typecheck_node(*node_id, parse_results);
 
                         type_id = self.node_types[node_id.0];
                     }
@@ -158,10 +157,10 @@ impl<'source> TypeChecker<'source> {
                 }
             }
             AstNode::Type => {
-                let span_start = delta.span_start[node_id.0];
-                let span_end = delta.span_end[node_id.0];
+                let span_start = parse_results.span_start[node_id.0];
+                let span_end = parse_results.span_end[node_id.0];
 
-                let contents = &delta.contents[span_start..span_end];
+                let contents = &parse_results.contents[span_start..span_end];
 
                 match contents {
                     b"i64" => self.node_types[node_id.0] = I64_TYPE,
@@ -177,35 +176,43 @@ impl<'source> TypeChecker<'source> {
                 ty,
                 initializer,
                 ..
-            } => self.typecheck_let(*variable_name, *ty, *initializer, node_id, delta),
-            AstNode::Variable => self.resolve_variable(node_id, delta),
+            } => self.typecheck_let(*variable_name, *ty, *initializer, node_id, parse_results),
+            AstNode::Variable => self.resolve_variable(node_id, parse_results),
             AstNode::If {
                 condition,
                 then_block,
                 else_expression,
-            } => self.typecheck_if(*condition, *then_block, *else_expression, node_id, delta),
+            } => self.typecheck_if(
+                *condition,
+                *then_block,
+                *else_expression,
+                node_id,
+                parse_results,
+            ),
             AstNode::While { condition, block } => {
-                self.typecheck_while(*condition, *block, node_id, delta)
+                self.typecheck_while(*condition, *block, node_id, parse_results)
             }
             // AstNode::For {
             //     variable,
             //     range,
             //     block,
-            // } => self.typecheck_for(*variable, *range, *block, node_id, delta),
+            // } => self.typecheck_for(*variable, *range, *block, node_id, parse_results),
             AstNode::True => self.node_types[node_id.0] = BOOL_TYPE,
             AstNode::False => self.node_types[node_id.0] = BOOL_TYPE,
-            // AstNode::Range { lhs, rhs } => self.typecheck_range(*lhs, *rhs, node_id, delta),
-            AstNode::Call { head, args } => self.typecheck_call(*head, args, node_id, delta),
+            // AstNode::Range { lhs, rhs } => self.typecheck_range(*lhs, *rhs, node_id, parse_results),
+            AstNode::Call { head, args } => {
+                self.typecheck_call(*head, args, node_id, parse_results)
+            }
             _ => self.error("unsupported ast node in typechecker", node_id),
         }
     }
 
-    pub fn typecheck(&mut self, delta: &'source EngineDelta) {
-        if !delta.ast_nodes.is_empty() {
-            self.node_types = vec![VOID_TYPE; delta.ast_nodes.len()];
+    pub fn typecheck(&mut self, parse_results: &ParseResults) {
+        if !parse_results.ast_nodes.is_empty() {
+            self.node_types = vec![VOID_TYPE; parse_results.ast_nodes.len()];
 
-            let last = delta.ast_nodes.len() - 1;
-            self.typecheck_node(NodeId(last), delta)
+            let last = parse_results.ast_nodes.len() - 1;
+            self.typecheck_node(NodeId(last), parse_results)
         }
     }
 
@@ -215,12 +222,12 @@ impl<'source> TypeChecker<'source> {
         ty: Option<NodeId>,
         initializer: NodeId,
         node_id: NodeId,
-        delta: &'source EngineDelta,
+        parse_results: &ParseResults,
     ) {
-        self.typecheck_node(initializer, delta);
+        self.typecheck_node(initializer, parse_results);
 
         if let Some(ty) = ty {
-            self.typecheck_node(ty, delta);
+            self.typecheck_node(ty, parse_results);
 
             // TODO make this a compatibility check rather than equality check
             if self.node_types[ty.0] != self.node_types[initializer.0] {
@@ -228,7 +235,7 @@ impl<'source> TypeChecker<'source> {
             }
         }
 
-        self.define_variable(variable_name, delta);
+        self.define_variable(variable_name, parse_results);
 
         self.node_types[variable_name.0] = self.node_types[initializer.0];
 
@@ -240,20 +247,20 @@ impl<'source> TypeChecker<'source> {
         then_block: NodeId,
         else_expression: Option<NodeId>,
         node_id: NodeId,
-        delta: &'source EngineDelta,
+        parse_results: &ParseResults,
     ) {
-        self.typecheck_node(condition, delta);
+        self.typecheck_node(condition, parse_results);
         let condition_ty = self.node_types[condition.0];
 
         if condition_ty != BOOL_TYPE {
             self.error("expected bool for if condition", condition);
         }
 
-        self.typecheck_node(then_block, delta);
+        self.typecheck_node(then_block, parse_results);
         let then_ty = self.node_types[then_block.0];
 
         if let Some(else_expression) = else_expression {
-            self.typecheck_node(else_expression, delta);
+            self.typecheck_node(else_expression, parse_results);
             let else_ty = self.node_types[else_expression.0];
 
             if then_ty != else_ty {
@@ -269,16 +276,16 @@ impl<'source> TypeChecker<'source> {
         condition: NodeId,
         block: NodeId,
         node_id: NodeId,
-        delta: &'source EngineDelta,
+        parse_results: &ParseResults,
     ) {
-        self.typecheck_node(condition, delta);
+        self.typecheck_node(condition, parse_results);
         let condition_ty = self.node_types[condition.0];
 
         if condition_ty != BOOL_TYPE {
             self.error("expected bool for while condition", condition);
         }
 
-        self.typecheck_node(block, delta);
+        self.typecheck_node(block, parse_results);
 
         self.node_types[node_id.0] = VOID_TYPE;
     }
@@ -289,9 +296,9 @@ impl<'source> TypeChecker<'source> {
     //     range: NodeId,
     //     block: NodeId,
     //     node_id: NodeId,
-    //     delta: &'source EngineDelta,
+    //     parse_results: &ParseResults,
     // ) {
-    //     self.typecheck_node(range, delta);
+    //     self.typecheck_node(range, parse_results);
     //     let range_ty = self.node_types[range.0];
 
     //     let range_inner_ty = match &self.types[range_ty.0] {
@@ -302,9 +309,9 @@ impl<'source> TypeChecker<'source> {
     //         }
     //     };
 
-    //     self.typecheck_node(block, delta);
+    //     self.typecheck_node(block, parse_results);
 
-    //     self.define_variable(variable_name, delta);
+    //     self.define_variable(variable_name, parse_results);
 
     //     self.node_types[variable_name.0] = range_inner_ty;
 
@@ -317,15 +324,15 @@ impl<'source> TypeChecker<'source> {
         op: NodeId,
         rhs: NodeId,
         node_id: NodeId, // whole expression NodeId
-        delta: &'source EngineDelta,
+        parse_results: &ParseResults,
     ) {
-        self.typecheck_node(lhs, delta);
-        self.typecheck_node(rhs, delta);
+        self.typecheck_node(lhs, parse_results);
+        self.typecheck_node(rhs, parse_results);
 
         let lhs_ty = self.node_types[lhs.0];
         let rhs_ty = self.node_types[rhs.0];
-        let lhs = &delta.ast_nodes[lhs.0];
-        let op = &delta.ast_nodes[op.0];
+        let lhs = &parse_results.ast_nodes[lhs.0];
+        let op = &parse_results.ast_nodes[op.0];
 
         match op {
             AstNode::Assignment => {
@@ -370,10 +377,10 @@ impl<'source> TypeChecker<'source> {
     //     lhs: NodeId,
     //     rhs: NodeId,
     //     node_id: NodeId,
-    //     delta: &'source EngineDelta,
+    //     parse_results: &ParseResults,
     // ) {
-    //     self.typecheck_node(lhs, delta);
-    //     self.typecheck_node(rhs, delta);
+    //     self.typecheck_node(lhs, parse_results);
+    //     self.typecheck_node(rhs, parse_results);
 
     //     let lhs_ty = self.node_types[lhs.0];
     //     let rhs_ty = self.node_types[rhs.0];
@@ -397,12 +404,13 @@ impl<'source> TypeChecker<'source> {
         head: NodeId,
         args: &[NodeId],
         node_id: NodeId,
-        delta: &'source EngineDelta,
+        parse_results: &ParseResults,
     ) {
-        let call_name = &delta.contents[delta.span_start[head.0]..delta.span_end[head.0]];
+        let call_name = &parse_results.contents
+            [parse_results.span_start[head.0]..parse_results.span_end[head.0]];
 
         for node_id in args {
-            self.typecheck_node(*node_id, delta)
+            self.typecheck_node(*node_id, parse_results)
         }
 
         if let Some(defs) = self.external_functions.get(call_name) {
@@ -455,19 +463,20 @@ impl<'source> TypeChecker<'source> {
         }
     }
 
-    pub fn define_variable(&mut self, variable_name_node_id: NodeId, delta: &'source EngineDelta) {
-        let variable_name = &delta.contents
-            [delta.span_start[variable_name_node_id.0]..delta.span_end[variable_name_node_id.0]];
+    pub fn define_variable(&mut self, variable_name_node_id: NodeId, parse_results: &ParseResults) {
+        let variable_name = &parse_results.contents[parse_results.span_start
+            [variable_name_node_id.0]
+            ..parse_results.span_end[variable_name_node_id.0]];
         self.scope
             .last_mut()
             .expect("internal error: missing expected scope frame")
             .variables
-            .insert(variable_name, variable_name_node_id);
+            .insert(variable_name.to_vec(), variable_name_node_id);
     }
 
-    pub fn resolve_variable(&mut self, unbound_node_id: NodeId, delta: &'source EngineDelta) {
-        let variable_name =
-            &delta.contents[delta.span_start[unbound_node_id.0]..delta.span_end[unbound_node_id.0]];
+    pub fn resolve_variable(&mut self, unbound_node_id: NodeId, parse_results: &ParseResults) {
+        let variable_name = &parse_results.contents[parse_results.span_start[unbound_node_id.0]
+            ..parse_results.span_end[unbound_node_id.0]];
 
         if let Some(node_id) = self.find_variable(variable_name) {
             self.variable_def.insert(unbound_node_id, node_id);
@@ -581,7 +590,7 @@ pub trait FnRegister<A, RetVal, Args> {
     fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8);
 }
 
-impl<'source, A, U> FnRegister<A, U, ()> for TypeChecker<'source>
+impl<A, U> FnRegister<A, U, ()> for TypeChecker
 where
     A: 'static + Fn() -> U,
     U: Any,
@@ -613,7 +622,7 @@ where
     }
 }
 
-impl<'source, A, T, U> FnRegister<A, U, (T,)> for TypeChecker<'source>
+impl<A, T, U> FnRegister<A, U, (T,)> for TypeChecker
 where
     A: 'static + Fn(T) -> U,
     T: Clone + Any,
@@ -658,7 +667,7 @@ where
     }
 }
 
-impl<'source, A, T, U, V> FnRegister<A, V, (T, U)> for TypeChecker<'source>
+impl<A, T, U, V> FnRegister<A, V, (T, U)> for TypeChecker
 where
     A: 'static + Fn(T, U) -> V,
     T: Clone + Any,
@@ -714,7 +723,7 @@ where
     }
 }
 
-impl<'a, 'source, A, T, U, V, W> FnRegister<A, V, (&'a T, U, W)> for TypeChecker<'source>
+impl<'a, A, T, U, V, W> FnRegister<A, V, (&'a T, U, W)> for TypeChecker
 where
     A: 'static + Fn(T, U, W) -> V,
     T: Clone + Any,
@@ -786,7 +795,7 @@ where
     }
 }
 
-impl<'source, A, T, U, V, W> FnRegister<A, V, (&mut T, U, W)> for TypeChecker<'source>
+impl<A, T, U, V, W> FnRegister<A, V, (&mut T, U, W)> for TypeChecker
 where
     A: 'static + Fn(&mut T, U, W) -> V,
     T: Any,

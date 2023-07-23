@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use line_editor::{LineEditor, ReadLineOutput};
 
 use truffle::{
-    print_error, register_fn, Evaluator, FnRegister, FunctionCodegen, FunctionId, Parser,
+    print_error, register_fn, Evaluator, FnRegister, FunctionCodegen, FunctionId, Lexer, Parser,
     Translater, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE,
 };
 
@@ -47,18 +47,16 @@ fn main() {
     }
 }
 
-fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCodegen> {
-    let mut parser = Parser::new(line.as_bytes(), 0, 0);
+fn compile_line(
+    fname: &str,
+    line: &str,
+    typechecker: &mut TypeChecker,
+    debug_output: bool,
+) -> Option<FunctionCodegen> {
+    let mut lexer = Lexer::new(line.as_bytes().to_vec(), 0);
 
-    let mut typechecker = TypeChecker::new();
-    register_fn!(typechecker, "print", print::<i64>);
-    register_fn!(typechecker, "print", print::<f64>);
-    register_fn!(typechecker, "print", print::<bool>);
-    register_fn!(typechecker, "add", add::<i64>);
-    register_fn!(typechecker, "add", add::<f64>);
-    register_fn!(typechecker, "new_env", Env::new_env);
-    register_fn!(typechecker, "set_var", Env::set_var);
-    register_fn!(typechecker, "read_var", Env::read_var);
+    let tokens = lexer.lex();
+    let mut parser = Parser::new(tokens, line.as_bytes().to_vec(), 0);
 
     if debug_output {
         println!("line: {line}");
@@ -73,7 +71,7 @@ fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCod
         return None;
     }
 
-    let result = &parser.delta;
+    let result = &parser.results;
 
     if debug_output {
         println!();
@@ -81,7 +79,7 @@ fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCod
         result.print();
     }
 
-    typechecker.typecheck(&parser.delta);
+    typechecker.typecheck(&parser.results);
 
     if !typechecker.errors.is_empty() {
         for err in &typechecker.errors {
@@ -90,7 +88,7 @@ fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCod
         return None;
     }
 
-    let result = &parser.delta;
+    let result = &parser.results;
 
     if debug_output {
         println!();
@@ -116,7 +114,7 @@ fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCod
     let mut translater = Translater::new();
 
     #[allow(unused_mut)]
-    let mut output = translater.translate(&parser.delta, &typechecker);
+    let mut output = translater.translate(&parser.results, typechecker);
 
     if debug_output {
         println!();
@@ -162,7 +160,7 @@ fn run_line(fname: &str, line: &str, debug_output: bool) {
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
 
-    let output = parse_line(fname, line, debug_output);
+    let output = compile_line(fname, line, &mut typechecker, debug_output);
 
     if let Some(output) = output {
         let mut evaluator = Evaluator::default();
@@ -192,7 +190,7 @@ fn run_line(fname: &str, line: &str, debug_output: bool) {
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
 
-    let output = parse_line(fname, line, debug_output);
+    let output = compile_line(fname, line, &mut typechecker, debug_output);
 
     if let Some(output) = output {
         let mut evaluator = Evaluator::default();

@@ -1,9 +1,9 @@
-pub struct Lexer<'source> {
-    source: &'source [u8],
+pub struct Lexer {
+    source: Vec<u8>,
     span_offset: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum TokenType {
     Number,
     Comma,
@@ -42,10 +42,9 @@ pub enum TokenType {
     AmpersandAmpersand,
 }
 
-#[derive(Debug)]
-pub struct Token<'source> {
+#[derive(Debug, Clone, Copy)]
+pub struct Token {
     pub token_type: TokenType,
-    pub contents: &'source [u8],
     pub span_start: usize,
     pub span_end: usize,
 }
@@ -58,200 +57,186 @@ fn is_symbol(b: u8) -> bool {
     .contains(&b)
 }
 
-impl<'source> Lexer<'source> {
-    pub fn new(source: &'source [u8], span_offset: usize) -> Self {
+impl Lexer {
+    pub fn new(source: Vec<u8>, span_offset: usize) -> Self {
         Self {
             source,
             span_offset,
         }
     }
 
-    pub fn lex_quoted_string(&mut self) -> Option<Token<'source>> {
+    pub fn lex_quoted_string(&mut self) -> Option<Token> {
         let span_start = self.span_offset;
-        let mut token_offset = 1;
+        let mut current_position = self.span_offset + 1;
         let mut is_escaped = false;
-        while token_offset < self.source.len() {
+        while current_position < self.source.len() {
             if is_escaped {
                 is_escaped = false;
-            } else if self.source[token_offset] == b'\\' {
+            } else if self.source[current_position] == b'\\' {
                 is_escaped = true;
-            } else if self.source[token_offset] == b'"' {
-                token_offset += 1;
+            } else if self.source[current_position] == b'"' {
+                current_position += 1;
                 break;
             }
-            token_offset += 1;
+            current_position += 1;
         }
 
-        self.span_offset += token_offset;
-
-        let contents = &self.source[..token_offset];
-        self.source = &self.source[token_offset..];
+        self.span_offset = current_position;
 
         Some(Token {
             token_type: TokenType::String,
-            contents,
             span_start,
             span_end: self.span_offset,
         })
     }
 
-    pub fn lex_number(&mut self) -> Option<Token<'source>> {
+    pub fn lex_number(&mut self) -> Option<Token> {
         let span_start = self.span_offset;
-        let mut token_offset = 0;
-        while token_offset < self.source.len() {
-            if !self.source[token_offset].is_ascii_digit() {
+        let mut current_position = self.span_offset;
+        while current_position < self.source.len() {
+            if !self.source[current_position].is_ascii_digit() {
                 break;
             }
-            token_offset += 1;
+            current_position += 1;
         }
 
         // Check to see if we have a hex/octal/binary number
-        if token_offset < self.source.len() && self.source[token_offset] == b'x' {
-            token_offset += 1;
-            while token_offset < self.source.len() {
-                if !self.source[token_offset].is_ascii_hexdigit() {
+        if current_position < self.source.len() && self.source[current_position] == b'x' {
+            current_position += 1;
+            while current_position < self.source.len() {
+                if !self.source[current_position].is_ascii_hexdigit() {
                     break;
                 }
-                token_offset += 1;
+                current_position += 1;
             }
-        } else if token_offset < self.source.len() && self.source[token_offset] == b'o' {
-            token_offset += 1;
-            while token_offset < self.source.len() {
-                if !(self.source[token_offset] >= b'0' && self.source[token_offset] <= b'7') {
+        } else if current_position < self.source.len() && self.source[current_position] == b'o' {
+            current_position += 1;
+            while current_position < self.source.len() {
+                if !(self.source[current_position] >= b'0' && self.source[current_position] <= b'7')
+                {
                     break;
                 }
-                token_offset += 1;
+                current_position += 1;
             }
-        } else if token_offset < self.source.len() && self.source[token_offset] == b'b' {
-            token_offset += 1;
-            while token_offset < self.source.len() {
-                if !(self.source[token_offset] >= b'0' && self.source[token_offset] <= b'1') {
+        } else if current_position < self.source.len() && self.source[current_position] == b'b' {
+            current_position += 1;
+            while current_position < self.source.len() {
+                if !(self.source[current_position] >= b'0' && self.source[current_position] <= b'1')
+                {
                     break;
                 }
-                token_offset += 1;
+                current_position += 1;
             }
-        } else if token_offset < self.source.len()
-            && self.source[token_offset] == b'.'
-            && (token_offset + 1 < self.source.len())
-            && self.source[token_offset + 1].is_ascii_digit()
+        } else if current_position < self.source.len()
+            && self.source[current_position] == b'.'
+            && (current_position + 1 < self.source.len())
+            && self.source[current_position + 1].is_ascii_digit()
         {
             // Looks like a float
-            token_offset += 1;
-            while token_offset < self.source.len() {
-                if !self.source[token_offset].is_ascii_digit() {
+            current_position += 1;
+            while current_position < self.source.len() {
+                if !self.source[current_position].is_ascii_digit() {
                     break;
                 }
-                token_offset += 1;
+                current_position += 1;
             }
 
-            if token_offset < self.source.len()
-                && (self.source[token_offset] == b'e' || self.source[token_offset] == b'E')
+            if current_position < self.source.len()
+                && (self.source[current_position] == b'e' || self.source[current_position] == b'E')
             {
-                token_offset += 1;
+                current_position += 1;
 
-                if token_offset < self.source.len() && self.source[token_offset] == b'-' {
-                    token_offset += 1;
+                if current_position < self.source.len() && self.source[current_position] == b'-' {
+                    current_position += 1;
                 }
 
-                while token_offset < self.source.len() {
-                    if !self.source[token_offset].is_ascii_digit() {
+                while current_position < self.source.len() {
+                    if !self.source[current_position].is_ascii_digit() {
                         break;
                     }
-                    token_offset += 1;
+                    current_position += 1;
                 }
             }
         }
 
-        self.span_offset += token_offset;
-
-        let contents = &self.source[..token_offset];
-        self.source = &self.source[token_offset..];
+        self.span_offset = current_position;
 
         Some(Token {
             token_type: TokenType::Number,
-            contents,
             span_start,
             span_end: self.span_offset,
         })
     }
 
     pub fn skip_space(&mut self) {
-        let mut token_offset = 0;
+        let mut current_position = self.span_offset;
         let whitespace: &[u8] = &[b' ', b'\t', b'\r', b'\n'];
-        while token_offset < self.source.len() {
-            if !whitespace.contains(&self.source[token_offset]) {
+        while current_position < self.source.len() {
+            if !whitespace.contains(&self.source[current_position]) {
                 break;
             }
-            token_offset += 1;
+            current_position += 1;
         }
-        self.span_offset += token_offset;
-        self.source = &self.source[token_offset..];
+        self.span_offset = current_position;
     }
 
     pub fn skip_comment(&mut self) {
-        let mut token_offset = 0;
-        while token_offset < self.source.len() && self.source[token_offset] != b'\n' {
-            token_offset += 1;
+        let mut current_position = self.span_offset;
+        while current_position < self.source.len() && self.source[current_position] != b'\n' {
+            current_position += 1;
         }
-        self.span_offset += token_offset;
-        self.source = &self.source[token_offset..];
+        self.span_offset = current_position;
     }
 
-    pub fn lex_name(&mut self) -> Option<Token<'source>> {
+    pub fn lex_name(&mut self) -> Option<Token> {
         let span_start = self.span_offset;
-        let mut token_offset = 0;
-        while token_offset < self.source.len()
-            && (self.source[token_offset].is_ascii_alphanumeric()
-                || self.source[token_offset] == b'_')
+        let mut current_position = self.span_offset;
+        while current_position < self.source.len()
+            && (self.source[current_position].is_ascii_alphanumeric()
+                || self.source[current_position] == b'_')
         {
-            token_offset += 1;
+            current_position += 1;
         }
-        self.span_offset += token_offset;
-        let contents = &self.source[..token_offset];
-        self.source = &self.source[token_offset..];
+        self.span_offset = current_position;
 
         Some(Token {
             token_type: TokenType::Name,
-            contents,
             span_start,
             span_end: self.span_offset,
         })
     }
 
-    pub fn lex_symbol(&mut self) -> Option<Token<'source>> {
+    pub fn lex_symbol(&mut self) -> Option<Token> {
         let span_start = self.span_offset;
 
-        let result = match self.source[0] {
+        let result = match self.source[self.span_offset] {
             b'(' => Token {
                 token_type: TokenType::LParen,
-                contents: &self.source[..1],
                 span_start,
                 span_end: span_start + 1,
             },
             b'[' => Token {
                 token_type: TokenType::LSquare,
-                contents: &self.source[..1],
                 span_start,
                 span_end: span_start + 1,
             },
             b'{' => Token {
                 token_type: TokenType::LCurly,
-                contents: &self.source[..1],
                 span_start,
                 span_end: span_start + 1,
             },
             b'<' => {
-                if self.source.len() > 1 && self.source[1] == b'=' {
+                if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'='
+                {
                     Token {
                         token_type: TokenType::LessThanEqual,
-                        contents: &self.source[..2],
                         span_start,
                         span_end: span_start + 2,
                     }
                 } else {
                     Token {
                         token_type: TokenType::LessThan,
-                        contents: &self.source[..1],
                         span_start,
                         span_end: span_start + 1,
                     }
@@ -259,51 +244,48 @@ impl<'source> Lexer<'source> {
             }
             b')' => Token {
                 token_type: TokenType::RParen,
-                contents: &self.source[..1],
                 span_start,
                 span_end: span_start + 1,
             },
             b']' => Token {
                 token_type: TokenType::RSquare,
-                contents: &self.source[..1],
                 span_start,
                 span_end: span_start + 1,
             },
             b'}' => Token {
                 token_type: TokenType::RCurly,
-                contents: &self.source[..1],
                 span_start,
                 span_end: span_start + 1,
             },
             b'>' => {
-                if self.source.len() > 1 && self.source[1] == b'=' {
+                if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'='
+                {
                     Token {
                         token_type: TokenType::GreaterThanEqual,
-                        contents: &self.source[..2],
                         span_start,
                         span_end: span_start + 2,
                     }
                 } else {
                     Token {
                         token_type: TokenType::GreaterThan,
-                        contents: &self.source[..1],
                         span_start,
                         span_end: span_start + 1,
                     }
                 }
             }
             b'+' => {
-                if self.source.len() > 1 && self.source[1] == b'+' {
+                if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'+'
+                {
                     Token {
                         token_type: TokenType::PlusPlus,
-                        contents: &self.source[..2],
                         span_start,
                         span_end: span_start + 2,
                     }
                 } else {
                     Token {
                         token_type: TokenType::Plus,
-                        contents: &self.source[..1],
                         span_start,
                         span_end: span_start + 1,
                     }
@@ -311,63 +293,63 @@ impl<'source> Lexer<'source> {
             }
             b'-' => Token {
                 token_type: TokenType::Dash,
-                contents: &self.source[..1],
                 span_start,
                 span_end: span_start + 1,
             },
             b'*' => {
-                if self.source.len() > 1 && self.source[1] == b'*' {
+                if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'*'
+                {
                     Token {
                         token_type: TokenType::AsteriskAsterisk,
-                        contents: &self.source[..2],
                         span_start,
                         span_end: span_start + 2,
                     }
                 } else {
                     Token {
                         token_type: TokenType::Asterisk,
-                        contents: &self.source[..1],
                         span_start,
                         span_end: span_start + 1,
                     }
                 }
             }
             b'/' => {
-                if self.source.len() > 1 && self.source[1] == b'/' {
+                if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'/'
+                {
                     Token {
                         token_type: TokenType::ForwardSlashForwardSlash,
-                        contents: &self.source[..2],
                         span_start,
                         span_end: span_start + 2,
                     }
                 } else {
                     Token {
                         token_type: TokenType::ForwardSlash,
-                        contents: &self.source[..1],
                         span_start,
                         span_end: span_start + 1,
                     }
                 }
             }
             b'=' => {
-                if self.source.len() > 1 && self.source[1] == b'=' {
+                if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'='
+                {
                     Token {
                         token_type: TokenType::EqualsEquals,
-                        contents: &self.source[..2],
                         span_start,
                         span_end: span_start + 2,
                     }
-                } else if self.source.len() > 1 && self.source[1] == b'~' {
+                } else if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'~'
+                {
                     Token {
                         token_type: TokenType::EqualsTilde,
-                        contents: &self.source[..2],
                         span_start,
                         span_end: span_start + 2,
                     }
                 } else {
                     Token {
                         token_type: TokenType::Equals,
-                        contents: &self.source[..1],
                         span_start,
                         span_end: span_start + 1,
                     }
@@ -375,86 +357,85 @@ impl<'source> Lexer<'source> {
             }
             b':' => Token {
                 token_type: TokenType::Colon,
-                contents: &self.source[..1],
                 span_start,
                 span_end: span_start + 1,
             },
             b';' => Token {
                 token_type: TokenType::Semicolon,
-                contents: &self.source[..1],
                 span_start,
                 span_end: span_start + 1,
             },
             b'.' => {
-                if self.source.len() > 1 && self.source[1] == b'.' {
+                if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'.'
+                {
                     Token {
                         token_type: TokenType::DotDot,
-                        contents: &self.source[..2],
                         span_start,
                         span_end: span_start + 2,
                     }
                 } else {
                     Token {
                         token_type: TokenType::Dot,
-                        contents: &self.source[..1],
                         span_start,
                         span_end: span_start + 1,
                     }
                 }
             }
             b'!' => {
-                if self.source.len() > 1 && self.source[1] == b'=' {
+                if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'='
+                {
                     Token {
                         token_type: TokenType::ExclamationEquals,
-                        contents: &self.source[..2],
                         span_start,
                         span_end: span_start + 2,
                     }
-                } else if self.source.len() > 1 && self.source[1] == b'~' {
+                } else if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'~'
+                {
                     Token {
                         token_type: TokenType::ExclamationTilde,
-                        contents: &self.source[..2],
                         span_start,
                         span_end: span_start + 2,
                     }
                 } else {
                     Token {
                         token_type: TokenType::Exclamation,
-                        contents: &self.source[..1],
                         span_start,
                         span_end: span_start + 1,
                     }
                 }
             }
             b'|' => {
-                if self.source.len() > 1 && self.source[1] == b'|' {
+                if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'|'
+                {
                     Token {
                         token_type: TokenType::PipePipe,
-                        contents: &self.source[..2],
                         span_start,
                         span_end: span_start + 2,
                     }
                 } else {
                     Token {
                         token_type: TokenType::Pipe,
-                        contents: &self.source[..1],
                         span_start,
                         span_end: span_start + 1,
                     }
                 }
             }
             b'&' => {
-                if self.source.len() > 1 && self.source[1] == b'&' {
+                if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'&'
+                {
                     Token {
                         token_type: TokenType::AmpersandAmpersand,
-                        contents: &self.source[..2],
                         span_start,
                         span_end: span_start + 2,
                     }
                 } else {
                     Token {
                         token_type: TokenType::Ampersand,
-                        contents: &self.source[..1],
                         span_start,
                         span_end: span_start + 1,
                     }
@@ -462,7 +443,6 @@ impl<'source> Lexer<'source> {
             }
             b',' => Token {
                 token_type: TokenType::Comma,
-                contents: &self.source[..1],
                 span_start,
                 span_end: span_start + 1,
             },
@@ -475,48 +455,59 @@ impl<'source> Lexer<'source> {
         };
 
         self.span_offset = result.span_end;
-        self.source = &self.source[(result.span_end - span_start)..];
-
         Some(result)
     }
 }
 
-impl<'source> Lexer<'source> {
-    pub fn peek(&mut self) -> Option<Token<'source>> {
+impl Lexer {
+    pub fn peek_token(&mut self) -> Option<Token> {
         let prev_offset = self.span_offset;
-        let prev_source = self.source;
-        let output = self.next();
+        let output = self.next_token();
         self.span_offset = prev_offset;
-        self.source = prev_source;
 
         output
     }
 
     /// Extract and return the next token from the source
-    pub fn next(&mut self) -> Option<Token<'source>> {
+    pub fn next_token(&mut self) -> Option<Token> {
         loop {
-            if self.source.is_empty() {
+            if self.span_offset >= self.source.len() {
                 return None;
-            } else if self.source[0].is_ascii_digit() {
+            } else if self.source[self.span_offset].is_ascii_digit() {
                 return self.lex_number();
-            } else if self.source[0] == b'"' {
+            } else if self.source[self.span_offset] == b'"' {
                 return self.lex_quoted_string();
-            } else if self.source[0] == b'/' && self.source.len() > 1 && self.source[1] == b'/' {
+            } else if self.source[self.span_offset] == b'/'
+                && self.source.len() > self.span_offset + 1
+                && self.source[self.span_offset + 1] == b'/'
+            {
                 // Comment
                 self.skip_comment();
-            } else if is_symbol(self.source[0]) {
+            } else if is_symbol(self.source[self.span_offset]) {
                 return self.lex_symbol();
-            } else if self.source[0] == b' '
-                || self.source[0] == b'\t'
-                || self.source[0] == b'\r'
-                || self.source[0] == b'\n'
+            } else if self.source[self.span_offset] == b' '
+                || self.source[self.span_offset] == b'\t'
+                || self.source[self.span_offset] == b'\r'
+                || self.source[self.span_offset] == b'\n'
             {
                 self.skip_space()
-            } else if self.source[0].is_ascii_alphanumeric() || self.source[0] == b'_' {
+            } else if self.source[self.span_offset].is_ascii_alphanumeric()
+                || self.source[self.span_offset] == b'_'
+            {
                 return self.lex_name();
             } else {
-                panic!("unsupported character: {}", self.source[0])
+                panic!("unsupported character: {}", self.source[self.span_offset])
             }
         }
+    }
+
+    pub fn lex(&mut self) -> Vec<Token> {
+        let mut output = vec![];
+
+        while let Some(token) = self.next_token() {
+            output.push(token)
+        }
+
+        output
     }
 }

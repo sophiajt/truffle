@@ -1,11 +1,6 @@
 use truffle::{
-    register_fn, Evaluator, FnRegister, FunctionId, Parser, Translater, TypeChecker, TypeId,
+    register_fn, Evaluator, FnRegister, FunctionId, Lexer, Parser, Translater, TypeChecker, TypeId,
 };
-
-#[cfg(test)]
-pub fn eval_source_into_float(source: &str) -> f64 {
-    f64::from_bits(eval_source_with_type(source).0 as u64)
-}
 
 pub fn eval_source(source: &str) -> i64 {
     eval_source_with_type(source).0
@@ -15,19 +10,22 @@ pub fn eval_source(source: &str) -> i64 {
 pub fn eval_source_with_type(source: &str) -> (i64, TypeId) {
     use futures::executor::block_on;
 
-    let mut parser = Parser::new(source.as_bytes(), 0, 0);
+    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
+
+    let tokens = lexer.lex();
+    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
     parser.parse();
 
     let mut typechecker = TypeChecker::new();
     register_fn!(typechecker, "add", add::<i64>);
     register_fn!(typechecker, "add", add::<f64>);
 
-    typechecker.typecheck(&parser.delta);
+    typechecker.typecheck(&parser.results);
 
     let mut translater = Translater::new();
 
     #[allow(unused_mut)]
-    let mut output = translater.translate(&parser.delta, &typechecker);
+    let mut output = translater.translate(&parser.results, &typechecker);
 
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
@@ -37,7 +35,10 @@ pub fn eval_source_with_type(source: &str) -> (i64, TypeId) {
 
 #[cfg(not(feature = "async"))]
 pub fn eval_source_with_type(source: &str) -> (i64, TypeId) {
-    let mut parser = Parser::new(source.as_bytes(), 0, 0);
+    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
+
+    let tokens = lexer.lex();
+    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
     parser.parse();
 
     let mut typechecker = TypeChecker::new();
@@ -47,12 +48,12 @@ pub fn eval_source_with_type(source: &str) -> (i64, TypeId) {
     register_fn!(typechecker, "add", add::<i64>);
     register_fn!(typechecker, "add", add::<f64>);
 
-    typechecker.typecheck(&parser.delta);
+    typechecker.typecheck(&parser.results);
 
     let mut translater = Translater::new();
 
     #[allow(unused_mut)]
-    let mut output = translater.translate(&parser.delta, &typechecker);
+    let mut output = translater.translate(&parser.results, &typechecker);
 
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
