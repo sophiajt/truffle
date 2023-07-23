@@ -14,6 +14,11 @@ fn math() {
     assert_eq!(eval_source("2 >= 2"), 1);
 }
 
+#[cfg(test)]
+pub fn eval_source_into_float(source: &str) -> f64 {
+    f64::from_bits(eval_source_with_type(source).0 as u64)
+}
+
 #[test]
 fn float_math() {
     assert_eq!(eval_source_into_float("1.2 + 2.3"), 3.5);

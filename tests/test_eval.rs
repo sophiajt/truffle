@@ -2,11 +2,6 @@ use truffle::{
     register_fn, Evaluator, FnRegister, FunctionId, Lexer, Parser, Translater, TypeChecker, TypeId,
 };
 
-#[cfg(test)]
-pub fn eval_source_into_float(source: &str) -> f64 {
-    f64::from_bits(eval_source_with_type(source).0 as u64)
-}
-
 pub fn eval_source(source: &str) -> i64 {
     eval_source_with_type(source).0
 }
