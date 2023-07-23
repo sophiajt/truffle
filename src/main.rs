@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use line_editor::{LineEditor, ReadLineOutput};
 
 use truffle::{
-    register_fn, Evaluator, FnRegister, FunctionCodegen, FunctionId, Parser, Translater,
-    TypeChecker, TypeId, BOOL_TYPE, F64_TYPE,
+    print_error, register_fn, Evaluator, FnRegister, FunctionCodegen, FunctionId, Parser,
+    Translater, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE,
 };
 
 fn main() {
@@ -13,9 +13,9 @@ fn main() {
 
     if args.len() > 1 {
         for arg in args.skip(1) {
-            let contents = std::fs::read_to_string(arg).expect("couldn't find file");
+            let contents = std::fs::read_to_string(&arg).expect("couldn't find file");
 
-            run_line(&contents, true);
+            run_line(&arg, &contents, true);
         }
         return;
     }
@@ -37,7 +37,7 @@ fn main() {
                 } else if line == "debug" {
                     debug_output = !debug_output;
                 } else {
-                    run_line(&line, debug_output);
+                    run_line("<repl>", &line, debug_output);
                 }
             }
             Err(err) => {
@@ -47,7 +47,7 @@ fn main() {
     }
 }
 
-fn parse_line(line: &str, debug_output: bool) -> Option<FunctionCodegen> {
+fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCodegen> {
     let mut parser = Parser::new(line.as_bytes(), 0, 0);
 
     let mut typechecker = TypeChecker::new();
@@ -66,13 +66,9 @@ fn parse_line(line: &str, debug_output: bool) -> Option<FunctionCodegen> {
 
     parser.parse();
 
-    for error in &parser.errors {
-        println!("error: {:?}", error);
-    }
-
     if !parser.errors.is_empty() {
         for err in &parser.errors {
-            println!("{:?}", err);
+            print_error(fname, err, &parser)
         }
         return None;
     }
@@ -87,13 +83,9 @@ fn parse_line(line: &str, debug_output: bool) -> Option<FunctionCodegen> {
 
     typechecker.typecheck(&parser.delta);
 
-    for error in &typechecker.errors {
-        println!("error: {:?}", error);
-    }
-
     if !typechecker.errors.is_empty() {
         for err in &typechecker.errors {
-            println!("{:?}", err);
+            print_error(fname, err, &parser)
         }
         return None;
     }
@@ -156,12 +148,8 @@ fn print_result(typechecker: &TypeChecker, result: (i64, TypeId)) {
     }
 }
 
-async fn foo(i: i64) -> i64 {
-    i + 10
-}
-
 #[cfg(feature = "async")]
-fn run_line(line: &str, debug_output: bool) {
+fn run_line(fname: &str, line: &str, debug_output: bool) {
     use futures::executor::block_on;
 
     let mut typechecker = TypeChecker::new();
@@ -174,7 +162,7 @@ fn run_line(line: &str, debug_output: bool) {
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
 
-    let output = parse_line(line, debug_output);
+    let output = parse_line(fname, line, debug_output);
 
     if let Some(output) = output {
         let mut evaluator = Evaluator::default();
@@ -193,7 +181,7 @@ fn run_line(line: &str, debug_output: bool) {
 }
 
 #[cfg(not(feature = "async"))]
-fn run_line(line: &str, debug_output: bool) {
+fn run_line(fname: &str, line: &str, debug_output: bool) {
     let mut typechecker = TypeChecker::new();
     register_fn!(typechecker, "print", print::<i64>);
     register_fn!(typechecker, "print", print::<f64>);
@@ -204,7 +192,7 @@ fn run_line(line: &str, debug_output: bool) {
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
 
-    let output = parse_line(line, debug_output);
+    let output = parse_line(fname, line, debug_output);
 
     if let Some(output) = output {
         let mut evaluator = Evaluator::default();
