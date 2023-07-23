@@ -488,6 +488,7 @@ impl Evaluator {
 }
 
 // Test function for async until we build out full support
+#[cfg(feature = "async")]
 async fn test_async_fn() -> i64 {
     42
 }

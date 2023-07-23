@@ -1,8 +1,8 @@
-
 use truffle::{
     register_fn, Evaluator, FnRegister, FunctionId, Parser, Translater, TypeChecker, TypeId,
 };
 
+#[cfg(test)]
 pub fn eval_source_into_float(source: &str) -> f64 {
     f64::from_bits(eval_source_with_type(source).0 as u64)
 }
@@ -65,6 +65,7 @@ pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
     lhs + rhs
 }
 
+#[cfg(test)]
 pub fn print<T: std::fmt::Display>(value: T) {
     println!("value: {value}")
 }
