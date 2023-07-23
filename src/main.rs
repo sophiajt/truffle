@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use line_editor::{LineEditor, ReadLineOutput};
 
 use truffle::{
-    print_error, register_fn, Evaluator, FnRegister, FunctionCodegen, FunctionId, Parser,
+    print_error, register_fn, Evaluator, FnRegister, FunctionCodegen, FunctionId, Lexer, Parser,
     Translater, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE,
 };
 
@@ -48,7 +48,10 @@ fn main() {
 }
 
 fn parse_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCodegen> {
-    let mut parser = Parser::new(line.as_bytes(), 0, 0);
+    let mut lexer = Lexer::new(line.as_bytes().to_vec(), 0);
+
+    let tokens = lexer.lex();
+    let mut parser = Parser::new(tokens, line.as_bytes().to_vec(), 0);
 
     let mut typechecker = TypeChecker::new();
     register_fn!(typechecker, "print", print::<i64>);

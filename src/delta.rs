@@ -1,16 +1,16 @@
 use crate::parser::{AstNode, NodeId};
 
 #[derive(Debug)]
-pub struct EngineDelta<'a> {
+pub struct EngineDelta {
     pub node_id_offset: usize,
     pub span_start: Vec<usize>,
     pub span_end: Vec<usize>,
     pub ast_nodes: Vec<AstNode>,
-    pub contents: &'a [u8],
+    pub contents: Vec<u8>,
 }
 
-impl<'a> EngineDelta<'a> {
-    pub fn new(node_id_offset: usize, contents: &'a [u8]) -> Self {
+impl EngineDelta {
+    pub fn new(node_id_offset: usize, contents: Vec<u8>) -> Self {
         Self {
             node_id_offset,
             span_start: vec![],

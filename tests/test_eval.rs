@@ -1,5 +1,5 @@
 use truffle::{
-    register_fn, Evaluator, FnRegister, FunctionId, Parser, Translater, TypeChecker, TypeId,
+    register_fn, Evaluator, FnRegister, FunctionId, Lexer, Parser, Translater, TypeChecker, TypeId,
 };
 
 #[cfg(test)]
@@ -15,7 +15,10 @@ pub fn eval_source(source: &str) -> i64 {
 pub fn eval_source_with_type(source: &str) -> (i64, TypeId) {
     use futures::executor::block_on;
 
-    let mut parser = Parser::new(source.as_bytes(), 0, 0);
+    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
+
+    let tokens = lexer.lex();
+    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
     parser.parse();
 
     let mut typechecker = TypeChecker::new();
@@ -37,7 +40,10 @@ pub fn eval_source_with_type(source: &str) -> (i64, TypeId) {
 
 #[cfg(not(feature = "async"))]
 pub fn eval_source_with_type(source: &str) -> (i64, TypeId) {
-    let mut parser = Parser::new(source.as_bytes(), 0, 0);
+    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
+
+    let tokens = lexer.lex();
+    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
     parser.parse();
 
     let mut typechecker = TypeChecker::new();

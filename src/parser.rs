@@ -1,12 +1,13 @@
 use crate::delta::EngineDelta;
 use crate::errors::ScriptError;
-use crate::lexer::{Lexer, Token, TokenType};
+use crate::lexer::{Token, TokenType};
 
-pub struct Parser<'source> {
-    lexer: Lexer<'source>,
-    pub delta: EngineDelta<'source>,
+pub struct Parser {
+    pub delta: EngineDelta,
+    pub tokens: Vec<Token>,
+    pub current_token: usize,
+    pub content_length: usize,
     pub errors: Vec<ScriptError>,
-    content_length: usize,
 }
 
 #[derive(Debug, PartialEq)]
@@ -122,21 +123,38 @@ impl AstNode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub usize);
 
-impl<'source> Parser<'source> {
-    pub fn new(source: &'source [u8], span_offset: usize, node_id_offset: usize) -> Self {
+impl Parser {
+    pub fn new(tokens: Vec<Token>, source: Vec<u8>, node_id_offset: usize) -> Self {
         let content_length = source.len();
-
         Self {
-            lexer: Lexer::new(source, span_offset),
             delta: EngineDelta::new(node_id_offset, source),
-            errors: vec![],
+            tokens,
+            current_token: 0,
             content_length,
+            errors: vec![],
+        }
+    }
+
+    fn peek(&self) -> Option<&Token> {
+        if self.current_token < self.tokens.len() {
+            Some(&self.tokens[self.current_token])
+        } else {
+            None
+        }
+    }
+
+    fn next(&mut self) -> Option<&Token> {
+        if self.current_token < self.tokens.len() {
+            self.current_token += 1;
+            Some(&self.tokens[self.current_token - 1])
+        } else {
+            None
         }
     }
 
     fn position(&mut self) -> usize {
-        if let Some(Token { span_start, .. }) = self.lexer.peek() {
-            span_start
+        if let Some(Token { span_start, .. }) = self.peek() {
+            *span_start
         } else {
             self.content_length
         }
@@ -151,11 +169,11 @@ impl<'source> Parser<'source> {
     }
 
     pub fn has_tokens(&mut self) -> bool {
-        self.lexer.peek().is_some()
+        self.peek().is_some()
     }
 
     pub fn is_operator(&mut self) -> bool {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token { token_type, .. }) => matches!(
                 token_type,
                 TokenType::Asterisk
@@ -179,7 +197,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_comma(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::Comma,
                 ..
@@ -189,7 +207,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_lcurly(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::LCurly,
                 ..
@@ -199,7 +217,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_rcurly(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::RCurly,
                 ..
@@ -209,7 +227,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_lparen(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::LParen,
                 ..
@@ -219,7 +237,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_rparen(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::RParen,
                 ..
@@ -229,7 +247,7 @@ impl<'source> Parser<'source> {
 
     // pub fn is_lsquare(&mut self) -> bool {
     //     matches!(
-    //         self.lexer.peek(),
+    //         self.peek(),
     //         Some(Token {
     //             token_type: TokenType::LSquare,
     //             ..
@@ -239,7 +257,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_rsquare(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::RSquare,
                 ..
@@ -249,7 +267,7 @@ impl<'source> Parser<'source> {
 
     // pub fn is_less_than(&mut self) -> bool {
     //     matches!(
-    //         self.lexer.peek(),
+    //         self.peek(),
     //         Some(Token {
     //             token_type: TokenType::LessThan,
     //             ..
@@ -259,7 +277,7 @@ impl<'source> Parser<'source> {
 
     // pub fn is_greater_than(&mut self) -> bool {
     //     matches!(
-    //         self.lexer.peek(),
+    //         self.peek(),
     //         Some(Token {
     //             token_type: TokenType::GreaterThan,
     //             ..
@@ -269,7 +287,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_pipe(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::Pipe,
                 ..
@@ -279,7 +297,7 @@ impl<'source> Parser<'source> {
 
     // pub fn is_double_pipe(&mut self) -> bool {
     //     matches!(
-    //         self.lexer.peek(),
+    //         self.peek(),
     //         Some(Token {
     //             token_type: TokenType::PipePipe,
     //             ..
@@ -289,7 +307,7 @@ impl<'source> Parser<'source> {
 
     // pub fn is_double_ampersand(&mut self) -> bool {
     //     matches!(
-    //         self.lexer.peek(),
+    //         self.peek(),
     //         Some(Token {
     //             token_type: TokenType::AmpersandAmpersand,
     //             ..
@@ -299,7 +317,7 @@ impl<'source> Parser<'source> {
 
     // pub fn is_dash(&mut self) -> bool {
     //     matches!(
-    //         self.lexer.peek(),
+    //         self.peek(),
     //         Some(Token {
     //             token_type: TokenType::Dash,
     //             ..
@@ -309,7 +327,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_colon(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::Colon,
                 ..
@@ -319,7 +337,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_semicolon(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::Semicolon,
                 ..
@@ -329,7 +347,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_dot(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::Dot,
                 ..
@@ -339,7 +357,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_dotdot(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::DotDot,
                 ..
@@ -349,7 +367,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_number(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::Number,
                 ..
@@ -359,7 +377,7 @@ impl<'source> Parser<'source> {
 
     pub fn is_string(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::String,
                 ..
@@ -367,20 +385,24 @@ impl<'source> Parser<'source> {
         )
     }
 
-    pub fn is_keyword(&mut self, keyword: &[u8]) -> bool {
-        matches!(
-            self.lexer.peek(),
-            Some(Token {
-                token_type: TokenType::Name,
-                contents,
-                ..
-            }) if contents == keyword
-        )
+    pub fn is_keyword(&self, keyword: &[u8]) -> bool {
+        if let Some(Token {
+            token_type: TokenType::Name,
+            span_start,
+            span_end,
+        }) = self.peek()
+        {
+            if keyword == &self.delta.contents[*span_start..*span_end] {
+                return true;
+            }
+        }
+
+        false
     }
 
     pub fn is_name(&mut self) -> bool {
         matches!(
-            self.lexer.peek(),
+            self.peek(),
             Some(Token {
                 token_type: TokenType::Name,
                 ..
@@ -392,8 +414,8 @@ impl<'source> Parser<'source> {
         self.is_simple_expression() || self.is_keyword(b"if") || self.is_keyword(b"where")
     }
 
-    pub fn is_simple_expression(&mut self) -> bool {
-        match self.lexer.peek() {
+    pub fn is_simple_expression(&self) -> bool {
+        match self.peek() {
             Some(Token {
                 token_type: TokenType::Number,
                 ..
@@ -416,14 +438,12 @@ impl<'source> Parser<'source> {
             }) => true,
             Some(Token {
                 token_type: TokenType::Name,
-                contents,
                 ..
-            }) if contents == b"true" => true,
+            }) if self.is_keyword(b"true") => true,
             Some(Token {
                 token_type: TokenType::Name,
-                contents,
                 ..
-            }) if contents == b"false" => true,
+            }) if self.is_keyword(b"false") => true,
             Some(Token {
                 token_type: TokenType::Name,
                 ..
@@ -437,8 +457,11 @@ impl<'source> Parser<'source> {
             span_start,
             span_end,
             ..
-        }) = self.lexer.next()
+        }) = self.next()
         {
+            let span_start = *span_start;
+            let span_end = *span_end;
+
             let node_id = self.create_node(AstNode::Garbage, span_start, span_end);
             self.errors.push(ScriptError {
                 message: message.into(),
@@ -485,7 +508,7 @@ impl<'source> Parser<'source> {
                 self.rcurly();
                 break;
             } else if self.is_semicolon() {
-                self.lexer.next();
+                self.next();
                 continue;
             } else if self.is_keyword(b"fn") {
                 let result = self.fn_definition();
@@ -496,7 +519,7 @@ impl<'source> Parser<'source> {
                     && !self.is_semicolon()
                     && self.has_tokens()
                 {
-                    let p = self.lexer.peek();
+                    let p = self.peek();
                     self.error(format!("expected newline or semicolon but found {:?}", p));
                 }
             } else if self.is_keyword(b"let") {
@@ -515,7 +538,7 @@ impl<'source> Parser<'source> {
 
                 if self.is_semicolon() {
                     // This is a statement, not an expression
-                    self.lexer.next();
+                    self.next();
                     code_body.push(self.create_node(
                         AstNode::Statement(expression),
                         span_start,
@@ -556,10 +579,9 @@ impl<'source> Parser<'source> {
 
     pub fn method_call(&mut self, span_start: usize, receiver: NodeId) -> NodeId {
         // Skip the dot
-        self.lexer.next();
+        self.next();
 
         let method_name = self
-            .lexer
             .next()
             .expect("internal error: missing token that was expected to be there");
         let name_start = method_name.span_start;
@@ -691,7 +713,7 @@ impl<'source> Parser<'source> {
 
         if self.is_dotdot() {
             // Range
-            self.lexer.next();
+            self.next();
 
             let rhs = self.simple_expression();
             let span_end = self.position();
@@ -705,16 +727,21 @@ impl<'source> Parser<'source> {
     }
 
     pub fn number(&mut self) -> NodeId {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token {
                 token_type: TokenType::Number,
                 span_start,
                 span_end,
-                contents,
             }) => {
-                self.lexer.next();
+                let span_start = *span_start;
+                let span_end = *span_end;
 
-                if contents.contains(&b'.') {
+                let contents = &self.delta.contents[span_start..span_end];
+                let is_float = contents.contains(&b'.');
+
+                self.next();
+
+                if is_float {
                     self.create_node(AstNode::Float, span_start, span_end)
                 } else {
                     self.create_node(AstNode::Int, span_start, span_end)
@@ -725,99 +752,105 @@ impl<'source> Parser<'source> {
     }
 
     pub fn boolean(&mut self) -> NodeId {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token {
                 token_type: TokenType::Name,
                 span_start,
                 span_end,
-                contents,
-            }) if contents == b"true" => {
-                self.lexer.next();
-                self.create_node(AstNode::True, span_start, span_end)
-            }
-            Some(Token {
-                token_type: TokenType::Name,
-                span_start,
-                span_end,
-                contents,
-            }) if contents == b"false" => {
-                self.lexer.next();
-                self.create_node(AstNode::False, span_start, span_end)
+            }) => {
+                let span_start = *span_start;
+                let span_end = *span_end;
+
+                let contents = &self.delta.contents[span_start..span_end];
+
+                if contents == b"true" {
+                    self.next();
+                    self.create_node(AstNode::True, span_start, span_end)
+                } else if contents == b"false" {
+                    self.next();
+                    self.create_node(AstNode::False, span_start, span_end)
+                } else {
+                    self.error("expected: boolean")
+                }
             }
             _ => self.error("expected: boolean"),
         }
     }
 
     pub fn operator(&mut self) -> NodeId {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token {
                 token_type,
                 span_start,
                 span_end,
                 ..
-            }) => match token_type {
-                TokenType::Plus => {
-                    self.lexer.next();
-                    self.create_node(AstNode::Plus, span_start, span_end)
+            }) => {
+                let span_start = *span_start;
+                let span_end = *span_end;
+                match token_type {
+                    TokenType::Plus => {
+                        self.next();
+                        self.create_node(AstNode::Plus, span_start, span_end)
+                    }
+                    TokenType::PlusPlus => {
+                        self.next();
+                        self.create_node(AstNode::Append, span_start, span_end)
+                    }
+                    TokenType::Dash => {
+                        self.next();
+                        self.create_node(AstNode::Minus, span_start, span_end)
+                    }
+                    TokenType::Asterisk => {
+                        self.next();
+                        self.create_node(AstNode::Multiply, span_start, span_end)
+                    }
+                    TokenType::ForwardSlash => {
+                        self.next();
+                        self.create_node(AstNode::Divide, span_start, span_end)
+                    }
+                    TokenType::LessThan => {
+                        self.next();
+                        self.create_node(AstNode::LessThan, span_start, span_end)
+                    }
+                    TokenType::LessThanEqual => {
+                        self.next();
+                        self.create_node(AstNode::LessThanOrEqual, span_start, span_end)
+                    }
+                    TokenType::GreaterThan => {
+                        self.next();
+                        self.create_node(AstNode::GreaterThan, span_start, span_end)
+                    }
+                    TokenType::GreaterThanEqual => {
+                        self.next();
+                        self.create_node(AstNode::GreaterThanOrEqual, span_start, span_end)
+                    }
+                    TokenType::EqualsEquals => {
+                        self.next();
+                        self.create_node(AstNode::Equal, span_start, span_end)
+                    }
+                    TokenType::ExclamationEquals => {
+                        self.next();
+                        self.create_node(AstNode::NotEqual, span_start, span_end)
+                    }
+                    TokenType::AsteriskAsterisk => {
+                        self.next();
+                        self.create_node(AstNode::Pow, span_start, span_end)
+                    }
+                    TokenType::AmpersandAmpersand => {
+                        self.next();
+                        self.create_node(AstNode::And, span_start, span_end)
+                    }
+                    TokenType::PipePipe => {
+                        self.next();
+                        self.create_node(AstNode::Or, span_start, span_end)
+                    }
+                    TokenType::Equals => {
+                        self.next();
+                        self.create_node(AstNode::Assignment, span_start, span_end)
+                    }
+                    _ => self.error("expected: operator"),
                 }
-                TokenType::PlusPlus => {
-                    self.lexer.next();
-                    self.create_node(AstNode::Append, span_start, span_end)
-                }
-                TokenType::Dash => {
-                    self.lexer.next();
-                    self.create_node(AstNode::Minus, span_start, span_end)
-                }
-                TokenType::Asterisk => {
-                    self.lexer.next();
-                    self.create_node(AstNode::Multiply, span_start, span_end)
-                }
-                TokenType::ForwardSlash => {
-                    self.lexer.next();
-                    self.create_node(AstNode::Divide, span_start, span_end)
-                }
-                TokenType::LessThan => {
-                    self.lexer.next();
-                    self.create_node(AstNode::LessThan, span_start, span_end)
-                }
-                TokenType::LessThanEqual => {
-                    self.lexer.next();
-                    self.create_node(AstNode::LessThanOrEqual, span_start, span_end)
-                }
-                TokenType::GreaterThan => {
-                    self.lexer.next();
-                    self.create_node(AstNode::GreaterThan, span_start, span_end)
-                }
-                TokenType::GreaterThanEqual => {
-                    self.lexer.next();
-                    self.create_node(AstNode::GreaterThanOrEqual, span_start, span_end)
-                }
-                TokenType::EqualsEquals => {
-                    self.lexer.next();
-                    self.create_node(AstNode::Equal, span_start, span_end)
-                }
-                TokenType::ExclamationEquals => {
-                    self.lexer.next();
-                    self.create_node(AstNode::NotEqual, span_start, span_end)
-                }
-                TokenType::AsteriskAsterisk => {
-                    self.lexer.next();
-                    self.create_node(AstNode::Pow, span_start, span_end)
-                }
-                TokenType::AmpersandAmpersand => {
-                    self.lexer.next();
-                    self.create_node(AstNode::And, span_start, span_end)
-                }
-                TokenType::PipePipe => {
-                    self.lexer.next();
-                    self.create_node(AstNode::Or, span_start, span_end)
-                }
-                TokenType::Equals => {
-                    self.lexer.next();
-                    self.create_node(AstNode::Assignment, span_start, span_end)
-                }
-                _ => self.error("expected: operator"),
-            },
+            }
             _ => self.error("expected: operator"),
         }
     }
@@ -831,14 +864,17 @@ impl<'source> Parser<'source> {
     }
 
     pub fn string(&mut self) -> NodeId {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token {
                 token_type: TokenType::String,
                 span_start,
                 span_end,
                 ..
             }) => {
-                self.lexer.next();
+                let span_start = *span_start;
+                let span_end = *span_end;
+
+                self.next();
                 self.create_node(AstNode::String, span_start, span_end)
             }
             _ => self.error("expected: string"),
@@ -846,14 +882,17 @@ impl<'source> Parser<'source> {
     }
 
     pub fn name(&mut self) -> NodeId {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token {
                 token_type: TokenType::Name,
                 span_start,
                 span_end,
                 ..
             }) => {
-                self.lexer.next();
+                let span_start = *span_start;
+                let span_end = *span_end;
+
+                self.next();
                 self.create_node(AstNode::Name, span_start, span_end)
             }
             _ => self.error("expect name"),
@@ -861,14 +900,17 @@ impl<'source> Parser<'source> {
     }
 
     pub fn typename(&mut self) -> NodeId {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token {
                 token_type: TokenType::Name,
                 span_start,
                 span_end,
                 ..
             }) => {
-                self.lexer.next();
+                let span_start = *span_start;
+                let span_end = *span_end;
+
+                self.next();
                 self.create_node(AstNode::Type, span_start, span_end)
             }
             _ => self.error("expect name"),
@@ -898,7 +940,7 @@ impl<'source> Parser<'source> {
             }
 
             if self.is_comma() {
-                self.lexer.next();
+                self.next();
                 continue;
             }
 
@@ -938,7 +980,7 @@ impl<'source> Parser<'source> {
                 args.push(self.expression());
 
                 if self.is_comma() {
-                    self.lexer.next();
+                    self.next();
                     continue;
                 } else if self.is_rparen() {
                     break;
@@ -964,7 +1006,7 @@ impl<'source> Parser<'source> {
         let then_block = self.block(true);
 
         let else_expression = if self.is_keyword(b"else") {
-            self.lexer.next();
+            self.next();
             Some(self.expression())
         } else {
             None
@@ -990,7 +1032,7 @@ impl<'source> Parser<'source> {
 
         if self.is_keyword(b"mut") {
             is_mutable = true;
-            self.lexer.next();
+            self.next();
         }
 
         let variable_name = self.variable();
@@ -1058,7 +1100,6 @@ impl<'source> Parser<'source> {
     pub fn variable(&mut self) -> NodeId {
         if self.is_name() {
             let name = self
-                .lexer
                 .next()
                 .expect("internal error: missing token that was expected to be there");
             let name_start = name.span_start;
@@ -1074,7 +1115,6 @@ impl<'source> Parser<'source> {
             let span_start = self.position();
 
             let name = self
-                .lexer
                 .next()
                 .expect("internal error: missing token that was expected to be there");
             let name_start = name.span_start;
@@ -1099,30 +1139,35 @@ impl<'source> Parser<'source> {
     }
 
     pub fn keyword(&mut self, keyword: &[u8]) {
-        match self.lexer.peek() {
-            Some(Token {
-                token_type: TokenType::Name,
-                contents,
-                ..
-            }) if contents == keyword => {
-                self.lexer.next();
-            }
-            _ => {
-                self.error(format!(
-                    "expected keyword: {}",
-                    String::from_utf8_lossy(keyword)
-                ));
+        if let Some(Token {
+            token_type: TokenType::Name,
+            span_start,
+            span_end,
+        }) = self.peek()
+        {
+            let span_start = *span_start;
+            let span_end = *span_end;
+
+            let contents = &self.delta.contents[span_start..span_end];
+
+            if contents == keyword {
+                self.next();
+                return;
             }
         }
+        self.error(format!(
+            "expected keyword: {}",
+            String::from_utf8_lossy(keyword)
+        ));
     }
 
     pub fn lparen(&mut self) {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token {
                 token_type: TokenType::LParen,
                 ..
             }) => {
-                self.lexer.next();
+                self.next();
             }
             _ => {
                 self.error("expected: left paren '('");
@@ -1131,12 +1176,12 @@ impl<'source> Parser<'source> {
     }
 
     pub fn rparen(&mut self) {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token {
                 token_type: TokenType::RParen,
                 ..
             }) => {
-                self.lexer.next();
+                self.next();
             }
             _ => {
                 self.error("expected: right paren ')'");
@@ -1145,12 +1190,12 @@ impl<'source> Parser<'source> {
     }
 
     pub fn lcurly(&mut self) {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token {
                 token_type: TokenType::LCurly,
                 ..
             }) => {
-                self.lexer.next();
+                self.next();
             }
             _ => {
                 self.error("expected: left bracket '{'");
@@ -1159,12 +1204,12 @@ impl<'source> Parser<'source> {
     }
 
     pub fn rcurly(&mut self) {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token {
                 token_type: TokenType::RCurly,
                 ..
             }) => {
-                self.lexer.next();
+                self.next();
             }
             _ => {
                 self.error("expected: right bracket '}'");
@@ -1173,12 +1218,12 @@ impl<'source> Parser<'source> {
     }
 
     pub fn equals(&mut self) {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token {
                 token_type: TokenType::Equals,
                 ..
             }) => {
-                self.lexer.next();
+                self.next();
             }
             _ => {
                 self.error("expected: equals '='");
@@ -1187,12 +1232,12 @@ impl<'source> Parser<'source> {
     }
 
     pub fn colon(&mut self) {
-        match self.lexer.peek() {
+        match self.peek() {
             Some(Token {
                 token_type: TokenType::Colon,
                 ..
             }) => {
-                self.lexer.next();
+                self.next();
             }
             _ => {
                 self.error("expected: colon ':'");
