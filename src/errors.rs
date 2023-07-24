@@ -1,9 +1,8 @@
-use crate::{parser::NodeId, Parser};
-
 #[derive(Debug)]
 pub struct ScriptError {
     pub message: String,
-    pub node_id: NodeId,
+    pub span_start: usize,
+    pub span_end: usize,
 }
 
 impl ScriptError {
@@ -15,24 +14,28 @@ impl ScriptError {
     // }
 }
 
-pub fn print_error(fname: &str, script_error: &ScriptError, parser: &Parser) {
-    let ScriptError { node_id, message } = script_error;
+pub fn print_error(fname: &str, script_error: &ScriptError, contents: &[u8]) {
+    let ScriptError {
+        message,
+        span_start,
+        span_end,
+    } = script_error;
 
-    let span_start = parser.results.span_start[node_id.0];
-    let span_end = parser.results.span_end[node_id.0];
+    let span_start = *span_start;
+    let span_end = *span_end;
 
     let filename = fname.to_string();
     let file_span_start = 0;
-    let file_span_end = parser.results.contents.len();
+    let file_span_end = contents.len();
 
     let (line_number, line_start, line_end) =
-        line_extents(parser, span_start, file_span_start, file_span_end);
+        line_extents(contents, span_start, file_span_start, file_span_end);
 
     let line_number_width = format!("{}", line_number).len();
 
     let max_number_width = if (line_end + 1) < file_span_end {
         let (next_line_number, _, _) =
-            line_extents(parser, line_end + 1, file_span_start, file_span_end);
+            line_extents(contents, line_end + 1, file_span_start, file_span_end);
         format!("{}", next_line_number).len()
     } else {
         line_number_width
@@ -51,7 +54,7 @@ pub fn print_error(fname: &str, script_error: &ScriptError, parser: &Parser) {
     // Previous line in the source code, if available
     if line_start > (file_span_start + 1) {
         let (prev_line_number, prev_line_start, prev_line_end) =
-            line_extents(parser, line_start - 1, file_span_start, file_span_end);
+            line_extents(contents, line_start - 1, file_span_start, file_span_end);
         let prev_line_number_str = format!("{}", prev_line_number);
 
         for _ in 0..(max_number_width - prev_line_number_str.len()) {
@@ -61,7 +64,7 @@ pub fn print_error(fname: &str, script_error: &ScriptError, parser: &Parser) {
         eprintln!(
             " {} │ {}",
             prev_line_number_str,
-            String::from_utf8_lossy(&parser.results.contents[prev_line_start..prev_line_end])
+            String::from_utf8_lossy(&contents[prev_line_start..prev_line_end])
         );
     }
 
@@ -73,7 +76,7 @@ pub fn print_error(fname: &str, script_error: &ScriptError, parser: &Parser) {
     eprintln!(
         " {} │ {}",
         line_number,
-        String::from_utf8_lossy(&parser.results.contents[line_start..line_end])
+        String::from_utf8_lossy(&contents[line_start..line_end])
     );
 
     for _ in 0..(max_number_width + 2) {
@@ -94,12 +97,12 @@ pub fn print_error(fname: &str, script_error: &ScriptError, parser: &Parser) {
     // Next line after error, for context
     if (line_end + 1) < file_span_end {
         let (next_line_number, next_line_start, next_line_end) =
-            line_extents(parser, line_end + 1, file_span_start, file_span_end);
+            line_extents(contents, line_end + 1, file_span_start, file_span_end);
 
         eprintln!(
             " {} │ {}",
             next_line_number,
-            String::from_utf8_lossy(&parser.results.contents[next_line_start..next_line_end])
+            String::from_utf8_lossy(&contents[next_line_start..next_line_end])
         );
     }
 
@@ -111,13 +114,11 @@ pub fn print_error(fname: &str, script_error: &ScriptError, parser: &Parser) {
 
 // line number, line start, line_end
 pub fn line_extents(
-    parser: &Parser,
+    contents: &[u8],
     span_position: usize,
     file_span_start: usize,
     file_span_end: usize,
 ) -> (usize, usize, usize) {
-    let contents = &parser.results.contents;
-
     let line_number = contents[0..span_position].split(|x| *x == b'\n').count();
 
     let mut line_start = span_position;

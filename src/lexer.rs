@@ -1,6 +1,9 @@
+use crate::errors::ScriptError;
+
 pub struct Lexer {
     source: Vec<u8>,
     span_offset: usize,
+    pub errors: Vec<ScriptError>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -40,6 +43,9 @@ pub enum TokenType {
     GreaterThanEqual,
     Ampersand,
     AmpersandAmpersand,
+
+    // Unknown token
+    Garbage,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -62,7 +68,16 @@ impl Lexer {
         Self {
             source,
             span_offset,
+            errors: vec![],
         }
+    }
+
+    pub fn error(&mut self, message: impl Into<String>, span_start: usize, span_end: usize) {
+        self.errors.push(ScriptError {
+            message: message.into(),
+            span_start,
+            span_end,
+        })
     }
 
     pub fn lex_quoted_string(&mut self) -> Option<Token> {
@@ -447,10 +462,19 @@ impl Lexer {
                 span_end: span_start + 1,
             },
             x => {
-                panic!(
-                    "Internal compiler error: symbol character mismatched in lexer: {}",
-                    x as char
-                )
+                self.error(
+                    format!(
+                        "Internal compiler error: symbol character mismatched in lexer: {}",
+                        x as char
+                    ),
+                    span_start,
+                    span_start + 1,
+                );
+                Token {
+                    token_type: TokenType::Garbage,
+                    span_start,
+                    span_end: span_start + 1,
+                }
             }
         };
 
@@ -496,7 +520,22 @@ impl Lexer {
             {
                 return self.lex_name();
             } else {
-                panic!("unsupported character: {}", self.source[self.span_offset])
+                let span_start = self.span_offset;
+                let span_end = self.span_offset + 1;
+                self.error(
+                    format!(
+                        "unsupported character: {}",
+                        self.source[self.span_offset] as char
+                    ),
+                    span_start,
+                    span_end,
+                );
+                self.span_offset += 1;
+                return Some(Token {
+                    token_type: TokenType::Garbage,
+                    span_start,
+                    span_end,
+                });
             }
         }
     }

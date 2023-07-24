@@ -109,10 +109,18 @@ impl TypeChecker {
         }
     }
 
-    pub fn error(&mut self, message: impl Into<String>, node_id: NodeId) {
+    pub fn error(
+        &mut self,
+        message: impl Into<String>,
+        node_id: NodeId,
+        parse_results: &ParseResults,
+    ) {
+        let span_start = parse_results.span_start[node_id.0];
+        let span_end = parse_results.span_end[node_id.0];
         self.errors.push(ScriptError {
             message: message.into(),
-            node_id,
+            span_start,
+            span_end,
         })
     }
 
@@ -168,6 +176,7 @@ impl TypeChecker {
                     _ => self.error(
                         format!("unknown type: {}", String::from_utf8_lossy(contents)),
                         node_id,
+                        parse_results,
                     ),
                 }
             }
@@ -203,7 +212,11 @@ impl TypeChecker {
             AstNode::Call { head, args } => {
                 self.typecheck_call(*head, args, node_id, parse_results)
             }
-            _ => self.error("unsupported ast node in typechecker", node_id),
+            _ => self.error(
+                "unsupported ast node in typechecker",
+                node_id,
+                parse_results,
+            ),
         }
     }
 
@@ -231,7 +244,11 @@ impl TypeChecker {
 
             // TODO make this a compatibility check rather than equality check
             if self.node_types[ty.0] != self.node_types[initializer.0] {
-                self.error("initializer does not match declared type", initializer)
+                self.error(
+                    "initializer does not match declared type",
+                    initializer,
+                    parse_results,
+                )
             }
         }
 
@@ -253,7 +270,7 @@ impl TypeChecker {
         let condition_ty = self.node_types[condition.0];
 
         if condition_ty != BOOL_TYPE {
-            self.error("expected bool for if condition", condition);
+            self.error("expected bool for if condition", condition, parse_results);
         }
 
         self.typecheck_node(then_block, parse_results);
@@ -264,7 +281,11 @@ impl TypeChecker {
             let else_ty = self.node_types[else_expression.0];
 
             if then_ty != else_ty {
-                self.error("then and else output different types", else_expression)
+                self.error(
+                    "then and else output different types",
+                    else_expression,
+                    parse_results,
+                )
             }
         }
 
@@ -282,7 +303,11 @@ impl TypeChecker {
         let condition_ty = self.node_types[condition.0];
 
         if condition_ty != BOOL_TYPE {
-            self.error("expected bool for while condition", condition);
+            self.error(
+                "expected bool for while condition",
+                condition,
+                parse_results,
+            );
         }
 
         self.typecheck_node(block, parse_results);
@@ -338,10 +363,14 @@ impl TypeChecker {
             AstNode::Assignment => {
                 // FIXME: replace with compatibility check rather than an equality check
                 if lhs_ty != rhs_ty {
-                    self.error("mismatched types during assignment", node_id)
+                    self.error("mismatched types during assignment", node_id, parse_results)
                 }
                 if !matches!(lhs, AstNode::Variable) {
-                    self.error("assignment should use a variable on the left side", node_id)
+                    self.error(
+                        "assignment should use a variable on the left side",
+                        node_id,
+                        parse_results,
+                    )
                 }
                 self.node_types[node_id.0] = VOID_TYPE;
             }
@@ -354,7 +383,7 @@ impl TypeChecker {
                 {
                     self.node_types[node_id.0] = BOOL_TYPE;
                 } else {
-                    self.error("mismatch types for operation", node_id)
+                    self.error("mismatch types for operation", node_id, parse_results)
                 }
             }
             AstNode::Equal | AstNode::NotEqual => {
@@ -366,7 +395,7 @@ impl TypeChecker {
                 } else if lhs_ty == F64_TYPE && rhs_ty == F64_TYPE {
                     self.node_types[node_id.0] = F64_TYPE;
                 } else {
-                    self.error("mismatch types for operation", node_id)
+                    self.error("mismatch types for operation", node_id, parse_results)
                 }
             }
         }
@@ -456,10 +485,18 @@ impl TypeChecker {
             }
 
             let name = String::from_utf8_lossy(call_name);
-            self.error(format!("could not resolve call to {}", name), node_id)
+            self.error(
+                format!("could not resolve call to {}", name),
+                node_id,
+                parse_results,
+            )
         } else {
             let name = String::from_utf8_lossy(call_name);
-            self.error(format!("unknown function '{}'", name), node_id)
+            self.error(
+                format!("unknown function '{}'", name),
+                node_id,
+                parse_results,
+            )
         }
     }
 
@@ -482,7 +519,7 @@ impl TypeChecker {
             self.variable_def.insert(unbound_node_id, node_id);
             self.node_types[unbound_node_id.0] = self.node_types[node_id.0];
         } else {
-            self.error("variable not found", unbound_node_id)
+            self.error("variable not found", unbound_node_id, parse_results)
         }
     }
 
