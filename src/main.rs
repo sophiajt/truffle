@@ -56,6 +56,14 @@ fn compile_line(
     let mut lexer = Lexer::new(line.as_bytes().to_vec(), 0);
 
     let tokens = lexer.lex();
+
+    if !lexer.errors.is_empty() {
+        for err in &lexer.errors {
+            print_error(fname, err, line.as_bytes())
+        }
+        return None;
+    }
+
     let mut parser = Parser::new(tokens, line.as_bytes().to_vec(), 0);
 
     if debug_output {
@@ -66,7 +74,7 @@ fn compile_line(
 
     if !parser.errors.is_empty() {
         for err in &parser.errors {
-            print_error(fname, err, &parser)
+            print_error(fname, err, line.as_bytes())
         }
         return None;
     }
@@ -83,7 +91,7 @@ fn compile_line(
 
     if !typechecker.errors.is_empty() {
         for err in &typechecker.errors {
-            print_error(fname, err, &parser)
+            print_error(fname, err, line.as_bytes())
         }
         return None;
     }

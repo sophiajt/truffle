@@ -462,7 +462,8 @@ impl Parser {
             self.errors.push(ScriptError {
                 message: message.into(),
 
-                node_id,
+                span_start,
+                span_end,
             });
 
             node_id
@@ -471,8 +472,8 @@ impl Parser {
                 self.create_node(AstNode::Garbage, self.content_length, self.content_length);
             self.errors.push(ScriptError {
                 message: message.into(),
-
-                node_id,
+                span_start: self.content_length,
+                span_end: self.content_length,
             });
 
             node_id
