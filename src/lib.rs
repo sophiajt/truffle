@@ -11,7 +11,7 @@ pub use crate::codegen::Translater;
 
 pub use crate::{
     codegen::FunctionCodegen,
-    errors::print_error,
+    errors::{print_error, ScriptError},
     eval::Evaluator,
     lexer::Lexer,
     parser::Parser,

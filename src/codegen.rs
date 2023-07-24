@@ -578,7 +578,7 @@ impl Translater {
         typechecker: &TypeChecker,
     ) -> RegisterId {
         let def_site = typechecker
-            .variable_def
+            .variable_def_site
             .get(&variable_name)
             .expect("internal error: resolved variable not found");
 
