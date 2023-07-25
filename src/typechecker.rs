@@ -43,6 +43,11 @@ pub struct ExternalFunctionId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FunctionId(pub usize);
 
+pub struct Variable {
+    type_id: TypeId,
+    is_mutable: bool,
+}
+
 #[derive(Default)]
 pub struct TypeChecker {
     // Used by TypeId
@@ -58,7 +63,10 @@ pub struct TypeChecker {
     pub node_types: Vec<TypeId>,
 
     // Bindings from use to def
-    pub variable_def: HashMap<NodeId, NodeId>,
+    pub variable_def_site: HashMap<NodeId, NodeId>,
+
+    // Mapping betwen definition node id and the full variable definition
+    pub variable_info: HashMap<NodeId, Variable>,
 
     // List of all registered functions
     pub functions: Vec<ExternalFnRecord>,
@@ -98,7 +106,8 @@ impl TypeChecker {
             errors: vec![],
 
             node_types: vec![],
-            variable_def: HashMap::new(),
+            variable_def_site: HashMap::new(),
+            variable_info: HashMap::new(),
 
             call_resolution: HashMap::new(),
             external_functions: HashMap::new(),
@@ -147,7 +156,6 @@ impl TypeChecker {
                 self.typecheck_node(*node, parse_results);
                 self.node_types[node_id.0] = VOID_TYPE;
             }
-
             AstNode::Block(nodes) => {
                 if nodes.is_empty() {
                     self.node_types[node_id.0] = VOID_TYPE;
@@ -184,8 +192,15 @@ impl TypeChecker {
                 variable_name,
                 ty,
                 initializer,
-                ..
-            } => self.typecheck_let(*variable_name, *ty, *initializer, node_id, parse_results),
+                is_mutable,
+            } => self.typecheck_let(
+                *variable_name,
+                *ty,
+                *initializer,
+                *is_mutable,
+                node_id,
+                parse_results,
+            ),
             AstNode::Variable => self.resolve_variable(node_id, parse_results),
             AstNode::If {
                 condition,
@@ -234,6 +249,7 @@ impl TypeChecker {
         variable_name: NodeId,
         ty: Option<NodeId>,
         initializer: NodeId,
+        is_mutable: bool,
         node_id: NodeId,
         parse_results: &ParseResults,
     ) {
@@ -252,7 +268,16 @@ impl TypeChecker {
             }
         }
 
-        self.define_variable(variable_name, parse_results);
+        self.define_variable(
+            variable_name,
+            if let Some(ty) = ty {
+                self.node_types[ty.0]
+            } else {
+                self.node_types[initializer.0]
+            },
+            is_mutable,
+            parse_results,
+        );
 
         self.node_types[variable_name.0] = self.node_types[initializer.0];
 
@@ -356,18 +381,36 @@ impl TypeChecker {
 
         let lhs_ty = self.node_types[lhs.0];
         let rhs_ty = self.node_types[rhs.0];
-        let lhs = &parse_results.ast_nodes[lhs.0];
-        let op = &parse_results.ast_nodes[op.0];
+        let lhs_ast = &parse_results.ast_nodes[lhs.0];
+        let op_ast = &parse_results.ast_nodes[op.0];
 
-        match op {
+        match op_ast {
             AstNode::Assignment => {
                 // FIXME: replace with compatibility check rather than an equality check
                 if lhs_ty != rhs_ty {
                     self.error("mismatched types during assignment", node_id, parse_results)
                 }
-                if !matches!(lhs, AstNode::Variable) {
+                if !matches!(lhs_ast, AstNode::Variable) {
                     self.error(
                         "assignment should use a variable on the left side",
+                        node_id,
+                        parse_results,
+                    )
+                } else if let Some(definition_id) = self.variable_def_site.get(&lhs) {
+                    if let Some(variable) = self.variable_info.get(definition_id) {
+                        if !variable.is_mutable {
+                            self.error("assignment to immutable variable", lhs, parse_results)
+                        }
+                    } else {
+                        self.error(
+                            "internal error: resolved variable missing variable information",
+                            node_id,
+                            parse_results,
+                        )
+                    }
+                } else {
+                    self.error(
+                        "internal error: variable not resolved to a variable definition",
                         node_id,
                         parse_results,
                     )
@@ -500,7 +543,13 @@ impl TypeChecker {
         }
     }
 
-    pub fn define_variable(&mut self, variable_name_node_id: NodeId, parse_results: &ParseResults) {
+    pub fn define_variable(
+        &mut self,
+        variable_name_node_id: NodeId,
+        type_id: TypeId,
+        is_mutable: bool,
+        parse_results: &ParseResults,
+    ) {
         let variable_name = &parse_results.contents[parse_results.span_start
             [variable_name_node_id.0]
             ..parse_results.span_end[variable_name_node_id.0]];
@@ -509,6 +558,14 @@ impl TypeChecker {
             .expect("internal error: missing expected scope frame")
             .variables
             .insert(variable_name.to_vec(), variable_name_node_id);
+
+        self.variable_info.insert(
+            variable_name_node_id,
+            Variable {
+                type_id,
+                is_mutable,
+            },
+        );
     }
 
     pub fn resolve_variable(&mut self, unbound_node_id: NodeId, parse_results: &ParseResults) {
@@ -516,8 +573,16 @@ impl TypeChecker {
             ..parse_results.span_end[unbound_node_id.0]];
 
         if let Some(node_id) = self.find_variable(variable_name) {
-            self.variable_def.insert(unbound_node_id, node_id);
-            self.node_types[unbound_node_id.0] = self.node_types[node_id.0];
+            self.variable_def_site.insert(unbound_node_id, node_id);
+            if let Some(variable) = self.variable_info.get(&node_id) {
+                self.node_types[unbound_node_id.0] = variable.type_id;
+            } else {
+                self.error(
+                    "internal error: resolved variable missing variable information",
+                    unbound_node_id,
+                    parse_results,
+                )
+            }
         } else {
             self.error("variable not found", unbound_node_id, parse_results)
         }

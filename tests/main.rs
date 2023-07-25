@@ -57,3 +57,11 @@ fn external_call() {
     assert_eq!(eval_source("add(3, 4)"), 7);
     assert_eq!(eval_source_into_float("add(6.0, 3.0)"), 9.0);
 }
+
+#[test]
+fn typecheck_errors() {
+    assert!(error_contains(
+        &compile_to_error("let x = 123; x = 4566"),
+        "assignment to immutable variable"
+    ))
+}
