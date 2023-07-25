@@ -432,6 +432,17 @@ impl TypeChecker {
             AstNode::Equal | AstNode::NotEqual => {
                 self.node_types[node_id.0] = BOOL_TYPE;
             }
+            AstNode::And | AstNode::Or => {
+                if lhs_ty == BOOL_TYPE && rhs_ty == BOOL_TYPE {
+                    self.node_types[node_id.0] = BOOL_TYPE;
+                } else {
+                    self.error(
+                        "boolean operator expects boolean types",
+                        node_id,
+                        parse_results,
+                    )
+                }
+            }
             _ => {
                 if lhs_ty == I64_TYPE && rhs_ty == I64_TYPE {
                     self.node_types[node_id.0] = I64_TYPE;

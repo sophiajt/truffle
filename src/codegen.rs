@@ -540,19 +540,118 @@ impl Translater {
         parse_results: &ParseResults,
         typechecker: &TypeChecker,
     ) -> RegisterId {
-        let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
-        let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
-
         match parse_results.ast_nodes[op.0] {
-            AstNode::Plus => builder.add(lhs, rhs),
-            AstNode::Minus => builder.sub(lhs, rhs),
-            AstNode::Multiply => builder.mul(lhs, rhs),
-            AstNode::Divide => builder.div(lhs, rhs),
-            AstNode::LessThan => builder.lt(lhs, rhs),
-            AstNode::LessThanOrEqual => builder.lte(lhs, rhs),
-            AstNode::GreaterThan => builder.gt(lhs, rhs),
-            AstNode::GreaterThanOrEqual => builder.gte(lhs, rhs),
-            AstNode::Assignment => builder.mov(lhs, rhs),
+            AstNode::Plus => {
+                let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
+                let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
+                builder.add(lhs, rhs)
+            }
+            AstNode::Minus => {
+                let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
+                let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
+                builder.sub(lhs, rhs)
+            }
+            AstNode::Multiply => {
+                let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
+                let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
+                builder.mul(lhs, rhs)
+            }
+            AstNode::Divide => {
+                let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
+                let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
+                builder.div(lhs, rhs)
+            }
+            AstNode::LessThan => {
+                let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
+                let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
+                builder.lt(lhs, rhs)
+            }
+            AstNode::LessThanOrEqual => {
+                let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
+                let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
+                builder.lte(lhs, rhs)
+            }
+            AstNode::GreaterThan => {
+                let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
+                let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
+                builder.gt(lhs, rhs)
+            }
+            AstNode::GreaterThanOrEqual => {
+                let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
+                let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
+                builder.gte(lhs, rhs)
+            }
+            AstNode::Assignment => {
+                let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
+                let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
+                builder.mov(lhs, rhs)
+            }
+            AstNode::And => {
+                // Note: we can't pre-translate lhs and rhs because
+                // we need to have boolean shortcircuiting
+                let output = builder.new_register(BOOL_TYPE);
+
+                let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
+
+                let brif_location = builder.next_position();
+                builder.brif(output, lhs, InstructionId(0), InstructionId(0));
+
+                let true_branch = InstructionId(builder.next_position());
+                let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
+                builder.mov(output, rhs);
+
+                let jmp_location = builder.next_position();
+                builder.jmp(InstructionId(0));
+
+                let false_branch = InstructionId(builder.next_position());
+                let false_const = builder.bool_const(false);
+                builder.mov(output, false_const);
+
+                let after_false_branch = builder.next_position();
+                builder.instructions[jmp_location] =
+                    Instruction::JMP(InstructionId(after_false_branch));
+
+                builder.instructions[brif_location] = Instruction::BRIF {
+                    condition: lhs,
+                    then_branch: true_branch,
+                    else_branch: false_branch,
+                };
+
+                output
+            }
+            AstNode::Or => {
+                // Note: we can't pre-translate lhs and rhs because
+                // we need to have boolean shortcircuiting
+                let output = builder.new_register(BOOL_TYPE);
+
+                let lhs = self.translate_node(builder, lhs, parse_results, typechecker);
+
+                let brif_location = builder.next_position();
+                builder.brif(output, lhs, InstructionId(0), InstructionId(0));
+
+                let true_branch = InstructionId(builder.next_position());
+                let true_const = builder.bool_const(true);
+                builder.mov(output, true_const);
+
+                let jmp_location = builder.next_position();
+                builder.jmp(InstructionId(0));
+
+                let false_branch = InstructionId(builder.next_position());
+                let rhs = self.translate_node(builder, rhs, parse_results, typechecker);
+                builder.mov(output, rhs);
+
+                let after_false_branch = builder.next_position();
+                builder.instructions[jmp_location] =
+                    Instruction::JMP(InstructionId(after_false_branch));
+
+                builder.instructions[brif_location] = Instruction::BRIF {
+                    condition: lhs,
+                    then_branch: true_branch,
+                    else_branch: false_branch,
+                };
+
+                output
+            }
             _ => panic!("unsupported operation"),
         }
     }
