@@ -20,6 +20,7 @@ pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
     register_fn!(typechecker, "print", print::<String>);
     register_fn!(typechecker, "add", add::<i64>);
     register_fn!(typechecker, "add", add::<f64>);
+    register_fn!(typechecker, "test_async_fn", test_async_fn);
 
     typechecker.typecheck()?;
 
@@ -77,4 +78,8 @@ pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
 #[allow(unused)]
 pub fn print<T: std::fmt::Display>(value: T) {
     println!("value: {value}")
+}
+
+pub fn test_async_fn() -> i64 {
+    42
 }

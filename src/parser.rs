@@ -79,6 +79,10 @@ pub enum AstNode {
         head: NodeId,
         args: Vec<NodeId>,
     },
+    AsyncCall {
+        head: NodeId,
+        args: Vec<NodeId>,
+    },
     BinaryOp {
         lhs: NodeId,
         op: NodeId,
@@ -145,6 +149,14 @@ impl Parser {
         }
     }
 
+    fn crimes(&self) -> Option<Token> {
+        if self.current_token < self.tokens.len() {
+            Some(self.tokens[self.current_token])
+        } else {
+            None
+        }
+    }
+
     fn next(&mut self) -> Option<Token> {
         if self.current_token < self.tokens.len() {
             self.current_token += 1;
@@ -177,6 +189,10 @@ impl Parser {
 
     pub fn has_tokens(&mut self) -> bool {
         self.peek().is_some()
+    }
+
+    pub fn is_awaited(&mut self) -> bool {
+        todo!()
     }
 
     pub fn is_operator(&mut self) -> bool {
@@ -590,6 +606,7 @@ impl Parser {
             .expect("internal error: missing token that was expected to be there");
         let name_start = method_name.span_start;
         let name_end = method_name.span_end;
+        dbg!(std::str::from_utf8(&self.results.contents[name_start..name_end]).unwrap());
         let head = self.create_node(AstNode::Name, name_start, name_end);
 
         self.lparen();
@@ -598,7 +615,12 @@ impl Parser {
         self.rparen();
 
         let span_end = self.position();
-        self.create_node(AstNode::Call { head, args }, span_start, span_end)
+
+        if self.is_awaited() {
+            self.create_node(AstNode::AsyncCall { head, args }, span_start, span_end)
+        } else {
+            self.create_node(AstNode::Call { head, args }, span_start, span_end)
+        }
     }
 
     pub fn expression(&mut self) -> NodeId {
