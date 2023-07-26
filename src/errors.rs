@@ -1,17 +1,8 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ScriptError {
     pub message: String,
     pub span_start: usize,
     pub span_end: usize,
-}
-
-impl ScriptError {
-    // pub fn new(message: impl Into<String>, node_id: NodeId) -> ScriptError {
-    //     ScriptError {
-    //         message: message.into(),
-    //         node_id,
-    //     }
-    // }
 }
 
 pub fn print_error(fname: &str, script_error: &ScriptError, contents: &[u8]) {

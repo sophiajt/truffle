@@ -2,8 +2,9 @@ use std::any::Any;
 
 use crate::{
     codegen::{FunctionCodegen, Instruction, InstructionId, RegisterId},
+    parser::NodeId,
     typechecker::{ExternalFnRecord, ExternalFunctionId, Function, FunctionId},
-    TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, VOID_TYPE,
+    ScriptError, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, VOID_TYPE,
 };
 
 #[derive(Clone)]
@@ -16,13 +17,26 @@ pub struct StackFrame {
 #[derive(Default)]
 pub struct Evaluator {
     pub instructions: Vec<Instruction>,
+    pub source_map: Vec<NodeId>,
     pub current_frame: usize,
+
+    pub span_start: Vec<usize>,
+    pub span_end: Vec<usize>,
 
     // Indexed by FunctionId
     pub functions: Vec<StackFrame>,
 
     // The live stack frames during evaluation
     pub stack_frames: Vec<StackFrame>,
+}
+
+#[derive(PartialEq, Debug)]
+pub enum ReturnValue {
+    I64(i64),
+    F64(f64),
+    Bool(bool),
+    Custom { value: i64, type_id: TypeId },
+    Error(ScriptError),
 }
 
 impl Evaluator {
@@ -35,6 +49,11 @@ impl Evaluator {
             instruction_pointer: InstructionId(function_entry),
         };
         self.instructions.append(&mut function_codegen.instructions);
+        self.source_map.append(&mut function_codegen.source_map);
+
+        self.span_start = function_codegen.span_start;
+        self.span_end = function_codegen.span_end;
+
         self.functions.push(stack_frame);
     }
 
@@ -43,7 +62,7 @@ impl Evaluator {
         &mut self,
         starting_function: FunctionId,
         external_functions: &[ExternalFnRecord],
-    ) -> (i64, TypeId) {
+    ) -> ReturnValue {
         self.current_frame = self.stack_frames.len();
         self.stack_frames
             .push(self.functions[starting_function.0].clone());
@@ -61,7 +80,7 @@ impl Evaluator {
         &mut self,
         starting_function: FunctionId,
         external_functions: &[ExternalFnRecord],
-    ) -> (i64, TypeId) {
+    ) -> ReturnValue {
         self.current_frame = self.stack_frames.len();
         self.stack_frames
             .push(self.functions[starting_function.0].clone());
@@ -91,7 +110,7 @@ impl Evaluator {
         &mut self,
         instruction_pointer: &mut usize,
         external_functions: &[ExternalFnRecord],
-    ) -> Option<(i64, TypeId)> {
+    ) -> Option<ReturnValue> {
         match &self.instructions[*instruction_pointer] {
             Instruction::IADD { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0] =
@@ -115,6 +134,11 @@ impl Evaluator {
                 *instruction_pointer += 1;
             }
             Instruction::IDIV { lhs, rhs, target } => {
+                if self.stack_frames[self.current_frame].register_values[rhs.0] == 0 {
+                    return Some(ReturnValue::Error(
+                        self.error("division by zero", self.source_map[*instruction_pointer]),
+                    ));
+                }
                 self.stack_frames[self.current_frame].register_values[target.0] =
                     self.stack_frames[self.current_frame].register_values[lhs.0]
                         / self.stack_frames[self.current_frame].register_values[rhs.0];
@@ -305,10 +329,29 @@ impl Evaluator {
                     *instruction_pointer =
                         self.stack_frames[self.current_frame].instruction_pointer.0;
                 } else {
-                    return Some((
-                        self.stack_frames[self.current_frame].register_values[0],
-                        self.stack_frames[self.current_frame].register_types[0],
-                    ));
+                    match self.stack_frames[self.current_frame].register_types[0] {
+                        BOOL_TYPE => {
+                            return Some(ReturnValue::Bool(
+                                self.stack_frames[self.current_frame].register_values[0] != 0,
+                            ))
+                        }
+                        I64_TYPE => {
+                            return Some(ReturnValue::I64(
+                                self.stack_frames[self.current_frame].register_values[0],
+                            ))
+                        }
+                        F64_TYPE => {
+                            return Some(ReturnValue::F64(f64::from_bits(
+                                self.stack_frames[self.current_frame].register_values[0] as u64,
+                            )))
+                        }
+                        _ => {
+                            return Some(ReturnValue::Custom {
+                                value: self.stack_frames[self.current_frame].register_values[0],
+                                type_id: self.stack_frames[self.current_frame].register_types[0],
+                            })
+                        }
+                    }
                 }
             }
             _ => {
@@ -484,6 +527,17 @@ impl Evaluator {
 
     pub fn is_user_type(&self, register_id: RegisterId) -> bool {
         self.stack_frames[self.current_frame].register_types[register_id.0].0 > BOOL_TYPE.0
+    }
+
+    pub fn error(&self, msg: impl Into<String>, node_id: NodeId) -> ScriptError {
+        let span_start = self.span_start[node_id.0];
+        let span_end = self.span_end[node_id.0];
+
+        ScriptError {
+            message: msg.into(),
+            span_start,
+            span_end,
+        }
     }
 }
 

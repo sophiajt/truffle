@@ -48,7 +48,6 @@ pub struct Variable {
     is_mutable: bool,
 }
 
-#[derive(Default)]
 pub struct TypeChecker {
     // Used by TypeId
     pub types: Vec<std::any::TypeId>,
@@ -61,6 +60,9 @@ pub struct TypeChecker {
 
     // Based on NodeId
     pub node_types: Vec<TypeId>,
+
+    // Parser results to refer to
+    pub parse_results: ParseResults,
 
     // Bindings from use to def
     pub variable_def_site: HashMap<NodeId, NodeId>,
@@ -88,7 +90,7 @@ pub const BOOL_TYPE: TypeId = TypeId(3);
 // PLEASE NOTE: BOOL_TYPE is considered last and any type after this is considered a user-defined datatype
 
 impl TypeChecker {
-    pub fn new() -> Self {
+    pub fn new(parse_results: ParseResults) -> Self {
         Self {
             types: vec![
                 std::any::TypeId::of::<()>(),
@@ -105,6 +107,8 @@ impl TypeChecker {
             reference_of_map: HashMap::new(),
             errors: vec![],
 
+            parse_results,
+
             node_types: vec![],
             variable_def_site: HashMap::new(),
             variable_info: HashMap::new(),
@@ -118,14 +122,10 @@ impl TypeChecker {
         }
     }
 
-    pub fn error(
-        &mut self,
-        message: impl Into<String>,
-        node_id: NodeId,
-        parse_results: &ParseResults,
-    ) {
-        let span_start = parse_results.span_start[node_id.0];
-        let span_end = parse_results.span_end[node_id.0];
+    pub fn error(&mut self, message: impl Into<String>, node_id: NodeId) {
+        let span_start = self.parse_results.span_start[node_id.0];
+        let span_end = self.parse_results.span_end[node_id.0];
+
         self.errors.push(ScriptError {
             message: message.into(),
             span_start,
@@ -141,8 +141,8 @@ impl TypeChecker {
         }
     }
 
-    pub fn typecheck_node(&mut self, node_id: NodeId, parse_results: &ParseResults) {
-        match &parse_results.ast_nodes[node_id.0] {
+    pub fn typecheck_node(&mut self, node_id: NodeId) {
+        match &self.parse_results.ast_nodes[node_id.0] {
             AstNode::Int => {
                 self.node_types[node_id.0] = I64_TYPE;
             }
@@ -150,21 +150,24 @@ impl TypeChecker {
                 self.node_types[node_id.0] = F64_TYPE;
             }
             AstNode::BinaryOp { lhs, op, rhs } => {
-                self.typecheck_binop(*lhs, *op, *rhs, node_id, parse_results);
+                self.typecheck_binop(*lhs, *op, *rhs, node_id);
             }
             AstNode::Statement(node) => {
-                self.typecheck_node(*node, parse_results);
+                self.typecheck_node(*node);
                 self.node_types[node_id.0] = VOID_TYPE;
             }
             AstNode::Block(nodes) => {
                 if nodes.is_empty() {
                     self.node_types[node_id.0] = VOID_TYPE;
                 } else {
+                    // FIXME: clone to get around ownership issue
+                    let nodes = nodes.clone();
+
                     self.enter_scope();
                     // FIXME: grab the last one if it's an expression
                     let mut type_id = VOID_TYPE;
                     for node_id in nodes {
-                        self.typecheck_node(*node_id, parse_results);
+                        self.typecheck_node(node_id);
 
                         type_id = self.node_types[node_id.0];
                     }
@@ -173,10 +176,10 @@ impl TypeChecker {
                 }
             }
             AstNode::Type => {
-                let span_start = parse_results.span_start[node_id.0];
-                let span_end = parse_results.span_end[node_id.0];
+                let span_start = self.parse_results.span_start[node_id.0];
+                let span_end = self.parse_results.span_end[node_id.0];
 
-                let contents = &parse_results.contents[span_start..span_end];
+                let contents = &self.parse_results.contents[span_start..span_end];
 
                 match contents {
                     b"i64" => self.node_types[node_id.0] = I64_TYPE,
@@ -184,7 +187,6 @@ impl TypeChecker {
                     _ => self.error(
                         format!("unknown type: {}", String::from_utf8_lossy(contents)),
                         node_id,
-                        parse_results,
                     ),
                 }
             }
@@ -193,28 +195,15 @@ impl TypeChecker {
                 ty,
                 initializer,
                 is_mutable,
-            } => self.typecheck_let(
-                *variable_name,
-                *ty,
-                *initializer,
-                *is_mutable,
-                node_id,
-                parse_results,
-            ),
-            AstNode::Variable => self.resolve_variable(node_id, parse_results),
+            } => self.typecheck_let(*variable_name, *ty, *initializer, *is_mutable, node_id),
+            AstNode::Variable => self.resolve_variable(node_id),
             AstNode::If {
                 condition,
                 then_block,
                 else_expression,
-            } => self.typecheck_if(
-                *condition,
-                *then_block,
-                *else_expression,
-                node_id,
-                parse_results,
-            ),
+            } => self.typecheck_if(*condition, *then_block, *else_expression, node_id),
             AstNode::While { condition, block } => {
-                self.typecheck_while(*condition, *block, node_id, parse_results)
+                self.typecheck_while(*condition, *block, node_id)
             }
             // AstNode::For {
             //     variable,
@@ -225,22 +214,19 @@ impl TypeChecker {
             AstNode::False => self.node_types[node_id.0] = BOOL_TYPE,
             // AstNode::Range { lhs, rhs } => self.typecheck_range(*lhs, *rhs, node_id, parse_results),
             AstNode::Call { head, args } => {
-                self.typecheck_call(*head, args, node_id, parse_results)
+                // FIXME: clone to get around ownership issue
+                self.typecheck_call(*head, &args.clone(), node_id)
             }
-            _ => self.error(
-                "unsupported ast node in typechecker",
-                node_id,
-                parse_results,
-            ),
+            _ => self.error("unsupported ast node in typechecker", node_id),
         }
     }
 
-    pub fn typecheck(&mut self, parse_results: &ParseResults) {
-        if !parse_results.ast_nodes.is_empty() {
-            self.node_types = vec![VOID_TYPE; parse_results.ast_nodes.len()];
+    pub fn typecheck(&mut self) {
+        if !self.parse_results.ast_nodes.is_empty() {
+            self.node_types = vec![VOID_TYPE; self.parse_results.ast_nodes.len()];
 
-            let last = parse_results.ast_nodes.len() - 1;
-            self.typecheck_node(NodeId(last), parse_results)
+            let last = self.parse_results.ast_nodes.len() - 1;
+            self.typecheck_node(NodeId(last))
         }
     }
 
@@ -251,20 +237,15 @@ impl TypeChecker {
         initializer: NodeId,
         is_mutable: bool,
         node_id: NodeId,
-        parse_results: &ParseResults,
     ) {
-        self.typecheck_node(initializer, parse_results);
+        self.typecheck_node(initializer);
 
         if let Some(ty) = ty {
-            self.typecheck_node(ty, parse_results);
+            self.typecheck_node(ty);
 
             // TODO make this a compatibility check rather than equality check
             if self.node_types[ty.0] != self.node_types[initializer.0] {
-                self.error(
-                    "initializer does not match declared type",
-                    initializer,
-                    parse_results,
-                )
+                self.error("initializer does not match declared type", initializer)
             }
         }
 
@@ -276,7 +257,6 @@ impl TypeChecker {
                 self.node_types[initializer.0]
             },
             is_mutable,
-            parse_results,
         );
 
         self.node_types[variable_name.0] = self.node_types[initializer.0];
@@ -289,53 +269,38 @@ impl TypeChecker {
         then_block: NodeId,
         else_expression: Option<NodeId>,
         node_id: NodeId,
-        parse_results: &ParseResults,
     ) {
-        self.typecheck_node(condition, parse_results);
+        self.typecheck_node(condition);
         let condition_ty = self.node_types[condition.0];
 
         if condition_ty != BOOL_TYPE {
-            self.error("expected bool for if condition", condition, parse_results);
+            self.error("expected bool for if condition", condition);
         }
 
-        self.typecheck_node(then_block, parse_results);
+        self.typecheck_node(then_block);
         let then_ty = self.node_types[then_block.0];
 
         if let Some(else_expression) = else_expression {
-            self.typecheck_node(else_expression, parse_results);
+            self.typecheck_node(else_expression);
             let else_ty = self.node_types[else_expression.0];
 
             if then_ty != else_ty {
-                self.error(
-                    "then and else output different types",
-                    else_expression,
-                    parse_results,
-                )
+                self.error("then and else output different types", else_expression)
             }
         }
 
         self.node_types[node_id.0] = then_ty
     }
 
-    pub fn typecheck_while(
-        &mut self,
-        condition: NodeId,
-        block: NodeId,
-        node_id: NodeId,
-        parse_results: &ParseResults,
-    ) {
-        self.typecheck_node(condition, parse_results);
+    pub fn typecheck_while(&mut self, condition: NodeId, block: NodeId, node_id: NodeId) {
+        self.typecheck_node(condition);
         let condition_ty = self.node_types[condition.0];
 
         if condition_ty != BOOL_TYPE {
-            self.error(
-                "expected bool for while condition",
-                condition,
-                parse_results,
-            );
+            self.error("expected bool for while condition", condition);
         }
 
-        self.typecheck_node(block, parse_results);
+        self.typecheck_node(block);
 
         self.node_types[node_id.0] = VOID_TYPE;
     }
@@ -374,45 +339,39 @@ impl TypeChecker {
         op: NodeId,
         rhs: NodeId,
         node_id: NodeId, // whole expression NodeId
-        parse_results: &ParseResults,
     ) {
-        self.typecheck_node(lhs, parse_results);
-        self.typecheck_node(rhs, parse_results);
+        self.typecheck_node(lhs);
+        self.typecheck_node(rhs);
 
         let lhs_ty = self.node_types[lhs.0];
         let rhs_ty = self.node_types[rhs.0];
-        let lhs_ast = &parse_results.ast_nodes[lhs.0];
-        let op_ast = &parse_results.ast_nodes[op.0];
+        let op_ast = &self.parse_results.ast_nodes[op.0];
 
         match op_ast {
             AstNode::Assignment => {
                 // FIXME: replace with compatibility check rather than an equality check
                 if lhs_ty != rhs_ty {
-                    self.error("mismatched types during assignment", node_id, parse_results)
+                    self.error("mismatched types during assignment", node_id)
                 }
+                let lhs_ast = &self.parse_results.ast_nodes[lhs.0];
+
                 if !matches!(lhs_ast, AstNode::Variable) {
-                    self.error(
-                        "assignment should use a variable on the left side",
-                        node_id,
-                        parse_results,
-                    )
+                    self.error("assignment should use a variable on the left side", node_id)
                 } else if let Some(definition_id) = self.variable_def_site.get(&lhs) {
                     if let Some(variable) = self.variable_info.get(definition_id) {
                         if !variable.is_mutable {
-                            self.error("assignment to immutable variable", lhs, parse_results)
+                            self.error("assignment to immutable variable", lhs)
                         }
                     } else {
                         self.error(
                             "internal error: resolved variable missing variable information",
                             node_id,
-                            parse_results,
                         )
                     }
                 } else {
                     self.error(
                         "internal error: variable not resolved to a variable definition",
                         node_id,
-                        parse_results,
                     )
                 }
                 self.node_types[node_id.0] = VOID_TYPE;
@@ -426,7 +385,7 @@ impl TypeChecker {
                 {
                     self.node_types[node_id.0] = BOOL_TYPE;
                 } else {
-                    self.error("mismatch types for operation", node_id, parse_results)
+                    self.error("mismatch types for operation", node_id)
                 }
             }
             AstNode::Equal | AstNode::NotEqual => {
@@ -436,11 +395,7 @@ impl TypeChecker {
                 if lhs_ty == BOOL_TYPE && rhs_ty == BOOL_TYPE {
                     self.node_types[node_id.0] = BOOL_TYPE;
                 } else {
-                    self.error(
-                        "boolean operator expects boolean types",
-                        node_id,
-                        parse_results,
-                    )
+                    self.error("boolean operator expects boolean types", node_id)
                 }
             }
             _ => {
@@ -449,7 +404,7 @@ impl TypeChecker {
                 } else if lhs_ty == F64_TYPE && rhs_ty == F64_TYPE {
                     self.node_types[node_id.0] = F64_TYPE;
                 } else {
-                    self.error("mismatch types for operation", node_id, parse_results)
+                    self.error("mismatch types for operation", node_id)
                 }
             }
         }
@@ -482,19 +437,13 @@ impl TypeChecker {
     //     self.node_types[node_id.0] = type_id
     // }
 
-    pub fn typecheck_call(
-        &mut self,
-        head: NodeId,
-        args: &[NodeId],
-        node_id: NodeId,
-        parse_results: &ParseResults,
-    ) {
-        let call_name = &parse_results.contents
-            [parse_results.span_start[head.0]..parse_results.span_end[head.0]];
-
+    pub fn typecheck_call(&mut self, head: NodeId, args: &[NodeId], node_id: NodeId) {
         for node_id in args {
-            self.typecheck_node(*node_id, parse_results)
+            self.typecheck_node(*node_id)
         }
+
+        let call_name = &self.parse_results.contents
+            [self.parse_results.span_start[head.0]..self.parse_results.span_end[head.0]];
 
         if let Some(defs) = self.external_functions.get(call_name) {
             'outer: for &def in defs {
@@ -539,18 +488,10 @@ impl TypeChecker {
             }
 
             let name = String::from_utf8_lossy(call_name);
-            self.error(
-                format!("could not resolve call to {}", name),
-                node_id,
-                parse_results,
-            )
+            self.error(format!("could not resolve call to {}", name), node_id)
         } else {
             let name = String::from_utf8_lossy(call_name);
-            self.error(
-                format!("unknown function '{}'", name),
-                node_id,
-                parse_results,
-            )
+            self.error(format!("unknown function '{}'", name), node_id)
         }
     }
 
@@ -559,11 +500,10 @@ impl TypeChecker {
         variable_name_node_id: NodeId,
         type_id: TypeId,
         is_mutable: bool,
-        parse_results: &ParseResults,
     ) {
-        let variable_name = &parse_results.contents[parse_results.span_start
+        let variable_name = &self.parse_results.contents[self.parse_results.span_start
             [variable_name_node_id.0]
-            ..parse_results.span_end[variable_name_node_id.0]];
+            ..self.parse_results.span_end[variable_name_node_id.0]];
         self.scope
             .last_mut()
             .expect("internal error: missing expected scope frame")
@@ -579,9 +519,10 @@ impl TypeChecker {
         );
     }
 
-    pub fn resolve_variable(&mut self, unbound_node_id: NodeId, parse_results: &ParseResults) {
-        let variable_name = &parse_results.contents[parse_results.span_start[unbound_node_id.0]
-            ..parse_results.span_end[unbound_node_id.0]];
+    pub fn resolve_variable(&mut self, unbound_node_id: NodeId) {
+        let variable_name = &self.parse_results.contents[self.parse_results.span_start
+            [unbound_node_id.0]
+            ..self.parse_results.span_end[unbound_node_id.0]];
 
         if let Some(node_id) = self.find_variable(variable_name) {
             self.variable_def_site.insert(unbound_node_id, node_id);
@@ -591,15 +532,14 @@ impl TypeChecker {
                 self.error(
                     "internal error: resolved variable missing variable information",
                     unbound_node_id,
-                    parse_results,
                 )
             }
         } else {
-            self.error("variable not found", unbound_node_id, parse_results)
+            self.error("variable not found", unbound_node_id)
         }
     }
 
-    pub fn find_variable(&mut self, variable_name: &[u8]) -> Option<NodeId> {
+    pub fn find_variable(&self, variable_name: &[u8]) -> Option<NodeId> {
         for scope in self.scope.iter().rev() {
             if let Some(result) = scope.variables.get(variable_name) {
                 return Some(*result);

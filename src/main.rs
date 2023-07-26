@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use line_editor::{LineEditor, ReadLineOutput};
 
 use truffle::{
-    print_error, register_fn, Evaluator, FnRegister, FunctionCodegen, FunctionId, Lexer, Parser,
-    Translater, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE,
+    print_error, register_fn, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue,
+    Translater, TypeChecker, BOOL_TYPE, F64_TYPE,
 };
 
 fn main() {
@@ -15,7 +15,7 @@ fn main() {
         for arg in args.skip(1) {
             let contents = std::fs::read_to_string(&arg).expect("couldn't find file");
 
-            run_line(&arg, &contents, true);
+            run_line(&arg, &contents);
         }
         return;
     }
@@ -37,7 +37,7 @@ fn main() {
                 } else if line == "debug" {
                     debug_output = !debug_output;
                 } else {
-                    run_line("<repl>", &line, debug_output);
+                    run_line("<repl>", &line);
                 }
             }
             Err(err) => {
@@ -47,118 +47,67 @@ fn main() {
     }
 }
 
-fn compile_line(
-    fname: &str,
-    line: &str,
-    typechecker: &mut TypeChecker,
-    debug_output: bool,
-) -> Option<FunctionCodegen> {
-    let mut lexer = Lexer::new(line.as_bytes().to_vec(), 0);
-
-    let tokens = lexer.lex();
-
-    if !lexer.errors.is_empty() {
-        for err in &lexer.errors {
-            print_error(fname, err, line.as_bytes())
+fn print_result(typechecker: &TypeChecker, fname: &str, result: ReturnValue, contents: &[u8]) {
+    match result {
+        ReturnValue::Bool(value) => {
+            println!("result -> {} (bool)", value)
         }
-        return None;
-    }
-
-    let mut parser = Parser::new(tokens, line.as_bytes().to_vec(), 0);
-
-    if debug_output {
-        println!("line: {line}");
-    }
-
-    parser.parse();
-
-    if !parser.errors.is_empty() {
-        for err in &parser.errors {
-            print_error(fname, err, line.as_bytes())
+        ReturnValue::I64(value) => {
+            println!("result -> {} (i64)", value)
         }
-        return None;
-    }
-
-    let result = &parser.results;
-
-    if debug_output {
-        println!();
-        println!("parse result:");
-        result.print();
-    }
-
-    typechecker.typecheck(&parser.results);
-
-    if !typechecker.errors.is_empty() {
-        for err in &typechecker.errors {
-            print_error(fname, err, line.as_bytes())
+        ReturnValue::F64(value) => {
+            println!("result -> {} (f64)", value)
         }
-        return None;
-    }
-
-    let result = &parser.results;
-
-    if debug_output {
-        println!();
-        println!("parse result:");
-        result.print();
-    }
-    let mut idx = 0;
-
-    if debug_output {
-        println!();
-        println!("typed nodes:");
-        while idx < result.ast_nodes.len() {
-            println!(
-                "  {}: {:?} ({})",
-                idx,
-                result.ast_nodes[idx],
-                typechecker.stringify_type(typechecker.node_types[idx])
-            );
-            idx += 1;
+        ReturnValue::Custom { value, type_id } => {
+            if type_id == F64_TYPE {
+                println!(
+                    "result -> {} ({})",
+                    f64::from_bits(value as u64),
+                    typechecker.stringify_type(type_id)
+                );
+            } else if type_id == BOOL_TYPE {
+                println!(
+                    "result -> {} ({})",
+                    value != 0,
+                    typechecker.stringify_type(type_id)
+                );
+            } else {
+                println!(
+                    "result -> {} ({})",
+                    value,
+                    typechecker.stringify_type(type_id)
+                );
+            }
         }
-    }
-
-    let mut translater = Translater::new();
-
-    #[allow(unused_mut)]
-    let mut output = translater.translate(&parser.results, typechecker);
-
-    if debug_output {
-        println!();
-        println!("===stdout===");
-    }
-
-    Some(output)
-}
-
-fn print_result(typechecker: &TypeChecker, result: (i64, TypeId)) {
-    if result.1 == F64_TYPE {
-        println!(
-            "result -> {} ({})",
-            f64::from_bits(result.0 as u64),
-            typechecker.stringify_type(result.1)
-        );
-    } else if result.1 == BOOL_TYPE {
-        println!(
-            "result -> {} ({})",
-            result.0 != 0,
-            typechecker.stringify_type(result.1)
-        );
-    } else {
-        println!(
-            "result -> {} ({})",
-            result.0,
-            typechecker.stringify_type(result.1)
-        );
+        ReturnValue::Error(script_error) => print_error(fname, &script_error, contents),
     }
 }
 
 #[cfg(feature = "async")]
-fn run_line(fname: &str, line: &str, debug_output: bool) {
+fn run_line(fname: &str, source: &str) -> Option<()> {
     use futures::executor::block_on;
 
-    let mut typechecker = TypeChecker::new();
+    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
+
+    if !lexer.errors.is_empty() {
+        for err in &lexer.errors {
+            print_error(fname, err, source.as_bytes())
+        }
+        return None;
+    }
+
+    let tokens = lexer.lex();
+    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
+    parser.parse();
+
+    if !parser.errors.is_empty() {
+        for err in &parser.errors {
+            print_error(fname, err, source.as_bytes())
+        }
+        return None;
+    }
+
+    let mut typechecker = TypeChecker::new(parser.results);
     register_fn!(typechecker, "print", print::<i64>);
     register_fn!(typechecker, "print", print::<f64>);
     register_fn!(typechecker, "print", print::<bool>);
@@ -168,27 +117,53 @@ fn run_line(fname: &str, line: &str, debug_output: bool) {
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
 
-    let output = compile_line(fname, line, &mut typechecker, debug_output);
+    typechecker.typecheck();
 
-    if let Some(output) = output {
-        let mut evaluator = Evaluator::default();
-        evaluator.add_function(output);
-
-        let result = block_on(evaluator.eval(FunctionId(0), &typechecker.functions));
-        if debug_output {
-            println!("============");
-            println!();
-            evaluator.debug_print(&typechecker);
-            println!();
+    if !typechecker.errors.is_empty() {
+        for err in &typechecker.errors {
+            print_error(fname, err, source.as_bytes())
         }
-
-        print_result(&typechecker, result);
+        return None;
     }
+
+    let mut translater = Translater::new(typechecker);
+
+    #[allow(unused_mut)]
+    let mut output = translater.translate();
+
+    let mut evaluator = Evaluator::default();
+    evaluator.add_function(output);
+
+    let result = block_on(evaluator.eval(FunctionId(0), &translater.typechecker.functions));
+
+    print_result(&translater.typechecker, fname, result, source.as_bytes());
+
+    Some(())
 }
 
 #[cfg(not(feature = "async"))]
-fn run_line(fname: &str, line: &str, debug_output: bool) {
-    let mut typechecker = TypeChecker::new();
+fn run_line(fname: &str, source: &str) -> Option<()> {
+    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
+
+    if !lexer.errors.is_empty() {
+        for err in &lexer.errors {
+            print_error(fname, err, source.as_bytes())
+        }
+        return None;
+    }
+
+    let tokens = lexer.lex();
+    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
+    parser.parse();
+
+    if !parser.errors.is_empty() {
+        for err in &parser.errors {
+            print_error(fname, err, source.as_bytes())
+        }
+        return None;
+    }
+
+    let mut typechecker = TypeChecker::new(parser.results);
     register_fn!(typechecker, "print", print::<i64>);
     register_fn!(typechecker, "print", print::<f64>);
     register_fn!(typechecker, "print", print::<bool>);
@@ -198,22 +173,28 @@ fn run_line(fname: &str, line: &str, debug_output: bool) {
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
 
-    let output = compile_line(fname, line, &mut typechecker, debug_output);
+    typechecker.typecheck();
 
-    if let Some(output) = output {
-        let mut evaluator = Evaluator::default();
-        evaluator.add_function(output);
-
-        let result = evaluator.eval(FunctionId(0), &typechecker.functions);
-        if debug_output {
-            println!("============");
-            println!();
-            evaluator.debug_print(&typechecker);
-            println!();
+    if !typechecker.errors.is_empty() {
+        for err in &typechecker.errors {
+            print_error(fname, err, source.as_bytes())
         }
-
-        print_result(&typechecker, result);
+        return None;
     }
+
+    let mut translater = Translater::new(typechecker);
+
+    #[allow(unused_mut)]
+    let mut output = translater.translate();
+
+    let mut evaluator = Evaluator::default();
+    evaluator.add_function(output);
+
+    let result = evaluator.eval(FunctionId(0), &translater.typechecker.functions);
+
+    print_result(&translater.typechecker, fname, result, source.as_bytes());
+
+    Some(())
 }
 
 pub fn print<T: std::fmt::Display>(value: T) {
