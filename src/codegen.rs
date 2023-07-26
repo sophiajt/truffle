@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    parser::{AstNode, NodeId, ParseResults},
-    typechecker::{self, ExternalFunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, VOID_TYPE},
+    parser::{AstNode, NodeId},
+    typechecker::{ExternalFunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, VOID_TYPE},
     F64_TYPE,
 };
 

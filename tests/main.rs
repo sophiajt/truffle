@@ -93,3 +93,8 @@ fn typecheck_errors() {
         "assignment to immutable variable"
     ))
 }
+
+#[test]
+fn runtime_errors() {
+    assert!(error_contains(&run_to_error("3 / 0"), "division by zero"))
+}

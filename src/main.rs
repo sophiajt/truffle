@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use line_editor::{LineEditor, ReadLineOutput};
 
 use truffle::{
-    print_error, register_fn, Evaluator, FnRegister, FunctionCodegen, FunctionId, Lexer,
-    ParseResults, Parser, ReturnValue, Translater, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE,
+    print_error, register_fn, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue,
+    Translater, TypeChecker, BOOL_TYPE, F64_TYPE,
 };
 
 fn main() {
@@ -46,96 +46,6 @@ fn main() {
         }
     }
 }
-
-// fn compile_line(fname: &str, line: &str, debug_output: bool) -> Option<FunctionCodegen> {
-//     let mut lexer = Lexer::new(line.as_bytes().to_vec(), 0);
-
-//     let tokens = lexer.lex();
-
-//     if !lexer.errors.is_empty() {
-//         for err in &lexer.errors {
-//             print_error(fname, err, line.as_bytes())
-//         }
-//         return None;
-//     }
-
-//     let mut parser = Parser::new(tokens, line.as_bytes().to_vec(), 0);
-
-//     if debug_output {
-//         println!("line: {line}");
-//     }
-
-//     parser.parse();
-
-//     if !parser.errors.is_empty() {
-//         for err in &parser.errors {
-//             print_error(fname, err, line.as_bytes())
-//         }
-//         return None;
-//     }
-
-//     let parser_results = parser.results;
-
-//     if debug_output {
-//         println!();
-//         println!("parse result:");
-//         parser_results.print();
-//     }
-
-//     let mut typechecker = TypeChecker::new(parser_results);
-//     register_fn!(typechecker, "print", print::<i64>);
-//     register_fn!(typechecker, "print", print::<f64>);
-//     register_fn!(typechecker, "print", print::<bool>);
-//     register_fn!(typechecker, "add", add::<i64>);
-//     register_fn!(typechecker, "add", add::<f64>);
-//     register_fn!(typechecker, "new_env", Env::new_env);
-//     register_fn!(typechecker, "set_var", Env::set_var);
-//     register_fn!(typechecker, "read_var", Env::read_var);
-
-//     typechecker.typecheck();
-
-//     if !typechecker.errors.is_empty() {
-//         for err in &typechecker.errors {
-//             print_error(fname, err, line.as_bytes())
-//         }
-//         return None;
-//     }
-
-//     let result = &parser.results;
-
-//     if debug_output {
-//         println!();
-//         println!("parse result:");
-//         result.print();
-//     }
-//     let mut idx = 0;
-
-//     if debug_output {
-//         println!();
-//         println!("typed nodes:");
-//         while idx < result.ast_nodes.len() {
-//             println!(
-//                 "  {}: {:?} ({})",
-//                 idx,
-//                 result.ast_nodes[idx],
-//                 typechecker.stringify_type(typechecker.node_types[idx])
-//             );
-//             idx += 1;
-//         }
-//     }
-
-//     let mut translater = Translater::new(typechecker);
-
-//     #[allow(unused_mut)]
-//     let mut output = translater.translate();
-
-//     if debug_output {
-//         println!();
-//         println!("===stdout===");
-//     }
-
-//     Some(output)
-// }
 
 fn print_result(typechecker: &TypeChecker, fname: &str, result: ReturnValue, contents: &[u8]) {
     match result {

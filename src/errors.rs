@@ -1,5 +1,3 @@
-use crate::parser::ParseResults;
-
 #[derive(Debug, PartialEq)]
 pub struct ScriptError {
     pub message: String,
