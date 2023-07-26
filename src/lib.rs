@@ -12,9 +12,9 @@ pub use crate::codegen::Translater;
 pub use crate::{
     codegen::FunctionCodegen,
     errors::{print_error, ScriptError},
-    eval::Evaluator,
+    eval::{Evaluator, ReturnValue},
     lexer::Lexer,
-    parser::Parser,
+    parser::{ParseResults, Parser},
     typechecker::{
         FnRegister, FunctionId, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, VOID_TYPE,
     },

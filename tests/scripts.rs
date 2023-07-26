@@ -1,4 +1,5 @@
-use libtest_mimic::{Arguments, Trial, Failed};
+use libtest_mimic::{Arguments, Failed, Trial};
+use truffle::ReturnValue;
 
 use std::{
     env,
@@ -8,7 +9,6 @@ use std::{
 };
 
 mod test_eval;
-
 
 fn main() -> eyre::Result<()> {
     let args = Arguments::from_args();
@@ -48,7 +48,9 @@ fn collect_tests() -> eyre::Result<Vec<Trial>> {
     // We recursively look for `.truffle` files, starting from the current
     // directory.
     let mut tests = Vec::new();
-    let current_dir = env::var("CARGO_MANIFEST_DIR").map(PathBuf::from)?.join("tests");
+    let current_dir = env::var("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)?
+        .join("tests");
     visit_dir(&current_dir, &mut tests)?;
 
     Ok(tests)
@@ -60,7 +62,7 @@ pub fn eval_source_runner(path: &Path) -> Result<(), Failed> {
     let source = String::from_utf8(source)
         .map_err(|_| "The file's contents are not a valid UTF-8 string!")?;
     match test_eval::eval_source(&source) {
-        0 => Ok(()),
-        non_zero => Err(format!("Script evaluated to {non_zero}, expected 0"))?,
+        ReturnValue::Custom { value: 0, .. } => Ok(()),
+        non_zero => Err(format!("Script evaluated to {non_zero:?}, expected 0"))?,
     }
 }

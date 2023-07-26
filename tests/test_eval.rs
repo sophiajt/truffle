@@ -1,6 +1,6 @@
 use truffle::{
-    register_fn, Evaluator, FnRegister, FunctionId, Lexer, Parser, ScriptError, Translater,
-    TypeChecker, TypeId,
+    register_fn, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue, ScriptError,
+    Translater, TypeChecker,
 };
 
 pub fn compile_to_error(source: &str) -> Vec<ScriptError> {
@@ -17,8 +17,8 @@ pub fn compile_to_error(source: &str) -> Vec<ScriptError> {
         return parser.errors;
     }
 
-    let mut typechecker = TypeChecker::new();
-    typechecker.typecheck(&parser.results);
+    let mut typechecker = TypeChecker::new(parser.results);
+    typechecker.typecheck();
     if !typechecker.errors.is_empty() {
         return typechecker.errors;
     }
@@ -36,12 +36,8 @@ pub fn error_contains(errors: &[ScriptError], expected: &str) -> bool {
     false
 }
 
-pub fn eval_source(source: &str) -> i64 {
-    eval_source_with_type(source).0
-}
-
 #[cfg(feature = "async")]
-pub fn eval_source_with_type(source: &str) -> (i64, TypeId) {
+pub fn eval_source(source: &str) -> ReturnValue {
     use futures::executor::block_on;
 
     let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
@@ -50,25 +46,25 @@ pub fn eval_source_with_type(source: &str) -> (i64, TypeId) {
     let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
     parser.parse();
 
-    let mut typechecker = TypeChecker::new();
+    let mut typechecker = TypeChecker::new(parser.results);
     register_fn!(typechecker, "add", add::<i64>);
     register_fn!(typechecker, "add", add::<f64>);
 
-    typechecker.typecheck(&parser.results);
+    typechecker.typecheck();
 
-    let mut translater = Translater::new();
+    let mut translater = Translater::new(typechecker);
 
     #[allow(unused_mut)]
-    let mut output = translater.translate(&parser.results, &typechecker);
+    let mut output = translater.translate();
 
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
 
-    block_on(evaluator.eval(FunctionId(0), &typechecker.functions))
+    block_on(evaluator.eval(FunctionId(0), &translater.typechecker.functions))
 }
 
 #[cfg(not(feature = "async"))]
-pub fn eval_source_with_type(source: &str) -> (i64, TypeId) {
+pub fn eval_source(source: &str) -> ReturnValue {
     let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
 
     let tokens = lexer.lex();

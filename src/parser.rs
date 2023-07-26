@@ -461,7 +461,6 @@ impl Parser {
             let node_id = self.create_node(AstNode::Garbage, span_start, span_end);
             self.errors.push(ScriptError {
                 message: message.into(),
-
                 span_start,
                 span_end,
             });

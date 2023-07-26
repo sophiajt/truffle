@@ -15,18 +15,18 @@ fn run_file(filename: &str) {
     let mut parser = Parser::new(tokens, contents, 0);
     parser.parse();
 
-    let mut typechecker = TypeChecker::new();
-    typechecker.typecheck(&parser.results);
+    let mut typechecker = TypeChecker::new(parser.results);
+    typechecker.typecheck();
 
-    let mut translater = Translater::new();
+    let mut translater = Translater::new(typechecker);
 
     #[allow(unused_mut)]
-    let mut output = translater.translate(&parser.results, &typechecker);
+    let mut output = translater.translate();
 
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
 
-    let _ = block_on(evaluator.eval(FunctionId(0), &typechecker.functions));
+    let _ = block_on(evaluator.eval(FunctionId(0), &translater.typechecker.functions));
 }
 
 #[cfg(not(feature = "async"))]
