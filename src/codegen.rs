@@ -502,10 +502,11 @@ impl Translater {
             }
             AstNode::String => self.translate_string(builder, node_id),
             AstNode::Await { call } => {
-                // TEST: uncomment the below to test the async function calls
-                // builder.instructions.push(Instruction::ASYNCCALL {
-                //     target: RegisterId(0),
-                // });
+                let node_id = *call;
+                let future = self.translate_node(builder, node_id, parse_results, typechecker);
+                builder.instructions.push(Instruction::ASYNCCALL {
+                    target: RegisterId(0),
+                });
                 todo!()
             }
             x => panic!("unsupported translation: {:?}", x),
