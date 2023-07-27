@@ -463,11 +463,6 @@ impl Translater {
             builder.register_types[0] = self.typechecker.node_types[last];
         }
 
-        // TEST: uncomment the below to test the async function calls
-        // builder.instructions.push(Instruction::ASYNCCALL {
-        //     target: RegisterId(0),
-        // });
-
         // FIXME: for now assume a RET at the end, though this should be inferred earlier in compilation
         builder.ret(NodeId(0)); // we used a dummy NodeId as this should be an infallible call
         builder
@@ -506,6 +501,13 @@ impl Translater {
                 self.translate_call(builder, *head, &args.clone(), node_id)
             }
             AstNode::String => self.translate_string(builder, node_id),
+            AstNode::Await { call } => {
+                // TEST: uncomment the below to test the async function calls
+                // builder.instructions.push(Instruction::ASYNCCALL {
+                //     target: RegisterId(0),
+                // });
+                todo!()
+            }
             x => panic!("unsupported translation: {:?}", x),
         }
     }

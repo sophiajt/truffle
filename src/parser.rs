@@ -79,9 +79,8 @@ pub enum AstNode {
         head: NodeId,
         args: Vec<NodeId>,
     },
-    AsyncCall {
-        head: NodeId,
-        args: Vec<NodeId>,
+    Await {
+        call: NodeId,
     },
     BinaryOp {
         lhs: NodeId,
@@ -142,14 +141,6 @@ impl Parser {
     }
 
     fn peek(&self) -> Option<Token> {
-        if self.current_token < self.tokens.len() {
-            Some(self.tokens[self.current_token])
-        } else {
-            None
-        }
-    }
-
-    fn crimes(&self) -> Option<Token> {
         if self.current_token < self.tokens.len() {
             Some(self.tokens[self.current_token])
         } else {
@@ -503,6 +494,10 @@ impl Parser {
         }
     }
 
+    pub fn curr_nodeid(&self) -> NodeId {
+        NodeId(self.results.span_start.len() - 1 + self.results.node_id_offset)
+    }
+
     pub fn create_node(
         &mut self,
         node_type: AstNode,
@@ -513,7 +508,7 @@ impl Parser {
         self.results.span_end.push(span_end);
         self.results.ast_nodes.push(node_type);
 
-        NodeId(self.results.span_start.len() - 1 + self.results.node_id_offset)
+        self.curr_nodeid()
     }
 
     pub fn block(&mut self, expect_parens: bool) -> NodeId {
@@ -598,9 +593,6 @@ impl Parser {
     }
 
     pub fn method_call(&mut self, span_start: usize, receiver: NodeId) -> NodeId {
-        // Skip the dot
-        self.next();
-
         let method_name = self
             .next()
             .expect("internal error: missing token that was expected to be there");
@@ -616,11 +608,7 @@ impl Parser {
 
         let span_end = self.position();
 
-        if self.is_awaited() {
-            self.create_node(AstNode::AsyncCall { head, args }, span_start, span_end)
-        } else {
-            self.create_node(AstNode::Call { head, args }, span_start, span_end)
-        }
+        self.create_node(AstNode::Call { head, args }, span_start, span_end)
     }
 
     pub fn expression(&mut self) -> NodeId {
@@ -746,7 +734,18 @@ impl Parser {
 
             self.create_node(AstNode::Range { lhs: expr, rhs }, span_start, span_end)
         } else if self.is_dot() {
-            self.method_call(span_start, expr)
+            // Skip the dot
+            self.next();
+
+            if self.is_keyword(b"await") {
+                let Some(Token { span_end, .. }) = self.peek() else {
+                    unreachable!("is_keyword guarantees there's a token currently");
+                };
+                let call = self.curr_nodeid();
+                self.create_node(AstNode::Await { call }, span_start, span_end)
+            } else {
+                self.method_call(span_start, expr)
+            }
         } else {
             expr
         }
