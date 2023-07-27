@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::{
-    codegen::{FunctionCodegen, Instruction, InstructionId, RegisterId},
+    codegen::{FunctionCodegen, Instruction, InstructionId, RegisterId, RegisterValue},
     parser::NodeId,
     typechecker::{ExternalFnRecord, ExternalFunctionId, Function, FunctionId},
     ScriptError, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, VOID_TYPE,
@@ -9,7 +9,7 @@ use crate::{
 
 #[derive(Clone)]
 pub struct StackFrame {
-    pub register_values: Vec<i64>,
+    pub register_values: Vec<RegisterValue>,
     pub register_types: Vec<TypeId>,
     pub instruction_pointer: InstructionId,
 }
@@ -57,6 +57,21 @@ impl Evaluator {
         self.functions.push(stack_frame);
     }
 
+    #[inline]
+    pub fn get_reg_i64(&self, register_id: &RegisterId) -> i64 {
+        unsafe { self.stack_frames[self.current_frame].register_values[register_id.0].i64 }
+    }
+
+    #[inline]
+    pub fn get_reg_f64(&self, register_id: &RegisterId) -> f64 {
+        unsafe { self.stack_frames[self.current_frame].register_values[register_id.0].f64 }
+    }
+
+    #[inline]
+    pub fn get_reg_bool(&self, register_id: &RegisterId) -> bool {
+        unsafe { self.stack_frames[self.current_frame].register_values[register_id.0].bool }
+    }
+
     #[cfg(not(feature = "async"))]
     pub fn eval(
         &mut self,
@@ -91,7 +106,7 @@ impl Evaluator {
                 Instruction::ASYNCCALL { target } => {
                     // TODO: for now, this will just be a test function we run
                     let result = test_async_fn().await;
-                    self.stack_frames[self.current_frame].register_values[target.0] = result;
+                    self.stack_frames[self.current_frame].register_values[target.0].i64 = result;
 
                     instruction_pointer += 1;
                 }
@@ -113,175 +128,108 @@ impl Evaluator {
     ) -> Option<ReturnValue> {
         match &self.instructions[*instruction_pointer] {
             Instruction::IADD { lhs, rhs, target } => {
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    self.stack_frames[self.current_frame].register_values[lhs.0]
-                        + self.stack_frames[self.current_frame].register_values[rhs.0];
-
+                self.stack_frames[self.current_frame].register_values[target.0].i64 =
+                    self.get_reg_i64(lhs) + self.get_reg_i64(rhs);
                 *instruction_pointer += 1;
             }
             Instruction::ISUB { lhs, rhs, target } => {
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    self.stack_frames[self.current_frame].register_values[lhs.0]
-                        - self.stack_frames[self.current_frame].register_values[rhs.0];
+                self.stack_frames[self.current_frame].register_values[target.0].i64 =
+                    self.get_reg_i64(lhs) - self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::IMUL { lhs, rhs, target } => {
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    self.stack_frames[self.current_frame].register_values[lhs.0]
-                        * self.stack_frames[self.current_frame].register_values[rhs.0];
+                self.stack_frames[self.current_frame].register_values[target.0].i64 =
+                    self.get_reg_i64(lhs) * self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::IDIV { lhs, rhs, target } => {
-                if self.stack_frames[self.current_frame].register_values[rhs.0] == 0 {
+                if self.get_reg_i64(rhs) == 0 {
                     return Some(ReturnValue::Error(
                         self.error("division by zero", self.source_map[*instruction_pointer]),
                     ));
                 }
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    self.stack_frames[self.current_frame].register_values[lhs.0]
-                        / self.stack_frames[self.current_frame].register_values[rhs.0];
+                self.stack_frames[self.current_frame].register_values[target.0].i64 =
+                    self.get_reg_i64(lhs) / self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1
             }
             Instruction::ILT { lhs, rhs, target } => {
-                let lhs = self.stack_frames[self.current_frame].register_values[lhs.0];
-                let rhs = self.stack_frames[self.current_frame].register_values[rhs.0];
-
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    (lhs < rhs) as i64;
+                self.stack_frames[self.current_frame].register_values[target.0].bool =
+                    self.get_reg_i64(lhs) < self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::ILTE { lhs, rhs, target } => {
-                let lhs = self.stack_frames[self.current_frame].register_values[lhs.0];
-                let rhs = self.stack_frames[self.current_frame].register_values[rhs.0];
-
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    (lhs <= rhs) as i64;
+                self.stack_frames[self.current_frame].register_values[target.0].bool =
+                    self.get_reg_i64(lhs) <= self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::IGT { lhs, rhs, target } => {
-                let lhs = self.stack_frames[self.current_frame].register_values[lhs.0];
-                let rhs = self.stack_frames[self.current_frame].register_values[rhs.0];
-
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    (lhs > rhs) as i64;
+                self.stack_frames[self.current_frame].register_values[target.0].bool =
+                    self.get_reg_i64(lhs) > self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::IGTE { lhs, rhs, target } => {
-                let lhs = self.stack_frames[self.current_frame].register_values[lhs.0];
-                let rhs = self.stack_frames[self.current_frame].register_values[rhs.0];
-
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    (lhs >= rhs) as i64;
+                self.stack_frames[self.current_frame].register_values[target.0].bool =
+                    self.get_reg_i64(lhs) >= self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::FADD { lhs, rhs, target } => {
-                let lhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                );
-                let rhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                );
-
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    (lhs + rhs).to_bits() as i64;
+                self.stack_frames[self.current_frame].register_values[target.0].f64 =
+                    self.get_reg_f64(lhs) + self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::FSUB { lhs, rhs, target } => {
-                let lhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                );
-                let rhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                );
-
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    (lhs - rhs).to_bits() as i64;
+                self.stack_frames[self.current_frame].register_values[target.0].f64 =
+                    self.get_reg_f64(lhs) - self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::FMUL { lhs, rhs, target } => {
-                let lhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                );
-                let rhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                );
-
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    (lhs * rhs).to_bits() as i64;
+                self.stack_frames[self.current_frame].register_values[target.0].f64 =
+                    self.get_reg_f64(lhs) * self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::FDIV { lhs, rhs, target } => {
-                let lhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                );
-                let rhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                );
+                if self.get_reg_f64(rhs) == 0.0 {
+                    return Some(ReturnValue::Error(
+                        self.error("division by zero", self.source_map[*instruction_pointer]),
+                    ));
+                }
 
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    (lhs / rhs).to_bits() as i64;
+                self.stack_frames[self.current_frame].register_values[target.0].f64 =
+                    self.get_reg_f64(lhs) / self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::FLT { lhs, rhs, target } => {
-                let lhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                );
-                let rhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                );
-
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    (lhs < rhs) as i64;
+                self.stack_frames[self.current_frame].register_values[target.0].bool =
+                    self.get_reg_f64(lhs) < self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::FLTE { lhs, rhs, target } => {
-                let lhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                );
-                let rhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                );
-
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    (lhs <= rhs) as i64;
+                self.stack_frames[self.current_frame].register_values[target.0].bool =
+                    self.get_reg_f64(lhs) <= self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::FGT { lhs, rhs, target } => {
-                let lhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                );
-                let rhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                );
-
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    (lhs > rhs) as i64;
+                self.stack_frames[self.current_frame].register_values[target.0].bool =
+                    self.get_reg_f64(lhs) > self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
             Instruction::FGTE { lhs, rhs, target } => {
-                let lhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[lhs.0] as u64,
-                );
-                let rhs = f64::from_bits(
-                    self.stack_frames[self.current_frame].register_values[rhs.0] as u64,
-                );
-
-                self.stack_frames[self.current_frame].register_values[target.0] =
-                    (lhs >= rhs) as i64;
+                self.stack_frames[self.current_frame].register_values[target.0].bool =
+                    self.get_reg_f64(lhs) >= self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
@@ -295,12 +243,12 @@ impl Evaluator {
                 then_branch,
                 else_branch,
             } => {
-                let condition = self.stack_frames[self.current_frame].register_values[condition.0];
+                let condition = self.get_reg_bool(condition);
 
-                if condition == 0 {
-                    *instruction_pointer = else_branch.0;
-                } else {
+                if condition {
                     *instruction_pointer = then_branch.0;
+                } else {
+                    *instruction_pointer = else_branch.0;
                 }
             }
             Instruction::JMP(location) => {
@@ -316,10 +264,7 @@ impl Evaluator {
                     self.stack_frames[self.current_frame].register_types[target.0]
                 );
                 self.unbox_to_register(output, target);
-                println!(
-                    "register is now: {}",
-                    self.stack_frames[self.current_frame].register_values[target.0]
-                );
+                println!("register is now: {}", self.get_reg_i64(&target));
                 *instruction_pointer += 1;
             }
             Instruction::RET => {
@@ -331,23 +276,17 @@ impl Evaluator {
                 } else {
                     match self.stack_frames[self.current_frame].register_types[0] {
                         BOOL_TYPE => {
-                            return Some(ReturnValue::Bool(
-                                self.stack_frames[self.current_frame].register_values[0] != 0,
-                            ))
+                            return Some(ReturnValue::Bool(self.get_reg_bool(&RegisterId(0))))
                         }
                         I64_TYPE => {
-                            return Some(ReturnValue::I64(
-                                self.stack_frames[self.current_frame].register_values[0],
-                            ))
+                            return Some(ReturnValue::I64(self.get_reg_i64(&RegisterId(0))))
                         }
                         F64_TYPE => {
-                            return Some(ReturnValue::F64(f64::from_bits(
-                                self.stack_frames[self.current_frame].register_values[0] as u64,
-                            )))
+                            return Some(ReturnValue::F64(self.get_reg_f64(&RegisterId(0))))
                         }
                         _ => {
                             return Some(ReturnValue::Custom {
-                                value: self.stack_frames[self.current_frame].register_values[0],
+                                value: self.get_reg_i64(&RegisterId(0)),
                                 type_id: self.stack_frames[self.current_frame].register_types[0],
                             })
                         }
@@ -429,23 +368,22 @@ impl Evaluator {
 
     pub fn box_register(&self, register_id: RegisterId) -> Box<dyn Any> {
         if self.stack_frames[self.current_frame].register_types[register_id.0] == F64_TYPE {
-            let val = f64::from_bits(
-                self.stack_frames[self.current_frame].register_values[register_id.0] as u64,
-            );
+            let val = self.get_reg_f64(&register_id);
             Box::new(val)
         } else if self.stack_frames[self.current_frame].register_types[register_id.0] == BOOL_TYPE {
-            let val = self.stack_frames[self.current_frame].register_values[register_id.0] != 0;
+            let val = self.get_reg_bool(&register_id);
             Box::new(val)
         } else if self.stack_frames[self.current_frame].register_types[register_id.0] == I64_TYPE {
-            Box::new(self.stack_frames[self.current_frame].register_values[register_id.0])
+            Box::new(self.get_reg_i64(&register_id))
         } else {
             println!(
                 "transmuting: {} with {}",
-                register_id.0, self.stack_frames[self.current_frame].register_values[register_id.0]
+                register_id.0,
+                self.get_reg_i64(&register_id)
             );
             let boxed = unsafe {
                 std::mem::transmute::<i64, Box<Box<dyn Any>>>(
-                    self.stack_frames[self.current_frame].register_values[register_id.0],
+                    self.stack_frames[self.current_frame].register_values[register_id.0].i64,
                 )
             };
 
@@ -460,17 +398,13 @@ impl Evaluator {
     pub fn unbox_to_register(&mut self, value: Box<dyn Any>, target: RegisterId) {
         if self.stack_frames[self.current_frame].register_types[target.0] == F64_TYPE {
             if let Ok(value) = value.downcast::<f64>() {
-                let val = (*value).to_bits() as i64;
-
-                self.stack_frames[self.current_frame].register_values[target.0] = val;
+                self.stack_frames[self.current_frame].register_values[target.0].f64 = *value;
             } else {
                 panic!("internal error: could not properly handle conversion of register to i64")
             }
         } else if self.stack_frames[self.current_frame].register_types[target.0] == BOOL_TYPE {
             if let Ok(value) = value.downcast::<bool>() {
-                let val = *value as i64;
-
-                self.stack_frames[self.current_frame].register_values[target.0] = val;
+                self.stack_frames[self.current_frame].register_values[target.0].bool = *value;
             } else {
                 panic!("internal error: could not properly handle conversion of register to i64")
             }
@@ -478,18 +412,15 @@ impl Evaluator {
             // Ignore this case, as void creates no changes
         } else if self.stack_frames[self.current_frame].register_types[target.0] == I64_TYPE {
             if let Ok(value) = value.downcast::<i64>() {
-                self.stack_frames[self.current_frame].register_values[target.0] = *value;
+                self.stack_frames[self.current_frame].register_values[target.0].i64 = *value;
             } else {
                 panic!("internal error: could not properly handle conversion of register to i64")
             }
         } else {
-            self.stack_frames[self.current_frame].register_values[target.0] =
+            self.stack_frames[self.current_frame].register_values[target.0].i64 =
                 unsafe { std::mem::transmute::<Box<Box<dyn Any>>, i64>(Box::new(value)) };
 
-            println!(
-                "setting {} into {}",
-                target.0, self.stack_frames[self.current_frame].register_values[target.0]
-            )
+            println!("setting {} into {}", target.0, self.get_reg_i64(&target))
         }
     }
 
@@ -509,7 +440,7 @@ impl Evaluator {
                 println!(
                     "    {}: {} ({})",
                     idx,
-                    f64::from_bits(*value as u64),
+                    unsafe { value.f64 },
                     typechecker
                         .stringify_type(self.stack_frames[self.current_frame].register_types[idx])
                 );
@@ -517,7 +448,7 @@ impl Evaluator {
                 println!(
                     "    {}: {} ({})",
                     idx,
-                    *value,
+                    unsafe { value.i64 },
                     typechecker
                         .stringify_type(self.stack_frames[self.current_frame].register_types[idx])
                 );
