@@ -12,23 +12,39 @@ pub struct InstructionId(pub usize);
 #[derive(Clone, Copy, Debug)]
 pub struct RegisterId(pub usize);
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy)]
+pub union RegisterValue {
+    pub f64: f64,
+    pub i64: i64,
+    pub bool: bool,
+}
+
 pub struct Value {
+    val: RegisterValue,
     ty: TypeId,
-    val: i64,
 }
 
 impl Value {
-    // pub fn new_i64(ty: ValueType, val: i64) -> Value {
-    //     Value { ty, val }
-    // }
+    pub fn new_i64(val: i64) -> Value {
+        Value {
+            val: RegisterValue { i64: val },
+            ty: I64_TYPE,
+        }
+    }
 
-    // pub fn unknown() -> Value {
-    //     Value {
-    //         ty: ValueType::Unknown,
-    //         val: 0,
-    //     }
-    // }
+    pub fn new_f64(val: f64) -> Value {
+        Value {
+            val: RegisterValue { f64: val },
+            ty: F64_TYPE,
+        }
+    }
+
+    pub fn new_bool(val: bool) -> Value {
+        Value {
+            val: RegisterValue { bool: val },
+            ty: BOOL_TYPE,
+        }
+    }
 }
 
 #[allow(clippy::upper_case_acronyms)]
@@ -151,7 +167,7 @@ pub struct FunctionCodegen {
     pub instructions: Vec<Instruction>,
     // Map InstructionId to NodeId
     pub source_map: Vec<NodeId>,
-    pub register_values: Vec<i64>,
+    pub register_values: Vec<RegisterValue>,
     pub register_types: Vec<TypeId>,
 
     // TODO: we may want a different permanent home, but this should work for now
@@ -160,9 +176,9 @@ pub struct FunctionCodegen {
 }
 
 impl FunctionCodegen {
-    pub fn new_register_with_value(&mut self, value: i64, value_type: TypeId) -> RegisterId {
-        self.register_values.push(value);
-        self.register_types.push(value_type);
+    pub fn new_register_with_value(&mut self, value: Value) -> RegisterId {
+        self.register_values.push(value.val);
+        self.register_types.push(value.ty);
 
         RegisterId(self.register_values.len() - 1)
     }
@@ -173,23 +189,23 @@ impl FunctionCodegen {
     }
 
     pub fn new_register(&mut self, ty: TypeId) -> RegisterId {
-        self.new_register_with_value(0, ty)
+        // For now just add in an used value that'll be later replaced
+        self.register_values.push(RegisterValue { i64: 0 });
+        self.register_types.push(ty);
+
+        RegisterId(self.register_values.len() - 1)
     }
 
     pub fn i64_const(&mut self, value: i64) -> RegisterId {
-        self.new_register_with_value(value, I64_TYPE)
+        self.new_register_with_value(Value::new_i64(value))
     }
 
     pub fn f64_const(&mut self, value: f64) -> RegisterId {
-        self.new_register_with_value(value.to_bits() as i64, F64_TYPE)
+        self.new_register_with_value(Value::new_f64(value))
     }
 
     pub fn bool_const(&mut self, value: bool) -> RegisterId {
-        if value {
-            self.new_register_with_value(1, BOOL_TYPE)
-        } else {
-            self.new_register_with_value(0, BOOL_TYPE)
-        }
+        self.new_register_with_value(Value::new_bool(value))
     }
 
     pub fn add(&mut self, node_id: NodeId, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
@@ -419,7 +435,7 @@ impl Translater {
         let mut builder = FunctionCodegen {
             instructions: vec![],
             source_map: vec![],
-            register_values: vec![0],
+            register_values: vec![RegisterValue { i64: 0 }],
             register_types: vec![TypeId(0)],
             span_start: self.typechecker.parse_results.span_start.clone(),
             span_end: self.typechecker.parse_results.span_end.clone(),
