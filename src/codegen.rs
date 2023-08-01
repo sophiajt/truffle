@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     parser::{AstNode, NodeId},
-    typechecker::{ExternalFunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, VOID_TYPE},
+    typechecker::{
+        ExternalFunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, STRING_TYPE, UNIT_TYPE,
+    },
     F64_TYPE,
 };
 
@@ -17,6 +19,7 @@ pub union RegisterValue {
     pub f64: f64,
     pub i64: i64,
     pub bool: bool,
+    pub ptr: *const (),
 }
 
 pub struct Value {
@@ -44,6 +47,14 @@ impl Value {
             val: RegisterValue { bool: val },
             ty: BOOL_TYPE,
         }
+    }
+
+    pub fn new_string(val: String) -> Value {
+        let thin_string = Box::new(val);
+        let ptr = Box::into_raw(thin_string) as _;
+        let val = RegisterValue { ptr };
+        let ty = STRING_TYPE;
+        Value { val, ty }
     }
 }
 
@@ -206,6 +217,11 @@ impl FunctionCodegen {
 
     pub fn bool_const(&mut self, value: bool) -> RegisterId {
         self.new_register_with_value(Value::new_bool(value))
+    }
+
+    pub fn string_const(&mut self, value: String) -> RegisterId {
+        let value = Value::new_string(value);
+        self.new_register_with_value(value)
     }
 
     pub fn add(&mut self, node_id: NodeId, lhs: RegisterId, rhs: RegisterId) -> RegisterId {
@@ -489,6 +505,7 @@ impl Translater {
                 // FIXME: clone to get around ownership issue
                 self.translate_call(builder, *head, &args.clone(), node_id)
             }
+            AstNode::String => self.translate_string(builder, node_id),
             x => panic!("unsupported translation: {:?}", x),
         }
     }
@@ -521,6 +538,22 @@ impl Translater {
             .expect("internal error: float constant could not be parsed");
 
         builder.f64_const(constant)
+    }
+
+    pub fn translate_string(
+        &mut self,
+        builder: &mut FunctionCodegen,
+        node_id: NodeId,
+    ) -> RegisterId {
+        let contents =
+            &self.typechecker.parse_results.contents[self.typechecker.parse_results.span_start
+                [node_id.0]
+                ..self.typechecker.parse_results.span_end[node_id.0]];
+
+        let s = String::from_utf8(contents.to_owned())
+            .expect("internal error: string literal could not be parsed");
+
+        builder.string_const(s)
     }
 
     pub fn translate_binop(
@@ -731,7 +764,7 @@ impl Translater {
         condition: NodeId,
         block: NodeId,
     ) -> RegisterId {
-        let output = builder.new_register(VOID_TYPE);
+        let output = builder.new_register(UNIT_TYPE);
 
         let top = builder.next_position();
         let condition = self.translate_node(builder, condition);
@@ -760,7 +793,7 @@ impl Translater {
         nodes: &[NodeId],
     ) -> RegisterId {
         if nodes.is_empty() {
-            builder.new_register(VOID_TYPE)
+            builder.new_register(UNIT_TYPE)
         } else {
             let mut idx = 0;
 
