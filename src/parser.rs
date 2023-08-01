@@ -182,10 +182,6 @@ impl Parser {
         self.peek().is_some()
     }
 
-    pub fn is_awaited(&mut self) -> bool {
-        todo!()
-    }
-
     pub fn is_operator(&mut self) -> bool {
         match self.peek() {
             Some(Token { token_type, .. }) => matches!(
@@ -598,7 +594,6 @@ impl Parser {
             .expect("internal error: missing token that was expected to be there");
         let name_start = method_name.span_start;
         let name_end = method_name.span_end;
-        dbg!(std::str::from_utf8(&self.results.contents[name_start..name_end]).unwrap());
         let head = self.create_node(AstNode::Name, name_start, name_end);
 
         self.lparen();
@@ -607,7 +602,6 @@ impl Parser {
         self.rparen();
 
         let span_end = self.position();
-
         self.create_node(AstNode::Call { head, args }, span_start, span_end)
     }
 

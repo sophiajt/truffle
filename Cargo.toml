@@ -13,6 +13,7 @@ futures = {version = "0.3", optional = true}
 reedline = { version = "0.21.0", features = ["bashisms"], optional = true}
 
 [features]
+default = ["async"]
 async = ["dep:futures"]
 
 [dev-dependencies]

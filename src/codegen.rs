@@ -168,6 +168,7 @@ pub enum Instruction {
     },
 
     ASYNCCALL {
+        future: RegisterId,
         target: RegisterId,
     },
 
@@ -503,9 +504,11 @@ impl Translater {
             AstNode::String => self.translate_string(builder, node_id),
             AstNode::Await { call } => {
                 let node_id = *call;
-                let future = self.translate_node(builder, node_id, parse_results, typechecker);
+                let future = self.translate_node(builder, node_id);
+                let target = builder.new_register(I64_TYPE);
                 builder.instructions.push(Instruction::ASYNCCALL {
-                    target: RegisterId(0),
+                    future,
+                    target,
                 });
                 todo!()
             }

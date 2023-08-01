@@ -111,7 +111,7 @@ impl Evaluator {
 
         loop {
             match &self.instructions[instruction_pointer] {
-                Instruction::ASYNCCALL { target } => {
+                Instruction::ASYNCCALL { target, future } => {
                     // TODO: for now, this will just be a test function we run
                     let result = test_async_fn().await;
                     self.stack_frames[self.current_frame].register_values[target.0].i64 = result;
