@@ -173,13 +173,14 @@ fn run_line(fname: &str, source: &str) -> Option<()> {
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
 
-    typechecker.typecheck();
-
-    if !typechecker.errors.is_empty() {
-        for err in &typechecker.errors {
-            print_error(fname, err, source.as_bytes())
+    match typechecker.typecheck() {
+        Ok(_) => {}
+        Err(errors) => {
+            for err in &errors {
+                print_error(fname, err, source.as_bytes())
+            }
+            return None;
         }
-        return None;
     }
 
     let mut translater = Translater::new(typechecker);

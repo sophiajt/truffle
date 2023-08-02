@@ -149,9 +149,9 @@ pub fn eval_source(source: &str) -> Result<ReturnValue, Vec<ScriptError>> {
     register_fn!(typechecker, "add", add::<i64>);
     register_fn!(typechecker, "add", add::<f64>);
 
-    typechecker.typecheck();
-    if !typechecker.errors.is_empty() {
-        return Err(typechecker.errors);
+    match typechecker.typecheck() {
+        Ok(_) => {}
+        Err(errors) => return Err(errors),
     }
 
     let mut translater = Translater::new(typechecker);
