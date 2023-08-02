@@ -145,22 +145,26 @@ fn run_line(fname: &str, source: &str) -> Option<()> {
 fn run_line(fname: &str, source: &str) -> Option<()> {
     let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
 
-    if !lexer.errors.is_empty() {
-        for err in &lexer.errors {
-            print_error(fname, err, source.as_bytes())
+    let tokens = match lexer.lex() {
+        Ok(tokens) => tokens,
+        Err(errors) => {
+            for err in &errors {
+                print_error(fname, err, source.as_bytes())
+            }
+            return None;
         }
-        return None;
-    }
+    };
 
-    let tokens = lexer.lex();
     let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
-    parser.parse();
 
-    if !parser.errors.is_empty() {
-        for err in &parser.errors {
-            print_error(fname, err, source.as_bytes())
+    match parser.parse() {
+        Ok(()) => {}
+        Err(errors) => {
+            for err in &errors {
+                print_error(fname, err, source.as_bytes())
+            }
+            return None;
         }
-        return None;
     }
 
     let mut typechecker = TypeChecker::new(parser.results);
