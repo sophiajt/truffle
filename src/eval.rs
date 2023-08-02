@@ -411,13 +411,13 @@ impl Evaluator {
             if let Ok(value) = value.downcast::<f64>() {
                 self.stack_frames[self.current_frame].register_values[target.0].f64 = *value;
             } else {
-                panic!("internal error: could not properly handle conversion of register to i64")
+                panic!("internal error: could not properly handle conversion of register to f64")
             }
         } else if self.stack_frames[self.current_frame].register_types[target.0] == BOOL_TYPE {
             if let Ok(value) = value.downcast::<bool>() {
                 self.stack_frames[self.current_frame].register_values[target.0].bool = *value;
             } else {
-                panic!("internal error: could not properly handle conversion of register to i64")
+                panic!("internal error: could not properly handle conversion of register to bool")
             }
         } else if self.stack_frames[self.current_frame].register_types[target.0] == UNIT_TYPE {
             // Ignore this case, as void creates no changes
@@ -468,7 +468,7 @@ impl Evaluator {
     }
 
     pub fn is_user_type(&self, register_id: RegisterId) -> bool {
-        self.stack_frames[self.current_frame].register_types[register_id.0].0 > BOOL_TYPE.0
+        self.stack_frames[self.current_frame].register_types[register_id.0].0 > STRING_TYPE.0
     }
 
     pub fn error(&self, msg: impl Into<String>, node_id: NodeId) -> ScriptError {

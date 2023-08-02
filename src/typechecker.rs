@@ -99,13 +99,15 @@ pub struct TypeChecker {
     pub scope: Vec<Scope>,
 }
 
+// PLEASE NOTE: STRING_TYPE is considered last and any type after this is considered a user-defined datatype
 pub const UNIT_TYPE: TypeId = TypeId(0);
 pub const I64_TYPE: TypeId = TypeId(1);
 pub const F64_TYPE: TypeId = TypeId(2);
 pub const BOOL_TYPE: TypeId = TypeId(3);
-pub const STRING_TYPE: TypeId = TypeId(4);
+pub const STRING_TYPE: TypeId = TypeId(4); // <-- last known builtin type id (after this, assume user-defined).
+                                           // Please: keep this last and insert new built-in types above it, making sure
+                                           // to adjust STRING_TYPE's type id.
 pub const UNKNOWN_TYPE: TypeId = TypeId(usize::MAX);
-// PLEASE NOTE: BOOL_TYPE is considered last and any type after this is considered a user-defined datatype
 
 impl TypeChecker {
     pub fn new(parse_results: ParseResults) -> Self {
