@@ -28,20 +28,20 @@ pub fn compile_to_error(source: &str) -> Vec<ScriptError> {
 }
 
 #[cfg(feature = "async")]
-pub fn eval_source(source: &str) -> ReturnValue {
+pub fn eval_source(source: &str) -> Result<ReturnValue, Vec<ScriptError>> {
     use futures::executor::block_on;
 
     let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
 
-    let tokens = lexer.lex();
+    let tokens = lexer.lex()?;
     let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
-    parser.parse();
+    parser.parse()?;
 
     let mut typechecker = TypeChecker::new(parser.results);
     register_fn!(typechecker, "add", add::<i64>);
     register_fn!(typechecker, "add", add::<f64>);
 
-    typechecker.typecheck();
+    typechecker.typecheck()?;
 
     let mut translater = Translater::new(typechecker);
 
@@ -51,7 +51,10 @@ pub fn eval_source(source: &str) -> ReturnValue {
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
 
-    block_on(evaluator.eval(FunctionId(0), &translater.typechecker.functions))
+    match block_on(evaluator.eval(FunctionId(0), &translater.typechecker.functions)) {
+        ReturnValue::Error(error) => Err(vec![error]),
+        return_value => Ok(return_value),
+    }
 }
 
 #[cfg(not(feature = "async"))]

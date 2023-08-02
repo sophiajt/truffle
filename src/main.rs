@@ -88,23 +88,25 @@ fn run_line(fname: &str, source: &str) -> Option<()> {
     use futures::executor::block_on;
 
     let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
-
-    if !lexer.errors.is_empty() {
-        for err in &lexer.errors {
-            print_error(fname, err, source.as_bytes())
+    let tokens = match lexer.lex() {
+        Ok(tokens) => tokens,
+        Err(errors) => {
+            for err in &errors {
+                print_error(fname, err, source.as_bytes())
+            }
+            return None;
         }
-        return None;
-    }
+    };
 
-    let tokens = lexer.lex();
     let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
-    parser.parse();
-
-    if !parser.errors.is_empty() {
-        for err in &parser.errors {
-            print_error(fname, err, source.as_bytes())
+    match parser.parse() {
+        Ok(()) => {}
+        Err(errors) => {
+            for err in &errors {
+                print_error(fname, err, source.as_bytes())
+            }
+            return None;
         }
-        return None;
     }
 
     let mut typechecker = TypeChecker::new(parser.results);
@@ -117,13 +119,14 @@ fn run_line(fname: &str, source: &str) -> Option<()> {
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
 
-    typechecker.typecheck();
-
-    if !typechecker.errors.is_empty() {
-        for err in &typechecker.errors {
-            print_error(fname, err, source.as_bytes())
+    match typechecker.typecheck() {
+        Ok(_) => {}
+        Err(errors) => {
+            for err in &errors {
+                print_error(fname, err, source.as_bytes())
+            }
+            return None;
         }
-        return None;
     }
 
     let mut translater = Translater::new(typechecker);
