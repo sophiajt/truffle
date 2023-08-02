@@ -244,12 +244,18 @@ impl TypeChecker {
         }
     }
 
-    pub fn typecheck(&mut self) {
+    pub fn typecheck(&mut self) -> Result<(), Vec<ScriptError>> {
         if !self.parse_results.ast_nodes.is_empty() {
             self.node_types = vec![UNKNOWN_TYPE; self.parse_results.ast_nodes.len()];
 
             let last = self.parse_results.ast_nodes.len() - 1;
-            self.typecheck_node(NodeId(last))
+            self.typecheck_node(NodeId(last));
+        }
+
+        if self.errors.is_empty() {
+            Ok(())
+        } else {
+            Err(self.errors.clone())
         }
     }
 
