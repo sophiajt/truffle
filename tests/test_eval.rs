@@ -134,7 +134,7 @@ pub fn eval_source(source: &str) -> ReturnValue {
 }
 
 #[cfg(not(feature = "async"))]
-pub fn eval_source(source: &str) -> ReturnValue {
+pub fn eval_source(source: &str) -> Result<ReturnValue, Vec<ScriptError>> {
     let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
 
     let tokens = lexer.lex();
@@ -145,10 +145,14 @@ pub fn eval_source(source: &str) -> ReturnValue {
     register_fn!(typechecker, "print", print::<i64>);
     register_fn!(typechecker, "print", print::<f64>);
     register_fn!(typechecker, "print", print::<bool>);
+    register_fn!(typechecker, "print", print::<String>);
     register_fn!(typechecker, "add", add::<i64>);
     register_fn!(typechecker, "add", add::<f64>);
 
     typechecker.typecheck();
+    if !typechecker.errors.is_empty() {
+        return Err(typechecker.errors);
+    }
 
     let mut translater = Translater::new(typechecker);
 
@@ -158,7 +162,7 @@ pub fn eval_source(source: &str) -> ReturnValue {
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
 
-    evaluator.eval(FunctionId(0), &translater.typechecker.functions)
+    Ok(evaluator.eval(FunctionId(0), &translater.typechecker.functions))
 }
 
 // Script Builtins

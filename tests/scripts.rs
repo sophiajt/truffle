@@ -1,5 +1,5 @@
 use libtest_mimic::{Arguments, Failed, Trial};
-use truffle::ReturnValue;
+use truffle::{print_error, ReturnValue};
 
 use std::{
     env,
@@ -57,12 +57,18 @@ fn collect_tests() -> eyre::Result<Vec<Trial>> {
 }
 
 /// testrunner adapter for libtest-mimic
-pub fn eval_source_runner(path: &Path) -> Result<(), Failed> {
-    let source = fs::read(path).map_err(|e| format!("Cannot read file: {e}"))?;
+pub fn eval_source_runner(fname: &Path) -> Result<(), Failed> {
+    let source = fs::read(fname).map_err(|e| format!("Cannot read file: {e}"))?;
     let source = String::from_utf8(source)
         .map_err(|_| "The file's contents are not a valid UTF-8 string!")?;
     match test_eval::eval_source(&source) {
-        ReturnValue::Custom { value: 0, .. } => Ok(()),
-        non_zero => Err(format!("Script evaluated to {non_zero:?}, expected 0"))?,
+        Ok(ReturnValue::Custom { value: 0, .. }) => Ok(()),
+        Ok(non_zero) => Err(format!("Script evaluated to {non_zero:?}, expected 0"))?,
+        Err(typechecker_errors) => {
+            for err in &typechecker_errors {
+                print_error(fname.to_string_lossy().as_ref(), err, source.as_bytes())
+            }
+            Err(format!("Script failed typechecking"))?
+        }
     }
 }

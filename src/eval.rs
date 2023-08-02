@@ -3,8 +3,8 @@ use std::any::Any;
 use crate::{
     codegen::{FunctionCodegen, Instruction, InstructionId, RegisterId, RegisterValue},
     parser::NodeId,
-    typechecker::{ExternalFnRecord, ExternalFunctionId, Function, FunctionId},
-    ScriptError, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, VOID_TYPE,
+    typechecker::{ExternalFnRecord, ExternalFunctionId, Function, FunctionId, STRING_TYPE},
+    ScriptError, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, UNIT_TYPE,
 };
 
 #[derive(Clone)]
@@ -70,6 +70,14 @@ impl Evaluator {
     #[inline]
     pub fn get_reg_bool(&self, register_id: &RegisterId) -> bool {
         unsafe { self.stack_frames[self.current_frame].register_values[register_id.0].bool }
+    }
+
+    #[inline]
+    pub fn get_reg_string(&self, register_id: &RegisterId) -> String {
+        let ptr =
+            unsafe { self.stack_frames[self.current_frame].register_values[register_id.0].ptr };
+        let thin_string: Box<String> = unsafe { Box::from_raw(ptr as _) };
+        *thin_string
     }
 
     #[cfg(not(feature = "async"))]
@@ -375,6 +383,9 @@ impl Evaluator {
             Box::new(val)
         } else if self.stack_frames[self.current_frame].register_types[register_id.0] == I64_TYPE {
             Box::new(self.get_reg_i64(&register_id))
+        } else if self.stack_frames[self.current_frame].register_types[register_id.0] == STRING_TYPE
+        {
+            Box::new(self.get_reg_string(&register_id))
         } else {
             println!(
                 "transmuting: {} with {}",
@@ -408,7 +419,7 @@ impl Evaluator {
             } else {
                 panic!("internal error: could not properly handle conversion of register to i64")
             }
-        } else if self.stack_frames[self.current_frame].register_types[target.0] == VOID_TYPE {
+        } else if self.stack_frames[self.current_frame].register_types[target.0] == UNIT_TYPE {
             // Ignore this case, as void creates no changes
         } else if self.stack_frames[self.current_frame].register_types[target.0] == I64_TYPE {
             if let Ok(value) = value.downcast::<i64>() {

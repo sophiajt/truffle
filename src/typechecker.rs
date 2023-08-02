@@ -1,12 +1,28 @@
-use std::{any::Any, collections::HashMap};
+use std::{any::Any, collections::HashMap, fmt};
 
 use crate::{
     errors::ScriptError,
     parser::{AstNode, NodeId, ParseResults},
 };
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct TypeId(pub usize);
+
+impl fmt::Debug for TypeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("TypeId").field(&self.0).finish()?;
+        match *self {
+            F64_TYPE => f.write_str(" (f64)")?,
+            I64_TYPE => f.write_str(" (i64)")?,
+            BOOL_TYPE => f.write_str(" (bool)")?,
+            UNIT_TYPE => f.write_str(" (unit aka `()`)")?,
+            STRING_TYPE => f.write_str(" (String)")?,
+            UNKNOWN_TYPE => f.write_str(" (Unknown type)")?,
+            _ => (),
+        }
+        Ok(())
+    }
+}
 
 #[derive(Default)]
 pub struct Scope {
@@ -83,10 +99,12 @@ pub struct TypeChecker {
     pub scope: Vec<Scope>,
 }
 
-pub const VOID_TYPE: TypeId = TypeId(0);
+pub const UNIT_TYPE: TypeId = TypeId(0);
 pub const I64_TYPE: TypeId = TypeId(1);
 pub const F64_TYPE: TypeId = TypeId(2);
 pub const BOOL_TYPE: TypeId = TypeId(3);
+pub const STRING_TYPE: TypeId = TypeId(4);
+pub const UNKNOWN_TYPE: TypeId = TypeId(usize::MAX);
 // PLEASE NOTE: BOOL_TYPE is considered last and any type after this is considered a user-defined datatype
 
 impl TypeChecker {
@@ -97,12 +115,14 @@ impl TypeChecker {
                 std::any::TypeId::of::<i64>(),
                 std::any::TypeId::of::<f64>(),
                 std::any::TypeId::of::<bool>(),
+                std::any::TypeId::of::<String>(),
             ],
             typenames: vec![
                 "void".into(), //std::any::type_name::<()>().to_string(),
                 std::any::type_name::<i64>().to_string(),
                 std::any::type_name::<f64>().to_string(),
                 std::any::type_name::<bool>().to_string(),
+                std::any::type_name::<String>().to_string(),
             ],
             reference_of_map: HashMap::new(),
             errors: vec![],
@@ -149,23 +169,26 @@ impl TypeChecker {
             AstNode::Float => {
                 self.node_types[node_id.0] = F64_TYPE;
             }
+            AstNode::String => {
+                self.node_types[node_id.0] = STRING_TYPE;
+            }
             AstNode::BinaryOp { lhs, op, rhs } => {
                 self.typecheck_binop(*lhs, *op, *rhs, node_id);
             }
             AstNode::Statement(node) => {
                 self.typecheck_node(*node);
-                self.node_types[node_id.0] = VOID_TYPE;
+                self.node_types[node_id.0] = UNIT_TYPE;
             }
             AstNode::Block(nodes) => {
                 if nodes.is_empty() {
-                    self.node_types[node_id.0] = VOID_TYPE;
+                    self.node_types[node_id.0] = UNIT_TYPE;
                 } else {
                     // FIXME: clone to get around ownership issue
                     let nodes = nodes.clone();
 
                     self.enter_scope();
                     // FIXME: grab the last one if it's an expression
-                    let mut type_id = VOID_TYPE;
+                    let mut type_id = UNKNOWN_TYPE;
                     for node_id in nodes {
                         self.typecheck_node(node_id);
 
@@ -223,7 +246,7 @@ impl TypeChecker {
 
     pub fn typecheck(&mut self) {
         if !self.parse_results.ast_nodes.is_empty() {
-            self.node_types = vec![VOID_TYPE; self.parse_results.ast_nodes.len()];
+            self.node_types = vec![UNKNOWN_TYPE; self.parse_results.ast_nodes.len()];
 
             let last = self.parse_results.ast_nodes.len() - 1;
             self.typecheck_node(NodeId(last))
@@ -261,8 +284,9 @@ impl TypeChecker {
 
         self.node_types[variable_name.0] = self.node_types[initializer.0];
 
-        self.node_types[node_id.0] = VOID_TYPE;
+        self.node_types[node_id.0] = UNIT_TYPE;
     }
+
     pub fn typecheck_if(
         &mut self,
         condition: NodeId,
@@ -302,7 +326,7 @@ impl TypeChecker {
 
         self.typecheck_node(block);
 
-        self.node_types[node_id.0] = VOID_TYPE;
+        self.node_types[node_id.0] = UNIT_TYPE;
     }
 
     // pub fn typecheck_for(
@@ -374,7 +398,7 @@ impl TypeChecker {
                         node_id,
                     )
                 }
-                self.node_types[node_id.0] = VOID_TYPE;
+                self.node_types[node_id.0] = UNIT_TYPE;
             }
             AstNode::LessThan
             | AstNode::LessThanOrEqual
@@ -616,7 +640,11 @@ impl TypeChecker {
     }
 
     pub fn stringify_type(&self, type_id: TypeId) -> String {
-        self.typenames[type_id.0].clone()
+        if type_id == UNKNOWN_TYPE {
+            String::from("<UNKNOWN TYPE>")
+        } else {
+            self.typenames[type_id.0].clone()
+        }
     }
 
     pub fn stringify_function_name(&self, name: &[u8], function_id: ExternalFunctionId) -> String {
@@ -687,7 +715,7 @@ where
                 let inside = (*arg).downcast_mut() as Option<&mut T>;
                 match inside {
                     Some(b) => Ok(Box::new(fun(b.clone())) as Box<dyn Any>),
-                    None => Err("ErrorFunctionArgMismatch".into()),
+                    None => Err("ErrorFunctionArgMismatch1".into()),
                 }
             });
 
@@ -736,7 +764,7 @@ where
 
             match (inside1, inside2) {
                 (Some(b), Some(c)) => Ok(Box::new(fun(b.clone(), c.clone())) as Box<dyn Any>),
-                _ => Err("ErrorFunctionArgMismatch".into()),
+                _ => Err("ErrorFunctionArgMismatch2".into()),
             }
         });
 
@@ -801,7 +829,7 @@ where
                     (Some(b), Some(c), Some(d)) => {
                         Ok(Box::new(fun(b.clone(), c.clone(), d.clone())) as Box<dyn Any>)
                     }
-                    _ => Err("ErrorFunctionArgMismatch".into()),
+                    _ => Err("ErrorFunctionArgMismatch3".into()),
                 }
             },
         );
@@ -873,7 +901,7 @@ where
                     (Some(b), Some(c), Some(d)) => {
                         Ok(Box::new(fun(b, c.clone(), d.clone())) as Box<dyn Any>)
                     }
-                    _ => Err("ErrorFunctionArgMismatch".into()),
+                    _ => Err("ErrorFunctionArgMismatch3Mut".into()),
                 }
             },
         );

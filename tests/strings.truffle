@@ -1,0 +1,5 @@
+let s = "this is a string!";
+print(s);
+let foo = "this is a different string";
+print(foo);
+print(s);

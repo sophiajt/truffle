@@ -16,6 +16,6 @@ pub use crate::{
     lexer::Lexer,
     parser::{ParseResults, Parser},
     typechecker::{
-        FnRegister, FunctionId, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, VOID_TYPE,
+        FnRegister, FunctionId, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, UNIT_TYPE,
     },
 };

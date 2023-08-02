@@ -120,6 +120,9 @@ impl AstNode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Uniquely identifies a node in the Abstract Syntax Tree
+///
+/// Used as an index into various vectors in `ParseResults`.
 pub struct NodeId(pub usize);
 
 impl Parser {
