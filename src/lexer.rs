@@ -540,13 +540,17 @@ impl Lexer {
         }
     }
 
-    pub fn lex(&mut self) -> Vec<Token> {
+    pub fn lex(&mut self) -> Result<Vec<Token>, Vec<ScriptError>> {
         let mut output = vec![];
 
         while let Some(token) = self.next_token() {
             output.push(token)
         }
 
-        output
+        if !self.errors.is_empty() {
+            Err(self.errors.clone())
+        } else {
+            Ok(output)
+        }
     }
 }

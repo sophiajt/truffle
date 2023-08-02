@@ -162,8 +162,13 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) {
+    pub fn parse(&mut self) -> Result<(), Vec<ScriptError>> {
         self.program();
+        if !self.errors.is_empty() {
+            Err(self.errors.clone())
+        } else {
+            Ok(())
+        }
     }
 
     pub fn program(&mut self) -> NodeId {
