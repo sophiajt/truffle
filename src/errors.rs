@@ -164,7 +164,11 @@ impl ErrorBatch {
     }
 
     pub fn assert_contains(&self, message: &str) {
-        assert!(self.errors.iter().any(|err| err.message.contains(message)));
+        assert!(
+            self.errors.iter().any(|err| err.message.contains(message)),
+            "One of the errors contained in this error batch should contain the text \"{}\"",
+            message
+        );
     }
 
     pub fn print_with(&self, fname: &Path, contents: &[u8]) {
