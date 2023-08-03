@@ -1,3 +1,5 @@
+use std::{fmt, path::Path, slice::Iter};
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScriptError {
     pub message: String,
@@ -5,7 +7,12 @@ pub struct ScriptError {
     pub span_end: usize,
 }
 
-pub fn print_error(fname: &str, script_error: &ScriptError, contents: &[u8]) {
+fn write_error(
+    fname: &Path,
+    script_error: &ScriptError,
+    contents: &[u8],
+    f: &mut fmt::Formatter<'_>,
+) -> fmt::Result {
     let ScriptError {
         message,
         span_start,
@@ -15,7 +22,7 @@ pub fn print_error(fname: &str, script_error: &ScriptError, contents: &[u8]) {
     let span_start = *span_start;
     let span_end = *span_end;
 
-    let filename = fname.to_string();
+    let filename = fname.display();
     let file_span_start = 0;
     let file_span_end = contents.len();
 
@@ -33,14 +40,15 @@ pub fn print_error(fname: &str, script_error: &ScriptError, contents: &[u8]) {
     };
 
     for _ in 0..(max_number_width + 2) {
-        eprint!("─");
+        write!(f, "─")?;
     }
-    eprintln!(
+    writeln!(
+        f,
         "┬─ \x1b[0;36m{}:{}:{}\x1b[0m",
         filename,
         line_number,
         span_start - line_start + 1
-    );
+    )?;
 
     // Previous line in the source code, if available
     if line_start > (file_span_start + 1) {
@@ -49,58 +57,164 @@ pub fn print_error(fname: &str, script_error: &ScriptError, contents: &[u8]) {
         let prev_line_number_str = format!("{}", prev_line_number);
 
         for _ in 0..(max_number_width - prev_line_number_str.len()) {
-            eprint!(" ")
+            write!(f, " ")?;
         }
 
-        eprintln!(
+        writeln!(
+            f,
             " {} │ {}",
             prev_line_number_str,
             String::from_utf8_lossy(&contents[prev_line_start..prev_line_end])
-        );
+        )?;
     }
 
     // Line being highlighted
     for _ in 0..(max_number_width - line_number_width) {
-        eprint!(" ")
+        write!(f, " ")?;
     }
 
-    eprintln!(
+    writeln!(
+        f,
         " {} │ {}",
         line_number,
         String::from_utf8_lossy(&contents[line_start..line_end])
-    );
+    )?;
 
     for _ in 0..(max_number_width + 2) {
-        eprint!(" ");
+        write!(f, " ")?;
     }
-    eprint!("│");
+    write!(f, "│")?;
     for _ in 0..(span_start - line_start + 1) {
-        eprint!(" ");
+        write!(f, " ")?;
     }
 
-    eprint!("\x1b[0;31m");
+    write!(f, "\x1b[0;31m")?;
     for _ in span_start..span_end {
-        eprint!("╍");
+        write!(f, "╍")?;
     }
-    eprintln!(" error: {}", message);
-    eprint!("\x1b[0m");
+    writeln!(f, " error: {}", message)?;
+    write!(f, "\x1b[0m")?;
 
     // Next line after error, for context
     if (line_end + 1) < file_span_end {
         let (next_line_number, next_line_start, next_line_end) =
             line_extents(contents, line_end + 1, file_span_start, file_span_end);
 
-        eprintln!(
+        writeln!(
+            f,
             " {} │ {}",
             next_line_number,
             String::from_utf8_lossy(&contents[next_line_start..next_line_end])
-        );
+        )?;
     }
 
     for _ in 0..(max_number_width + 2) {
-        eprint!("─");
+        write!(f, "─")?;
     }
-    eprintln!("┴─");
+    writeln!(f, "┴─")?;
+    Ok(())
+}
+
+impl ScriptError {
+    pub fn print_with(&self, fname: &Path, contents: &[u8]) {
+        eprintln!("{}", self.display_with(fname, contents));
+    }
+
+    pub fn display_with<'a>(
+        &'a self,
+        fname: &'a Path,
+        contents: &'a [u8],
+    ) -> ResolvedScriptError<'a> {
+        ResolvedScriptError {
+            error: self,
+            fname,
+            contents,
+        }
+    }
+}
+
+pub struct ResolvedScriptError<'a> {
+    error: &'a ScriptError,
+    fname: &'a Path,
+    contents: &'a [u8],
+}
+
+impl fmt::Display for ResolvedScriptError<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write_error(self.fname, self.error, self.contents, f)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ErrorBatch {
+    errors: Vec<ScriptError>,
+}
+
+impl ErrorBatch {
+    pub fn empty() -> ErrorBatch {
+        ErrorBatch { errors: vec![] }
+    }
+
+    pub fn push(&mut self, error: ScriptError) {
+        self.errors.push(error);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.errors.is_empty()
+    }
+
+    pub fn assert_contains(&self, message: &str) {
+        assert!(self.errors.iter().any(|err| err.message.contains(message)));
+    }
+
+    pub fn print_with(&self, fname: &Path, contents: &[u8]) {
+        eprintln!("{}", self.display_with(fname, contents));
+    }
+
+    fn display_with<'a>(&'a self, fname: &'a Path, contents: &'a [u8]) -> ResolvedErrorBatch<'a> {
+        ResolvedErrorBatch {
+            errors: self,
+            fname,
+            contents,
+        }
+    }
+}
+
+pub struct ResolvedErrorBatch<'a> {
+    errors: &'a ErrorBatch,
+    fname: &'a Path,
+    contents: &'a [u8],
+}
+
+impl ResolvedErrorBatch<'_> {}
+
+impl fmt::Display for ResolvedErrorBatch<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for script_error in self.errors {
+            let resolved = script_error.display_with(self.fname, self.contents);
+            writeln!(f, "{}", resolved)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl From<ScriptError> for ErrorBatch {
+    fn from(value: ScriptError) -> Self {
+        let mut batch = Self::empty();
+        batch.push(value);
+        batch
+    }
+}
+
+impl<'a> IntoIterator for &'a ErrorBatch {
+    type Item = &'a ScriptError;
+
+    type IntoIter = Iter<'a, ScriptError>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&self.errors).into_iter()
+    }
 }
 
 // line number, line start, line_end

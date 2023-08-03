@@ -1,7 +1,7 @@
 use std::{any::Any, collections::HashMap, fmt};
 
 use crate::{
-    errors::ScriptError,
+    errors::{ErrorBatch, ScriptError},
     parser::{AstNode, NodeId, ParseResults},
 };
 
@@ -95,7 +95,7 @@ pub struct TypeChecker {
     // Externally-registered functions
     pub external_functions: HashMap<Vec<u8>, Vec<ExternalFunctionId>>,
 
-    pub errors: Vec<ScriptError>,
+    pub errors: ErrorBatch,
     pub scope: Vec<Scope>,
 }
 
@@ -127,7 +127,7 @@ impl TypeChecker {
                 std::any::type_name::<String>().to_string(),
             ],
             reference_of_map: HashMap::new(),
-            errors: vec![],
+            errors: ErrorBatch::empty(),
 
             parse_results,
 
@@ -246,7 +246,7 @@ impl TypeChecker {
         }
     }
 
-    pub fn typecheck(&mut self) -> Result<(), Vec<ScriptError>> {
+    pub fn typecheck(&mut self) -> Result<(), ErrorBatch> {
         if !self.parse_results.ast_nodes.is_empty() {
             self.node_types = vec![UNKNOWN_TYPE; self.parse_results.ast_nodes.len()];
 

@@ -1,10 +1,10 @@
 mod line_editor;
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use line_editor::{LineEditor, ReadLineOutput};
 
 use truffle::{
-    print_error, register_fn, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue,
+    register_fn, ErrorBatch, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue,
     Translater, TypeChecker, BOOL_TYPE, F64_TYPE,
 };
 
@@ -47,7 +47,7 @@ fn main() {
     }
 }
 
-fn print_result(typechecker: &TypeChecker, fname: &str, result: ReturnValue, contents: &[u8]) {
+fn print_result(typechecker: &TypeChecker, fname: &Path, result: ReturnValue, contents: &[u8]) {
     match result {
         ReturnValue::Bool(value) => {
             println!("result -> {} (bool)", value)
@@ -79,21 +79,27 @@ fn print_result(typechecker: &TypeChecker, fname: &str, result: ReturnValue, con
                 );
             }
         }
-        ReturnValue::Error(script_error) => print_error(fname, &script_error, contents),
+        ReturnValue::Error(script_error) => {
+            let errors = ErrorBatch::from(script_error);
+            errors.print_with(fname, contents);
+        }
     }
 }
 
 #[cfg(feature = "async")]
-fn run_line(fname: &str, source: &str) -> Option<()> {
+fn run_line<P>(fname: P, source: &str) -> Option<()>
+where
+    P: AsRef<Path>,
+{
     use futures::executor::block_on;
+    let contents = source.as_bytes();
+    let fname = fname.as_ref();
 
     let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
     let tokens = match lexer.lex() {
         Ok(tokens) => tokens,
         Err(errors) => {
-            for err in &errors {
-                print_error(fname, err, source.as_bytes())
-            }
+            errors.print_with(fname, contents);
             return None;
         }
     };
@@ -102,9 +108,7 @@ fn run_line(fname: &str, source: &str) -> Option<()> {
     match parser.parse() {
         Ok(()) => {}
         Err(errors) => {
-            for err in &errors {
-                print_error(fname, err, source.as_bytes())
-            }
+            errors.print_with(fname, contents);
             return None;
         }
     }
@@ -122,9 +126,7 @@ fn run_line(fname: &str, source: &str) -> Option<()> {
     match typechecker.typecheck() {
         Ok(_) => {}
         Err(errors) => {
-            for err in &errors {
-                print_error(fname, err, source.as_bytes())
-            }
+            errors.print_with(fname, contents);
             return None;
         }
     }
@@ -145,15 +147,18 @@ fn run_line(fname: &str, source: &str) -> Option<()> {
 }
 
 #[cfg(not(feature = "async"))]
-fn run_line(fname: &str, source: &str) -> Option<()> {
+fn run_line<P>(fname: P, source: &str) -> Option<()>
+where
+    P: AsRef<Path>,
+{
+    let fname = fname.as_ref();
+    let contents = source.as_bytes();
     let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
 
     let tokens = match lexer.lex() {
         Ok(tokens) => tokens,
         Err(errors) => {
-            for err in &errors {
-                print_error(fname, err, source.as_bytes())
-            }
+            errors.print_with(fname, contents);
             return None;
         }
     };
@@ -163,9 +168,7 @@ fn run_line(fname: &str, source: &str) -> Option<()> {
     match parser.parse() {
         Ok(()) => {}
         Err(errors) => {
-            for err in &errors {
-                print_error(fname, err, source.as_bytes())
-            }
+            errors.print_with(fname, contents);
             return None;
         }
     }
@@ -183,9 +186,7 @@ fn run_line(fname: &str, source: &str) -> Option<()> {
     match typechecker.typecheck() {
         Ok(_) => {}
         Err(errors) => {
-            for err in &errors {
-                print_error(fname, err, source.as_bytes())
-            }
+            errors.print_with(fname, contents);
             return None;
         }
     }

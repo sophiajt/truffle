@@ -1,4 +1,4 @@
-use crate::errors::ScriptError;
+use crate::errors::{ErrorBatch, ScriptError};
 use crate::lexer::{Token, TokenType};
 
 pub struct Parser {
@@ -6,7 +6,7 @@ pub struct Parser {
     pub tokens: Vec<Token>,
     pub current_token: usize,
     pub content_length: usize,
-    pub errors: Vec<ScriptError>,
+    pub errors: ErrorBatch,
 }
 
 #[derive(Debug, PartialEq)]
@@ -133,7 +133,7 @@ impl Parser {
             tokens,
             current_token: 0,
             content_length,
-            errors: vec![],
+            errors: ErrorBatch::empty(),
         }
     }
 
@@ -162,7 +162,7 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<(), Vec<ScriptError>> {
+    pub fn parse(&mut self) -> Result<(), ErrorBatch> {
         self.program();
         if !self.errors.is_empty() {
             Err(self.errors.clone())

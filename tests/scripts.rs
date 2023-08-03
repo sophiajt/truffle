@@ -1,5 +1,5 @@
 use libtest_mimic::{Arguments, Failed, Trial};
-use truffle::{print_error, ReturnValue};
+use truffle::ReturnValue;
 
 use std::{
     env,
@@ -64,11 +64,10 @@ pub fn eval_source_runner(fname: &Path) -> Result<(), Failed> {
     match test_eval::eval_source(&source) {
         Ok(ReturnValue::Custom { value: 0, .. }) => Ok(()),
         Ok(non_zero) => Err(format!("Script evaluated to {non_zero:?}, expected 0"))?,
-        Err(typechecker_errors) => {
-            for err in &typechecker_errors {
-                print_error(fname.to_string_lossy().as_ref(), err, source.as_bytes())
-            }
-            Err(format!("Script failed typechecking"))?
+        Err(errors) => {
+            let contents = source.as_bytes();
+            errors.print_with(fname, contents);
+            Err(format!("Script is invalid"))?
         }
     }
 }
