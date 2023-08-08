@@ -1,9 +1,9 @@
-use crate::errors::ScriptError;
+use crate::errors::{ErrorBatch, ScriptError};
 
 pub struct Lexer {
     source: Vec<u8>,
     span_offset: usize,
-    pub errors: Vec<ScriptError>,
+    pub errors: ErrorBatch,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -68,7 +68,7 @@ impl Lexer {
         Self {
             source,
             span_offset,
-            errors: vec![],
+            errors: ErrorBatch::empty(),
         }
     }
 
@@ -540,7 +540,7 @@ impl Lexer {
         }
     }
 
-    pub fn lex(&mut self) -> Result<Vec<Token>, Vec<ScriptError>> {
+    pub fn lex(&mut self) -> Result<Vec<Token>, ErrorBatch> {
         let mut output = vec![];
 
         while let Some(token) = self.next_token() {

@@ -1,34 +1,10 @@
 use truffle::{
-    register_fn, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue, ScriptError,
+    register_fn, ErrorBatch, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue,
     Translater, TypeChecker,
 };
 
-#[allow(unused)]
-pub fn compile_to_error(source: &str) -> Vec<ScriptError> {
-    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
-
-    let tokens = match lexer.lex() {
-        Ok(tokens) => tokens,
-        Err(errors) => return errors,
-    };
-
-    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
-    match parser.parse() {
-        Ok(()) => {}
-        Err(errors) => return errors,
-    }
-
-    let mut typechecker = TypeChecker::new(parser.results);
-    typechecker.typecheck();
-    if !typechecker.errors.is_empty() {
-        return typechecker.errors;
-    }
-
-    vec![]
-}
-
 #[cfg(feature = "async")]
-pub fn eval_source(source: &str) -> Result<ReturnValue, Vec<ScriptError>> {
+pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
     use futures::executor::block_on;
 
     let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
@@ -38,6 +14,10 @@ pub fn eval_source(source: &str) -> Result<ReturnValue, Vec<ScriptError>> {
     parser.parse()?;
 
     let mut typechecker = TypeChecker::new(parser.results);
+    register_fn!(typechecker, "print", print::<i64>);
+    register_fn!(typechecker, "print", print::<f64>);
+    register_fn!(typechecker, "print", print::<bool>);
+    register_fn!(typechecker, "print", print::<String>);
     register_fn!(typechecker, "add", add::<i64>);
     register_fn!(typechecker, "add", add::<f64>);
 
@@ -52,13 +32,13 @@ pub fn eval_source(source: &str) -> Result<ReturnValue, Vec<ScriptError>> {
     evaluator.add_function(output);
 
     match block_on(evaluator.eval(FunctionId(0), &translater.typechecker.functions)) {
-        ReturnValue::Error(error) => Err(vec![error]),
+        ReturnValue::Error(error) => Err(error.into()),
         return_value => Ok(return_value),
     }
 }
 
 #[cfg(not(feature = "async"))]
-pub fn eval_source(source: &str) -> Result<ReturnValue, Vec<ScriptError>> {
+pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
     let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
 
     let tokens = lexer.lex()?;
@@ -84,7 +64,7 @@ pub fn eval_source(source: &str) -> Result<ReturnValue, Vec<ScriptError>> {
     evaluator.add_function(output);
 
     match evaluator.eval(FunctionId(0), &translater.typechecker.functions) {
-        ReturnValue::Error(error) => Err(vec![error]),
+        ReturnValue::Error(error) => Err(error.into()),
         return_value => Ok(return_value),
     }
 }

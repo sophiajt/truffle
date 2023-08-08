@@ -91,16 +91,14 @@ fn external_call() {
 
 #[test]
 fn typecheck_errors() {
-    assert!(eval_source("let x = 123; x = 4566")
+    eval_source("let x = 123; x = 4566")
         .expect_err("test should fail due to missing mut")
-        .iter()
-        .any(|err| err.message.contains("assignment to immutable variable")));
+        .assert_contains("assignment to immutable variable");
 }
 
 #[test]
 fn runtime_errors() {
-    assert!(eval_source("3 / 0")
+    eval_source("3 / 0")
         .expect_err("it should not be possible to divide by zero")
-        .iter()
-        .any(|err| err.message.contains("division by zero")));
+        .assert_contains("division by zero");
 }
