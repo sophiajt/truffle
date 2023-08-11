@@ -19,7 +19,7 @@ pub union RegisterValue {
     pub f64: f64,
     pub i64: i64,
     pub bool: bool,
-    pub ptr: *const (),
+    pub ptr: *const Box<String>,
 }
 
 pub struct Value {
