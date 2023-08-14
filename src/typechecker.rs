@@ -106,7 +106,11 @@ pub const F64_TYPE: TypeId = TypeId(2);
 pub const BOOL_TYPE: TypeId = TypeId(3);
 pub const STRING_TYPE: TypeId = TypeId(4); // <-- last known builtin type id (after this, assume user-defined).
                                            // Please: keep this last and insert new built-in types above it, making sure
-                                           // to adjust STRING_TYPE's type id.
+                                           // to adjust STRING_TYPE's type id. TODO update this to
+                                           // change the assumption to which types live on the heap
+                                           // and need to be leaked after usage to prevent drops,
+                                           // confirm there is no other behavior based on the
+                                           // assumption of last builtin
 pub const UNKNOWN_TYPE: TypeId = TypeId(usize::MAX);
 
 impl TypeChecker {

@@ -73,11 +73,10 @@ impl Evaluator {
     }
 
     #[inline]
-    pub fn get_reg_string(&self, register_id: &RegisterId) -> String {
+    pub fn get_reg_string(&self, register_id: &RegisterId) -> Box<String> {
         let ptr =
             unsafe { self.stack_frames[self.current_frame].register_values[register_id.0].ptr };
-        let thin_string: Box<String> = unsafe { Box::from_raw(ptr as _) };
-        *thin_string
+        unsafe { Box::from_raw(ptr as _) }
     }
 
     #[cfg(not(feature = "async"))]
@@ -325,7 +324,7 @@ impl Evaluator {
 
                 let result = fun(&mut arg0).unwrap();
 
-                if self.is_user_type(args[0]) {
+                if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg0);
                 }
@@ -338,11 +337,11 @@ impl Evaluator {
 
                 let result = fun(&mut arg0, &mut arg1).unwrap();
 
-                if self.is_user_type(args[0]) {
+                if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg0);
                 }
-                if self.is_user_type(args[1]) {
+                if self.is_heap_type(args[1]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg1);
                 }
@@ -356,15 +355,15 @@ impl Evaluator {
 
                 let result = fun(&mut arg0, &mut arg1, &mut arg2).unwrap();
 
-                if self.is_user_type(args[0]) {
+                if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg0);
                 }
-                if self.is_user_type(args[1]) {
+                if self.is_heap_type(args[1]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg1);
                 }
-                if self.is_user_type(args[2]) {
+                if self.is_heap_type(args[2]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg2);
                 }
@@ -385,7 +384,7 @@ impl Evaluator {
             Box::new(self.get_reg_i64(&register_id))
         } else if self.stack_frames[self.current_frame].register_types[register_id.0] == STRING_TYPE
         {
-            Box::new(self.get_reg_string(&register_id))
+            self.get_reg_string(&register_id)
         } else {
             println!(
                 "transmuting: {} with {}",
@@ -467,8 +466,8 @@ impl Evaluator {
         }
     }
 
-    pub fn is_user_type(&self, register_id: RegisterId) -> bool {
-        self.stack_frames[self.current_frame].register_types[register_id.0].0 > STRING_TYPE.0
+    pub fn is_heap_type(&self, register_id: RegisterId) -> bool {
+        self.stack_frames[self.current_frame].register_types[register_id.0].0 >= STRING_TYPE.0
     }
 
     pub fn error(&self, msg: impl Into<String>, node_id: NodeId) -> ScriptError {

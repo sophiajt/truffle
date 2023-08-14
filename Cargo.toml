@@ -17,7 +17,7 @@ async = ["dep:futures"]
 
 [dev-dependencies]
 criterion = "0.5.1"
-eyre = "0.6.8"
+anyhow = "1.0.72"
 libtest-mimic = "0.6.1"
 
 [[bench]]
