@@ -60,22 +60,22 @@ impl Evaluator {
     }
 
     #[inline]
-    pub fn get_reg_i64(&self, register_id: &RegisterId) -> i64 {
+    pub fn get_reg_i64(&self, register_id: RegisterId) -> i64 {
         unsafe { self.stack_frames[self.current_frame].register_values[register_id.0].i64 }
     }
 
     #[inline]
-    pub fn get_reg_f64(&self, register_id: &RegisterId) -> f64 {
+    pub fn get_reg_f64(&self, register_id: RegisterId) -> f64 {
         unsafe { self.stack_frames[self.current_frame].register_values[register_id.0].f64 }
     }
 
     #[inline]
-    pub fn get_reg_bool(&self, register_id: &RegisterId) -> bool {
+    pub fn get_reg_bool(&self, register_id: RegisterId) -> bool {
         unsafe { self.stack_frames[self.current_frame].register_values[register_id.0].bool }
     }
 
     #[inline]
-    pub fn get_reg_string(&self, register_id: &RegisterId) -> Box<String> {
+    pub fn get_reg_string(&self, register_id: RegisterId) -> Box<String> {
         let ptr =
             unsafe { self.stack_frames[self.current_frame].register_values[register_id.0].ptr };
         unsafe { Box::from_raw(ptr as _) }
@@ -93,7 +93,7 @@ impl Evaluator {
         println!(
             "transmuting: {} with {}",
             register_id.0,
-            self.get_reg_i64(&register_id)
+            self.get_reg_i64(register_id)
         );
         let boxed = unsafe {
             std::mem::transmute::<i64, Box<Box<dyn Any>>>(
@@ -110,24 +110,24 @@ impl Evaluator {
 
     pub fn eval_common_opcode(&mut self, instruction_pointer: &mut usize) -> Option<ReturnValue> {
         match &self.instructions[*instruction_pointer] {
-            Instruction::IADD { lhs, rhs, target } => {
+            &Instruction::IADD { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].i64 =
                     self.get_reg_i64(lhs) + self.get_reg_i64(rhs);
                 *instruction_pointer += 1;
             }
-            Instruction::ISUB { lhs, rhs, target } => {
+            &Instruction::ISUB { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].i64 =
                     self.get_reg_i64(lhs) - self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::IMUL { lhs, rhs, target } => {
+            &Instruction::IMUL { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].i64 =
                     self.get_reg_i64(lhs) * self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::IDIV { lhs, rhs, target } => {
+            &Instruction::IDIV { lhs, rhs, target } => {
                 if self.get_reg_i64(rhs) == 0 {
                     return Some(ReturnValue::Error(
                         self.error("division by zero", self.source_map[*instruction_pointer]),
@@ -138,49 +138,49 @@ impl Evaluator {
 
                 *instruction_pointer += 1
             }
-            Instruction::ILT { lhs, rhs, target } => {
+            &Instruction::ILT { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_i64(lhs) < self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::ILTE { lhs, rhs, target } => {
+            &Instruction::ILTE { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_i64(lhs) <= self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::IGT { lhs, rhs, target } => {
+            &Instruction::IGT { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_i64(lhs) > self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::IGTE { lhs, rhs, target } => {
+            &Instruction::IGTE { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_i64(lhs) >= self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::FADD { lhs, rhs, target } => {
+            &Instruction::FADD { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].f64 =
                     self.get_reg_f64(lhs) + self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::FSUB { lhs, rhs, target } => {
+            &Instruction::FSUB { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].f64 =
                     self.get_reg_f64(lhs) - self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::FMUL { lhs, rhs, target } => {
+            &Instruction::FMUL { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].f64 =
                     self.get_reg_f64(lhs) * self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::FDIV { lhs, rhs, target } => {
+            &Instruction::FDIV { lhs, rhs, target } => {
                 if self.get_reg_f64(rhs) == 0.0 {
                     return Some(ReturnValue::Error(
                         self.error("division by zero", self.source_map[*instruction_pointer]),
@@ -192,36 +192,37 @@ impl Evaluator {
 
                 *instruction_pointer += 1;
             }
-            Instruction::FLT { lhs, rhs, target } => {
+            &Instruction::FLT { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_f64(lhs) < self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::FLTE { lhs, rhs, target } => {
+            &Instruction::FLTE { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_f64(lhs) <= self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::FGT { lhs, rhs, target } => {
+            &Instruction::FGT { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_f64(lhs) > self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::FGTE { lhs, rhs, target } => {
+            &Instruction::FGTE { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_f64(lhs) >= self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            Instruction::MOV { target, source } => {
+            &Instruction::MOV { target, source } => {
+                self.maybe_free_register(target);
                 self.stack_frames[self.current_frame].register_values[target.0] =
                     self.stack_frames[self.current_frame].register_values[source.0];
                 *instruction_pointer += 1;
             }
-            Instruction::BRIF {
+            &Instruction::BRIF {
                 condition,
                 then_branch,
                 else_branch,
@@ -234,10 +235,10 @@ impl Evaluator {
                     *instruction_pointer = else_branch.0;
                 }
             }
-            Instruction::JMP(location) => {
+            &Instruction::JMP(location) => {
                 *instruction_pointer = location.0;
             }
-            Instruction::RET => {
+            &Instruction::RET => {
                 if self.stack_frames.len() > 1 {
                     self.stack_frames.pop();
                     self.current_frame -= 1;
@@ -247,17 +248,17 @@ impl Evaluator {
                     match self.stack_frames[self.current_frame].register_types[0] {
                         UNIT_TYPE => return Some(ReturnValue::Unit),
                         BOOL_TYPE => {
-                            return Some(ReturnValue::Bool(self.get_reg_bool(&RegisterId(0))))
+                            return Some(ReturnValue::Bool(self.get_reg_bool(RegisterId(0))))
                         }
                         I64_TYPE => {
-                            return Some(ReturnValue::I64(self.get_reg_i64(&RegisterId(0))))
+                            return Some(ReturnValue::I64(self.get_reg_i64(RegisterId(0))))
                         }
                         F64_TYPE => {
-                            return Some(ReturnValue::F64(self.get_reg_f64(&RegisterId(0))))
+                            return Some(ReturnValue::F64(self.get_reg_f64(RegisterId(0))))
                         }
                         STRING_TYPE => {
-                            let string = self.get_reg_string(&RegisterId(0));
-                            return Some(ReturnValue::String(*string));
+                            let string = self.get_reg_string(RegisterId(0));
+                            return Some(ReturnValue::String(*string))
                         }
                         _ => {
                             let value = self.get_user_type(RegisterId(0));
@@ -478,16 +479,16 @@ impl Evaluator {
 
     pub fn box_register(&self, register_id: RegisterId) -> Box<dyn Any> {
         if self.stack_frames[self.current_frame].register_types[register_id.0] == F64_TYPE {
-            let val = self.get_reg_f64(&register_id);
+            let val = self.get_reg_f64(register_id);
             Box::new(val)
         } else if self.stack_frames[self.current_frame].register_types[register_id.0] == BOOL_TYPE {
-            let val = self.get_reg_bool(&register_id);
+            let val = self.get_reg_bool(register_id);
             Box::new(val)
         } else if self.stack_frames[self.current_frame].register_types[register_id.0] == I64_TYPE {
-            Box::new(self.get_reg_i64(&register_id))
+            Box::new(self.get_reg_i64(register_id))
         } else if self.stack_frames[self.current_frame].register_types[register_id.0] == STRING_TYPE
         {
-            self.get_reg_string(&register_id)
+            self.get_reg_string(register_id)
         } else {
             self.get_user_type(register_id)
         }
@@ -515,10 +516,19 @@ impl Evaluator {
                 panic!("internal error: could not properly handle conversion of register to i64")
             }
         } else {
+            self.maybe_free_register(target);
             self.stack_frames[self.current_frame].register_values[target.0].i64 =
                 unsafe { std::mem::transmute::<Box<Box<dyn Any>>, i64>(Box::new(value)) };
 
-            println!("setting {} into {}", target.0, self.get_reg_i64(&target))
+            println!("setting {} into {}", target.0, self.get_reg_i64(target))
+        }
+    }
+
+    fn maybe_free_register(&mut self, target: RegisterId) {
+        if self.is_string_type(target) {
+            let _ = self.get_reg_string(target);
+        } else if self.is_user_type(target) {
+            let _ = self.get_user_type(target);
         }
     }
 
@@ -555,7 +565,15 @@ impl Evaluator {
     }
 
     pub fn is_heap_type(&self, register_id: RegisterId) -> bool {
-        self.stack_frames[self.current_frame].register_types[register_id.0].0 >= STRING_TYPE.0
+        self.is_string_type(register_id) || self.is_user_type(register_id)
+    }
+
+    pub fn is_string_type(&self, register_id: RegisterId) -> bool {
+        self.stack_frames[self.current_frame].register_types[register_id.0].0 == STRING_TYPE.0
+    }
+
+    pub fn is_user_type(&self, register_id: RegisterId) -> bool {
+        self.stack_frames[self.current_frame].register_types[register_id.0].0 > STRING_TYPE.0
     }
 
     pub fn error(&self, msg: impl Into<String>, node_id: NodeId) -> ScriptError {
