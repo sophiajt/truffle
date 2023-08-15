@@ -30,12 +30,15 @@ pub struct Evaluator {
     pub stack_frames: Vec<StackFrame>,
 }
 
-#[derive(PartialEq, Debug)]
+
+#[derive(Debug)]
 pub enum ReturnValue {
+    Unit,
     I64(i64),
     F64(f64),
     Bool(bool),
-    Custom { value: i64, type_id: TypeId },
+    String(String),
+    Custom(Box<dyn Any>),
     Error(ScriptError),
 }
 
@@ -77,6 +80,33 @@ impl Evaluator {
         let ptr =
             unsafe { self.stack_frames[self.current_frame].register_values[register_id.0].ptr };
         unsafe { Box::from_raw(ptr as _) }
+    }
+
+    #[inline]
+    /// Take a given register's contents, leaving a copy of the pointer in the register. Users must
+    /// leak the box to prevent the underlying storage from being freed.
+    ///
+    /// SAFETY: the underlying storage of the data stored at `register_id` must not have been freed
+    /// by a previous access
+    ///
+    /// TODO: we need to either mark this function unsafe or change how we do this in the future
+    pub fn get_user_type(&self, register_id: RegisterId) -> Box<dyn Any> {
+        println!(
+            "transmuting: {} with {}",
+            register_id.0,
+            self.get_reg_i64(&register_id)
+        );
+        let boxed = unsafe {
+            std::mem::transmute::<i64, Box<Box<dyn Any>>>(
+                self.stack_frames[self.current_frame].register_values[register_id.0].i64,
+            )
+        };
+
+        let boxed = Box::leak(boxed);
+
+        let leaked = &mut **boxed as *mut dyn Any;
+
+        unsafe { Box::from_raw(leaked) }
     }
 
     #[cfg(not(feature = "async"))]
@@ -282,6 +312,9 @@ impl Evaluator {
                         self.stack_frames[self.current_frame].instruction_pointer.0;
                 } else {
                     match self.stack_frames[self.current_frame].register_types[0] {
+                        UNIT_TYPE => {
+                            return Some(ReturnValue::Unit)
+                        }
                         BOOL_TYPE => {
                             return Some(ReturnValue::Bool(self.get_reg_bool(&RegisterId(0))))
                         }
@@ -291,11 +324,13 @@ impl Evaluator {
                         F64_TYPE => {
                             return Some(ReturnValue::F64(self.get_reg_f64(&RegisterId(0))))
                         }
+                        STRING_TYPE => {
+                            let string = self.get_reg_string(&RegisterId(0));
+                            return Some(ReturnValue::String(*string))
+                        }
                         _ => {
-                            return Some(ReturnValue::Custom {
-                                value: self.get_reg_i64(&RegisterId(0)),
-                                type_id: self.stack_frames[self.current_frame].register_types[0],
-                            })
+                            let value = self.get_user_type(RegisterId(0));
+                            return Some(ReturnValue::Custom(value))
                         }
                     }
                 }
@@ -386,22 +421,7 @@ impl Evaluator {
         {
             self.get_reg_string(&register_id)
         } else {
-            println!(
-                "transmuting: {} with {}",
-                register_id.0,
-                self.get_reg_i64(&register_id)
-            );
-            let boxed = unsafe {
-                std::mem::transmute::<i64, Box<Box<dyn Any>>>(
-                    self.stack_frames[self.current_frame].register_values[register_id.0].i64,
-                )
-            };
-
-            let boxed = Box::leak(boxed);
-
-            let leaked = &mut **boxed as *mut dyn Any;
-
-            unsafe { Box::from_raw(leaked) }
+            self.get_user_type(register_id)
         }
     }
 

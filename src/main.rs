@@ -5,7 +5,7 @@ use line_editor::{LineEditor, ReadLineOutput};
 
 use truffle::{
     register_fn, ErrorBatch, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue,
-    Translater, TypeChecker, BOOL_TYPE, F64_TYPE,
+    Translater, TypeChecker
 };
 
 fn main() {
@@ -47,37 +47,25 @@ fn main() {
     }
 }
 
-fn print_result(typechecker: &TypeChecker, fname: &Path, result: ReturnValue, contents: &[u8]) {
+fn print_result(_typechecker: &TypeChecker, fname: &Path, result: ReturnValue, contents: &[u8]) {
     match result {
+        ReturnValue::Unit => {
+            println!("result -> () (unit)");
+        }
         ReturnValue::Bool(value) => {
-            println!("result -> {} (bool)", value)
+            println!("result -> {value} (bool)")
         }
         ReturnValue::I64(value) => {
-            println!("result -> {} (i64)", value)
+            println!("result -> {value} (i64)")
         }
         ReturnValue::F64(value) => {
-            println!("result -> {} (f64)", value)
+            println!("result -> {value} (f64)")
         }
-        ReturnValue::Custom { value, type_id } => {
-            if type_id == F64_TYPE {
-                println!(
-                    "result -> {} ({})",
-                    f64::from_bits(value as u64),
-                    typechecker.stringify_type(type_id)
-                );
-            } else if type_id == BOOL_TYPE {
-                println!(
-                    "result -> {} ({})",
-                    value != 0,
-                    typechecker.stringify_type(type_id)
-                );
-            } else {
-                println!(
-                    "result -> {} ({})",
-                    value,
-                    typechecker.stringify_type(type_id)
-                );
-            }
+        ReturnValue::String(string) => {
+            println!("result -> {string} (String)")
+        }
+        ReturnValue::Custom(_) => {
+            println!("result -> <?> (Custom User Type)");
         }
         ReturnValue::Error(script_error) => {
             let errors = ErrorBatch::from(script_error);
