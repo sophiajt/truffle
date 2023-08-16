@@ -30,6 +30,21 @@ pub struct Evaluator {
     pub stack_frames: Vec<StackFrame>,
 }
 
+impl Drop for Evaluator {
+    fn drop(&mut self) {
+        let num_frames = self.stack_frames.len();
+        for frame_id in (0..num_frames).rev() {
+            let stack_frame = &self.stack_frames[frame_id];
+            let num_registers = stack_frame.register_values.len();
+
+            for register_id in (0..num_registers).map(RegisterId).rev() {
+                self.maybe_free_register(register_id);
+            }
+        }
+    }
+}
+
+
 #[derive(Debug)]
 pub enum ReturnValue {
     Unit,
