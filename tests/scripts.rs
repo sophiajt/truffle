@@ -10,7 +10,7 @@ use std::{
 
 mod test_eval;
 
-fn main() -> eyre::Result<()> {
+fn main() -> anyhow::Result<()> {
     let args = Arguments::from_args();
     let tests = collect_tests()?;
     libtest_mimic::run(&args, tests).exit();
@@ -18,8 +18,8 @@ fn main() -> eyre::Result<()> {
 
 /// Creates one test for each `.truffle` file in the current directory or
 /// sub-directories of the current directory.
-fn collect_tests() -> eyre::Result<Vec<Trial>> {
-    fn visit_dir(path: &Path, tests: &mut Vec<Trial>) -> eyre::Result<()> {
+fn collect_tests() -> anyhow::Result<Vec<Trial>> {
+    fn visit_dir(path: &Path, tests: &mut Vec<Trial>) -> anyhow::Result<()> {
         for entry in fs::read_dir(path)? {
             let entry = entry?;
             let file_type = entry.file_type()?;
@@ -62,7 +62,7 @@ pub fn eval_source_runner(fname: &Path) -> Result<(), Failed> {
     let source = String::from_utf8(source)
         .map_err(|_| "The file's contents are not a valid UTF-8 string!")?;
     match test_eval::eval_source(&source) {
-        Ok(ReturnValue::Custom { value: 0, .. }) => Ok(()),
+        Ok(ReturnValue::Unit) => Ok(()),
         Ok(non_zero) => Err(format!("Script evaluated to {non_zero:?}, expected 0"))?,
         Err(errors) => {
             let contents = source.as_bytes();
