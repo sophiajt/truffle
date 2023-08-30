@@ -167,10 +167,6 @@ pub enum Instruction {
         target: RegisterId,
     },
 
-    ASYNCCALL {
-        target: RegisterId,
-    },
-
     RET,
 }
 

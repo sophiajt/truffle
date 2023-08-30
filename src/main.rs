@@ -11,18 +11,19 @@ use truffle::{
 fn main() {
     let args = std::env::args();
 
+    let mut debug_output = false;
+
     if args.len() > 1 {
         for arg in args.skip(1) {
             let contents = std::fs::read_to_string(&arg).expect("couldn't find file");
 
-            run_line(&arg, &contents);
+            run_line(&arg, &contents, debug_output);
         }
         return;
     }
 
     let mut line_editor = LineEditor::new();
 
-    let mut debug_output = false;
     loop {
         match line_editor.read_line() {
             Ok(ReadLineOutput::Continue) => {
@@ -37,7 +38,7 @@ fn main() {
                 } else if line == "debug" {
                     debug_output = !debug_output;
                 } else {
-                    run_line("<repl>", &line);
+                    run_line("<repl>", &line, debug_output);
                 }
             }
             Err(err) => {
@@ -87,7 +88,7 @@ fn print_result(typechecker: &TypeChecker, fname: &Path, result: ReturnValue, co
 }
 
 #[cfg(feature = "async")]
-fn run_line<P>(fname: P, source: &str) -> Option<()>
+fn run_line<P>(fname: P, source: &str, debug_output: bool) -> Option<()>
 where
     P: AsRef<Path>,
 {
@@ -112,6 +113,9 @@ where
             return None;
         }
     }
+    if debug_output {
+        parser.results.print();
+    }
 
     let mut typechecker = TypeChecker::new(parser.results);
     register_fn!(typechecker, "print", print::<i64>);
@@ -122,6 +126,7 @@ where
     register_fn!(typechecker, "new_env", Env::new_env);
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
+    typechecker.add_async_call();
 
     match typechecker.typecheck() {
         Ok(_) => {}
@@ -129,6 +134,9 @@ where
             errors.print_with(fname, contents);
             return None;
         }
+    }
+    if debug_output {
+        typechecker.print_node_types();
     }
 
     let mut translater = Translater::new(typechecker);
@@ -147,7 +155,7 @@ where
 }
 
 #[cfg(not(feature = "async"))]
-fn run_line<P>(fname: P, source: &str) -> Option<()>
+fn run_line<P>(fname: P, source: &str, debug_output: bool) -> Option<()>
 where
     P: AsRef<Path>,
 {
@@ -171,6 +179,9 @@ where
             errors.print_with(fname, contents);
             return None;
         }
+    }
+    if debug_output {
+        parser.results.print();
     }
 
     let mut typechecker = TypeChecker::new(parser.results);

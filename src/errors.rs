@@ -217,7 +217,7 @@ impl<'a> IntoIterator for &'a ErrorBatch {
     type IntoIter = Iter<'a, ScriptError>;
 
     fn into_iter(self) -> Self::IntoIter {
-        (&self.errors).into_iter()
+        (self.errors).iter()
     }
 }
 
