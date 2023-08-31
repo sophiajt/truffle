@@ -5,7 +5,7 @@ use line_editor::{LineEditor, ReadLineOutput};
 
 use truffle::{
     register_fn, ErrorBatch, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue,
-    Translater, TypeChecker
+    Translater, TypeChecker,
 };
 
 fn main() {
