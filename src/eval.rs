@@ -30,7 +30,6 @@ pub struct Evaluator {
     pub stack_frames: Vec<StackFrame>,
 }
 
-
 #[derive(Debug)]
 pub enum ReturnValue {
     Unit,
@@ -109,60 +108,7 @@ impl Evaluator {
         unsafe { Box::from_raw(leaked) }
     }
 
-    #[cfg(not(feature = "async"))]
-    pub fn eval(
-        &mut self,
-        starting_function: FunctionId,
-        external_functions: &[ExternalFnRecord],
-    ) -> ReturnValue {
-        self.current_frame = self.stack_frames.len();
-        self.stack_frames
-            .push(self.functions[starting_function.0].clone());
-        let mut instruction_pointer = self.stack_frames[self.current_frame].instruction_pointer.0;
-
-        loop {
-            if let Some(ret_val) = self.eval_helper(&mut instruction_pointer, external_functions) {
-                return ret_val;
-            }
-        }
-    }
-
-    #[cfg(feature = "async")]
-    pub async fn eval(
-        &mut self,
-        starting_function: FunctionId,
-        external_functions: &[ExternalFnRecord],
-    ) -> ReturnValue {
-        self.current_frame = self.stack_frames.len();
-        self.stack_frames
-            .push(self.functions[starting_function.0].clone());
-        let mut instruction_pointer = self.stack_frames[self.current_frame].instruction_pointer.0;
-
-        loop {
-            match &self.instructions[instruction_pointer] {
-                Instruction::ASYNCCALL { target } => {
-                    // TODO: for now, this will just be a test function we run
-                    let result = test_async_fn().await;
-                    self.stack_frames[self.current_frame].register_values[target.0].i64 = result;
-
-                    instruction_pointer += 1;
-                }
-                _ => {
-                    if let Some(ret_val) =
-                        self.eval_helper(&mut instruction_pointer, external_functions)
-                    {
-                        return ret_val;
-                    }
-                }
-            }
-        }
-    }
-
-    fn eval_helper(
-        &mut self,
-        instruction_pointer: &mut usize,
-        external_functions: &[ExternalFnRecord],
-    ) -> Option<ReturnValue> {
+    pub fn eval_common_opcode(&mut self, instruction_pointer: &mut usize) -> Option<ReturnValue> {
         match &self.instructions[*instruction_pointer] {
             Instruction::IADD { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].i64 =
@@ -291,19 +237,6 @@ impl Evaluator {
             Instruction::JMP(location) => {
                 *instruction_pointer = location.0;
             }
-            Instruction::EXTERNALCALL { head, args, target } => {
-                let target = *target;
-                let output = self.eval_external_call(*head, args, external_functions);
-
-                println!("external call into: {:?}", target);
-                println!(
-                    "target is: {:?}",
-                    self.stack_frames[self.current_frame].register_types[target.0]
-                );
-                self.unbox_to_register(output, target);
-                println!("register is now: {}", self.get_reg_i64(&target));
-                *instruction_pointer += 1;
-            }
             Instruction::RET => {
                 if self.stack_frames.len() > 1 {
                     self.stack_frames.pop();
@@ -312,9 +245,7 @@ impl Evaluator {
                         self.stack_frames[self.current_frame].instruction_pointer.0;
                 } else {
                     match self.stack_frames[self.current_frame].register_types[0] {
-                        UNIT_TYPE => {
-                            return Some(ReturnValue::Unit)
-                        }
+                        UNIT_TYPE => return Some(ReturnValue::Unit),
                         BOOL_TYPE => {
                             return Some(ReturnValue::Bool(self.get_reg_bool(&RegisterId(0))))
                         }
@@ -326,27 +257,84 @@ impl Evaluator {
                         }
                         STRING_TYPE => {
                             let string = self.get_reg_string(&RegisterId(0));
-                            return Some(ReturnValue::String(*string))
+                            return Some(ReturnValue::String(*string));
                         }
                         _ => {
                             let value = self.get_user_type(RegisterId(0));
-                            return Some(ReturnValue::Custom(value))
+                            return Some(ReturnValue::Custom(value));
                         }
                     }
                 }
             }
             _ => {
-                panic!(
-                    "Unsupported opcode: {:?}",
-                    self.instructions[*instruction_pointer]
-                )
+                panic!("configuration-specific opcode found in common opcode evaluation")
             }
         }
-
         None
     }
 
-    pub fn eval_external_call(
+    #[cfg(feature = "async")]
+    pub async fn eval_async(
+        &mut self,
+        starting_function: FunctionId,
+        external_functions: &[ExternalFnRecord],
+    ) -> ReturnValue {
+        self.current_frame = self.stack_frames.len();
+        self.stack_frames
+            .push(self.functions[starting_function.0].clone());
+        let mut instruction_pointer = self.stack_frames[self.current_frame].instruction_pointer.0;
+
+        loop {
+            match &self.instructions[instruction_pointer] {
+                Instruction::EXTERNALCALL { head, args, target } => {
+                    let target = *target;
+
+                    let output = self
+                        .eval_external_call_async(*head, args, external_functions)
+                        .await;
+
+                    self.unbox_to_register(output, target);
+                    instruction_pointer += 1;
+                }
+                _ => {
+                    if let Some(ret_val) = self.eval_common_opcode(&mut instruction_pointer) {
+                        return ret_val;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn eval(
+        &mut self,
+        starting_function: FunctionId,
+        external_functions: &[ExternalFnRecord],
+    ) -> ReturnValue {
+        self.current_frame = self.stack_frames.len();
+        self.stack_frames
+            .push(self.functions[starting_function.0].clone());
+        let mut instruction_pointer = self.stack_frames[self.current_frame].instruction_pointer.0;
+
+        loop {
+            match &self.instructions[instruction_pointer] {
+                Instruction::EXTERNALCALL { head, args, target } => {
+                    let target = *target;
+
+                    let output = self.eval_external_call(*head, args, external_functions);
+
+                    self.unbox_to_register(output, target);
+                    instruction_pointer += 1;
+                }
+                _ => {
+                    if let Some(ret_val) = self.eval_common_opcode(&mut instruction_pointer) {
+                        return ret_val;
+                    }
+                }
+            }
+        }
+    }
+
+    fn eval_external_call(
         &self,
         head: ExternalFunctionId,
         args: &[RegisterId],
@@ -404,6 +392,86 @@ impl Evaluator {
                 }
 
                 result
+            }
+            _ => panic!("Async function call attempted in non-async mode"),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    async fn eval_external_call_async(
+        &self,
+        head: ExternalFunctionId,
+        args: &[RegisterId],
+        functions: &[ExternalFnRecord],
+    ) -> Box<dyn Any> {
+        match &functions[head.0].fun {
+            Function::ExternalFn0(fun) => fun().unwrap(),
+            Function::ExternalFn1(fun) => {
+                let mut arg0 = self.box_register(args[0]);
+
+                let result = fun(&mut arg0).unwrap();
+
+                if self.is_heap_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+
+                result
+            }
+            Function::ExternalFn2(fun) => {
+                let mut arg0 = self.box_register(args[0]);
+                let mut arg1 = self.box_register(args[1]);
+
+                let result = fun(&mut arg0, &mut arg1).unwrap();
+
+                if self.is_heap_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+                if self.is_heap_type(args[1]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg1);
+                }
+
+                result
+            }
+            Function::ExternalFn3(fun) => {
+                let mut arg0 = self.box_register(args[0]);
+                let mut arg1 = self.box_register(args[1]);
+                let mut arg2 = self.box_register(args[2]);
+
+                let result = fun(&mut arg0, &mut arg1, &mut arg2).unwrap();
+
+                if self.is_heap_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+                if self.is_heap_type(args[1]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg1);
+                }
+                if self.is_heap_type(args[2]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg2);
+                }
+
+                result
+            }
+            Function::ExternalAsyncFn1(fun) => {
+                let arg0 = if self.stack_frames[self.current_frame].register_types[args[0].0]
+                    == I64_TYPE
+                {
+                    Box::new(self.get_reg_i64(&args[0]))
+                } else {
+                    panic!("internal error: not an i64");
+                };
+                // let mut arg0 = self.box_register();
+                fun(arg0).await.unwrap()
+
+                // if self.is_user_type(args[0]) {
+                //     // We leak the box here because we manually clean it up later
+                //     Box::leak(arg0);
+                // }
             }
         }
     }
@@ -500,10 +568,4 @@ impl Evaluator {
             span_end,
         }
     }
-}
-
-// Test function for async until we build out full support
-#[cfg(feature = "async")]
-async fn test_async_fn() -> i64 {
-    42
 }

@@ -37,6 +37,7 @@ impl Scope {
     }
 }
 
+#[cfg(feature = "async")]
 pub enum Function {
     ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
     ExternalFn1(Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
@@ -50,7 +51,27 @@ pub enum Function {
             ) -> Result<Box<dyn Any>, String>,
         >,
     ),
-    // InternalFn,
+    ExternalAsyncFn1(
+        fn(
+            Box<dyn Any + Send>,
+        ) -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>>,
+    ),
+}
+
+#[cfg(not(feature = "async"))]
+pub enum Function {
+    ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
+    ExternalFn1(Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
+    ExternalFn2(Box<dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
+    ExternalFn3(
+        Box<
+            dyn Fn(
+                &mut Box<dyn Any>,
+                &mut Box<dyn Any>,
+                &mut Box<dyn Any>,
+            ) -> Result<Box<dyn Any>, String>,
+        >,
+    ),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -73,6 +94,9 @@ pub struct TypeChecker {
 
     // Type relationships via references
     pub reference_of_map: HashMap<TypeId, TypeId>,
+
+    // Map between future and its output
+    pub future_of_map: HashMap<TypeId, TypeId>,
 
     // Based on NodeId
     pub node_types: Vec<TypeId>,
@@ -131,6 +155,7 @@ impl TypeChecker {
                 std::any::type_name::<String>().to_string(),
             ],
             reference_of_map: HashMap::new(),
+            future_of_map: HashMap::new(),
             errors: ErrorBatch::empty(),
 
             parse_results,
@@ -141,7 +166,6 @@ impl TypeChecker {
 
             call_resolution: HashMap::new(),
             external_functions: HashMap::new(),
-
             functions: vec![],
 
             scope: vec![Scope::new()],
@@ -194,7 +218,7 @@ impl TypeChecker {
 
                     self.enter_scope();
                     // FIXME: grab the last one if it's an expression
-                    let mut type_id = UNKNOWN_TYPE;
+                    let mut type_id = UNIT_TYPE;
                     for node_id in nodes {
                         self.typecheck_node(node_id);
 
@@ -213,6 +237,8 @@ impl TypeChecker {
                 match contents {
                     b"i64" => self.node_types[node_id.0] = I64_TYPE,
                     b"f64" => self.node_types[node_id.0] = F64_TYPE,
+                    b"bool" => self.node_types[node_id.0] = BOOL_TYPE,
+                    b"String" => self.node_types[node_id.0] = STRING_TYPE,
                     _ => self.error(
                         format!("unknown type: {}", String::from_utf8_lossy(contents)),
                         node_id,
@@ -245,6 +271,29 @@ impl TypeChecker {
             AstNode::Call { head, args } => {
                 // FIXME: clone to get around ownership issue
                 self.typecheck_call(*head, &args.clone(), node_id)
+            }
+            AstNode::Await(inner_node_id) => {
+                let inner_node_id = *inner_node_id;
+
+                println!(
+                    "checking: {:?}",
+                    self.parse_results.ast_nodes[inner_node_id.0]
+                );
+                self.typecheck_node(inner_node_id);
+
+                let inner_type_id = self.node_types[inner_node_id.0];
+
+                if let Some(value) = self.future_of_map.get(&inner_type_id) {
+                    self.node_types[node_id.0] = *value;
+                } else {
+                    self.error(
+                        format!(
+                            "expected future type for .await, found {}",
+                            &self.typenames[inner_type_id.0]
+                        ),
+                        node_id,
+                    )
+                }
             }
             _ => self.error("unsupported ast node in typechecker", node_id),
         }
@@ -446,6 +495,25 @@ impl TypeChecker {
         }
     }
 
+    #[cfg(feature = "async")]
+    pub fn add_async_call(&mut self) {
+        self.functions.push(ExternalFnRecord {
+            params: vec![I64_TYPE],
+            ret: I64_TYPE,
+            fun: Function::ExternalAsyncFn1(wrapped_fn),
+            raw_ptr: None,
+        });
+
+        let id = self.functions.len() - 1;
+
+        let name = "async_call";
+        let ent = self
+            .external_functions
+            .entry(name.as_bytes().to_vec())
+            .or_insert(Vec::new());
+        (*ent).push(ExternalFunctionId(id));
+    }
+
     // pub fn typecheck_range(
     //     &mut self,
     //     lhs: NodeId,
@@ -516,7 +584,6 @@ impl TypeChecker {
                         }
                     }
 
-                    println!("resolved call with return type: {:?}", *ret);
                     self.node_types[node_id.0] = *ret;
                     self.call_resolution.insert(head, def);
                     return;
@@ -965,4 +1032,23 @@ macro_rules! register_fn {
     ( $typechecker:expr, $name: expr, $fun:expr ) => {{
         $typechecker.register_fn($name, $fun, $fun as *const u8)
     }};
+}
+
+// FIXME: test functions
+#[cfg(feature = "async")]
+async fn modify_this(this: i64) -> i64 {
+    this + 100
+}
+
+#[cfg(feature = "async")]
+fn wrapped_fn(
+    mut this: Box<dyn Any + Send>,
+) -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>> {
+    use futures::FutureExt;
+
+    async move {
+        let this = this.downcast_mut().unwrap();
+        Ok(Box::new(modify_this(*this).await) as Box<dyn Any>)
+    }
+    .boxed()
 }

@@ -94,6 +94,7 @@ pub enum AstNode {
         then_block: NodeId,
         else_expression: Option<NodeId>,
     },
+    Await(NodeId),
     Statement(NodeId),
     Garbage,
 }
@@ -582,9 +583,6 @@ impl Parser {
     }
 
     pub fn method_call(&mut self, span_start: usize, receiver: NodeId) -> NodeId {
-        // Skip the dot
-        self.next();
-
         let method_name = self
             .next()
             .expect("internal error: missing token that was expected to be there");
@@ -724,7 +722,17 @@ impl Parser {
 
             self.create_node(AstNode::Range { lhs: expr, rhs }, span_start, span_end)
         } else if self.is_dot() {
-            self.method_call(span_start, expr)
+            self.next();
+
+            if self.is_keyword(b"await") {
+                // consume the 'await' keyword
+                self.next();
+
+                let span_end = self.position();
+                self.create_node(AstNode::Await(expr), span_start, span_end)
+            } else {
+                self.method_call(span_start, expr)
+            }
         } else {
             expr
         }

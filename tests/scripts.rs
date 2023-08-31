@@ -67,7 +67,7 @@ pub fn eval_source_runner(fname: &Path) -> Result<(), Failed> {
         Err(errors) => {
             let contents = source.as_bytes();
             errors.print_with(fname, contents);
-            Err(format!("Script is invalid"))?
+            Err("Script is invalid".to_string())?
         }
     }
 }
