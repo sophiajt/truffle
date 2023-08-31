@@ -135,7 +135,7 @@ where
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
 
-    let result = block_on(evaluator.eval(FunctionId(0), &translater.typechecker.functions));
+    let result = block_on(evaluator.eval_async(FunctionId(0), &translater.typechecker.functions));
 
     print_result(&translater.typechecker, fname, result, source.as_bytes());
 

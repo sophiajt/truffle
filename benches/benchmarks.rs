@@ -25,7 +25,7 @@ fn run_file(filename: &str) {
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
 
-    let _ = block_on(evaluator.eval(FunctionId(0), &translater.typechecker.functions));
+    let _ = block_on(evaluator.eval_async(FunctionId(0), &translater.typechecker.functions));
 }
 
 #[cfg(not(feature = "async"))]

@@ -31,7 +31,7 @@ pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
 
-    match block_on(evaluator.eval(FunctionId(0), &translater.typechecker.functions)) {
+    match block_on(evaluator.eval_async(FunctionId(0), &translater.typechecker.functions)) {
         ReturnValue::Error(error) => Err(error.into()),
         return_value => Ok(return_value),
     }

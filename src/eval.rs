@@ -274,7 +274,7 @@ impl Evaluator {
     }
 
     #[cfg(feature = "async")]
-    pub async fn eval(
+    pub async fn eval_async(
         &mut self,
         starting_function: FunctionId,
         external_functions: &[ExternalFnRecord],
@@ -290,7 +290,7 @@ impl Evaluator {
                     let target = *target;
 
                     let output = self
-                        .eval_external_call(*head, args, external_functions)
+                        .eval_external_call_async(*head, args, external_functions)
                         .await;
 
                     self.unbox_to_register(output, target);
@@ -305,7 +305,6 @@ impl Evaluator {
         }
     }
 
-    #[cfg(not(feature = "async"))]
     pub fn eval(
         &mut self,
         starting_function: FunctionId,
@@ -335,7 +334,6 @@ impl Evaluator {
         }
     }
 
-    #[cfg(not(feature = "async"))]
     fn eval_external_call(
         &self,
         head: ExternalFunctionId,
@@ -395,11 +393,12 @@ impl Evaluator {
 
                 result
             }
+            _ => panic!("Async function call attempted in non-async mode"),
         }
     }
 
     #[cfg(feature = "async")]
-    async fn eval_external_call(
+    async fn eval_external_call_async(
         &self,
         head: ExternalFunctionId,
         args: &[RegisterId],
