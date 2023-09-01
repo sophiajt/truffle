@@ -409,7 +409,6 @@ impl Evaluator {
 
                 result
             }
-            _ => panic!("Async function call attempted in non-async mode"),
         }
     }
 
