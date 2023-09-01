@@ -124,25 +124,25 @@ impl Evaluator {
     }
 
     pub fn eval_common_opcode(&mut self, instruction_pointer: &mut usize) -> Option<ReturnValue> {
-        match &self.instructions[*instruction_pointer] {
-            &Instruction::IADD { lhs, rhs, target } => {
+        match self.instructions[*instruction_pointer] {
+            Instruction::IADD { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].i64 =
                     self.get_reg_i64(lhs) + self.get_reg_i64(rhs);
                 *instruction_pointer += 1;
             }
-            &Instruction::ISUB { lhs, rhs, target } => {
+            Instruction::ISUB { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].i64 =
                     self.get_reg_i64(lhs) - self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::IMUL { lhs, rhs, target } => {
+            Instruction::IMUL { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].i64 =
                     self.get_reg_i64(lhs) * self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::IDIV { lhs, rhs, target } => {
+            Instruction::IDIV { lhs, rhs, target } => {
                 if self.get_reg_i64(rhs) == 0 {
                     return Some(ReturnValue::Error(
                         self.error("division by zero", self.source_map[*instruction_pointer]),
@@ -153,49 +153,49 @@ impl Evaluator {
 
                 *instruction_pointer += 1
             }
-            &Instruction::ILT { lhs, rhs, target } => {
+            Instruction::ILT { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_i64(lhs) < self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::ILTE { lhs, rhs, target } => {
+            Instruction::ILTE { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_i64(lhs) <= self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::IGT { lhs, rhs, target } => {
+            Instruction::IGT { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_i64(lhs) > self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::IGTE { lhs, rhs, target } => {
+            Instruction::IGTE { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_i64(lhs) >= self.get_reg_i64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::FADD { lhs, rhs, target } => {
+            Instruction::FADD { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].f64 =
                     self.get_reg_f64(lhs) + self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::FSUB { lhs, rhs, target } => {
+            Instruction::FSUB { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].f64 =
                     self.get_reg_f64(lhs) - self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::FMUL { lhs, rhs, target } => {
+            Instruction::FMUL { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].f64 =
                     self.get_reg_f64(lhs) * self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::FDIV { lhs, rhs, target } => {
+            Instruction::FDIV { lhs, rhs, target } => {
                 if self.get_reg_f64(rhs) == 0.0 {
                     return Some(ReturnValue::Error(
                         self.error("division by zero", self.source_map[*instruction_pointer]),
@@ -207,37 +207,37 @@ impl Evaluator {
 
                 *instruction_pointer += 1;
             }
-            &Instruction::FLT { lhs, rhs, target } => {
+            Instruction::FLT { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_f64(lhs) < self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::FLTE { lhs, rhs, target } => {
+            Instruction::FLTE { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_f64(lhs) <= self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::FGT { lhs, rhs, target } => {
+            Instruction::FGT { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_f64(lhs) > self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::FGTE { lhs, rhs, target } => {
+            Instruction::FGTE { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].bool =
                     self.get_reg_f64(lhs) >= self.get_reg_f64(rhs);
 
                 *instruction_pointer += 1;
             }
-            &Instruction::MOV { target, source } => {
+            Instruction::MOV { target, source } => {
                 self.maybe_free_register(target);
                 self.stack_frames[self.current_frame].register_values[target.0] =
                     self.stack_frames[self.current_frame].register_values[source.0];
                 *instruction_pointer += 1;
             }
-            &Instruction::BRIF {
+            Instruction::BRIF {
                 condition,
                 then_branch,
                 else_branch,
@@ -250,10 +250,10 @@ impl Evaluator {
                     *instruction_pointer = else_branch.0;
                 }
             }
-            &Instruction::JMP(location) => {
+            Instruction::JMP(location) => {
                 *instruction_pointer = location.0;
             }
-            &Instruction::RET => {
+            Instruction::RET => {
                 if self.stack_frames.len() > 1 {
                     self.stack_frames.pop();
                     self.current_frame -= 1;
