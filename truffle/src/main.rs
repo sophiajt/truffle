@@ -1,4 +1,6 @@
 mod line_editor;
+
+use std::any::Any;
 use std::{collections::HashMap, path::Path};
 
 use line_editor::{LineEditor, ReadLineOutput};
@@ -114,7 +116,6 @@ where
     register_fn!(typechecker, "new_env", Env::new_env);
     register_fn!(typechecker, "set_var", Env::set_var);
     register_fn!(typechecker, "read_var", Env::read_var);
-    typechecker.add_async_call();
 
     match typechecker.typecheck() {
         Ok(_) => {}
@@ -231,4 +232,23 @@ impl Env {
     pub fn read_var(&self, var: i64) -> i64 {
         *self.vars.get(&var).unwrap()
     }
+}
+
+// FIXME: test functions
+#[cfg(feature = "async")]
+async fn modify_this(this: i64) -> i64 {
+    this + 100
+}
+
+#[cfg(feature = "async")]
+fn wrapped_fn(
+    mut this: Box<dyn Any + Send>,
+) -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>> {
+    use futures::FutureExt;
+
+    async move {
+        let this = this.downcast_mut().unwrap();
+        Ok(Box::new(modify_this(*this).await) as Box<dyn Any>)
+    }
+    .boxed()
 }

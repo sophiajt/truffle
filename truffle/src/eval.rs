@@ -44,7 +44,6 @@ impl Drop for Evaluator {
     }
 }
 
-
 #[derive(Debug)]
 pub enum ReturnValue {
     Unit,
@@ -265,15 +264,11 @@ impl Evaluator {
                         BOOL_TYPE => {
                             return Some(ReturnValue::Bool(self.get_reg_bool(RegisterId(0))))
                         }
-                        I64_TYPE => {
-                            return Some(ReturnValue::I64(self.get_reg_i64(RegisterId(0))))
-                        }
-                        F64_TYPE => {
-                            return Some(ReturnValue::F64(self.get_reg_f64(RegisterId(0))))
-                        }
+                        I64_TYPE => return Some(ReturnValue::I64(self.get_reg_i64(RegisterId(0)))),
+                        F64_TYPE => return Some(ReturnValue::F64(self.get_reg_f64(RegisterId(0)))),
                         STRING_TYPE => {
                             let string = self.get_reg_string(RegisterId(0));
-                            return Some(ReturnValue::String(*string))
+                            return Some(ReturnValue::String(*string));
                         }
                         _ => {
                             let value = self.get_user_type(RegisterId(0));
@@ -409,6 +404,7 @@ impl Evaluator {
 
                 result
             }
+            Function::ExternalAsyncFn1(_) => unreachable!(),
         }
     }
 
@@ -476,7 +472,7 @@ impl Evaluator {
                 let arg0 = if self.stack_frames[self.current_frame].register_types[args[0].0]
                     == I64_TYPE
                 {
-                    Box::new(self.get_reg_i64(&args[0]))
+                    Box::new(self.get_reg_i64(args[0]))
                 } else {
                     panic!("internal error: not an i64");
                 };
