@@ -1,4 +1,3 @@
-#![allow(illegal_floating_point_literal_pattern)]
 mod test_eval;
 
 use assert_matches::assert_matches;
