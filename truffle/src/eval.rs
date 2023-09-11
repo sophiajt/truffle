@@ -404,7 +404,7 @@ impl Evaluator {
 
                 result
             }
-            Function::ExternalAsyncFn1(_) => unreachable!(),
+            _ => unreachable!(),
         }
     }
 
