@@ -496,22 +496,28 @@ impl TypeChecker {
     }
 
     #[cfg(feature = "async")]
-    pub fn add_async_call(&mut self) {
+    pub fn add_async_call(&mut self, params: Vec<TypeId>, ret: TypeId, fun: Function, name: &str) {
         self.functions.push(ExternalFnRecord {
-            params: vec![I64_TYPE],
-            ret: I64_TYPE,
-            fun: Function::ExternalAsyncFn1(wrapped_fn),
+            params,
+            ret,
+            fun,
             raw_ptr: None,
         });
 
         let id = self.functions.len() - 1;
 
-        let name = "async_call";
         let ent = self
             .external_functions
             .entry(name.as_bytes().to_vec())
             .or_insert(Vec::new());
         (*ent).push(ExternalFunctionId(id));
+    }
+
+    pub fn with<F>(&mut self, f: F)
+    where
+        F: Fn(&mut TypeChecker),
+    {
+        f(self)
     }
 
     // pub fn typecheck_range(
@@ -1032,23 +1038,4 @@ macro_rules! register_fn {
     ( $typechecker:expr, $name: expr, $fun:expr ) => {{
         $typechecker.register_fn($name, $fun, $fun as *const u8)
     }};
-}
-
-// FIXME: test functions
-#[cfg(feature = "async")]
-async fn modify_this(this: i64) -> i64 {
-    this + 100
-}
-
-#[cfg(feature = "async")]
-fn wrapped_fn(
-    mut this: Box<dyn Any + Send>,
-) -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>> {
-    use futures::FutureExt;
-
-    async move {
-        let this = this.downcast_mut().unwrap();
-        Ok(Box::new(modify_this(*this).await) as Box<dyn Any>)
-    }
-    .boxed()
 }

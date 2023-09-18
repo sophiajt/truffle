@@ -1,0 +1,4 @@
+let val = modify_this(5)
+print(val)
+let val = modify_that(val)
+print(val)

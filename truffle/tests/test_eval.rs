@@ -1,3 +1,5 @@
+use std::any::Any;
+use truffle::Function;
 use truffle::{
     register_fn, ErrorBatch, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue,
     Translater, TypeChecker,
@@ -20,6 +22,18 @@ pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
     register_fn!(typechecker, "print", print::<String>);
     register_fn!(typechecker, "add", add::<i64>);
     register_fn!(typechecker, "add", add::<f64>);
+
+    #[truffle::register_async_fn]
+    async fn modify_this(this: i64) -> i64 {
+        this + 100
+    }
+
+    #[truffle::register_async_fn]
+    async fn modify_that(that: i64) -> i64 {
+        that - 50
+    }
+    typechecker.with(register_modify_this());
+    typechecker.with(register_modify_that());
 
     typechecker.typecheck()?;
 
