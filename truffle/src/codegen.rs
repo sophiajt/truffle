@@ -195,6 +195,12 @@ impl FunctionCodegen {
         self.source_map.push(node_id);
     }
 
+    pub fn debug_output(&self) {
+        for (idx, instr) in self.instructions.iter().enumerate() {
+            println!("{}: {:?}", idx, instr);
+        }
+    }
+
     pub fn new_register(&mut self, ty: TypeId) -> RegisterId {
         // For now just add in an used value that'll be later replaced
         self.register_values.push(RegisterValue { i64: 0 });
