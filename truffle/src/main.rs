@@ -195,6 +195,8 @@ where
     #[allow(unused_mut)]
     let mut output = translater.translate();
 
+    // output.debug_output();
+
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
 
