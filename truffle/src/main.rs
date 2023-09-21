@@ -1,6 +1,5 @@
 mod line_editor;
 
-use std::any::Any;
 use std::{collections::HashMap, path::Path};
 
 use line_editor::{LineEditor, ReadLineOutput};
@@ -242,13 +241,13 @@ async fn modify_this(this: i64) -> i64 {
 
 #[cfg(feature = "async")]
 fn wrapped_fn(
-    mut this: Box<dyn Any + Send>,
-) -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>> {
+    mut this: Box<dyn std::any::Any + Send>,
+) -> futures::future::BoxFuture<'static, Result<Box<dyn std::any::Any>, String>> {
     use futures::FutureExt;
 
     async move {
         let this = this.downcast_mut().unwrap();
-        Ok(Box::new(modify_this(*this).await) as Box<dyn Any>)
+        Ok(Box::new(modify_this(*this).await) as Box<dyn std::any::Any>)
     }
     .boxed()
 }

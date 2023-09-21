@@ -122,6 +122,7 @@ impl Evaluator {
         unsafe { Box::from_raw(leaked) }
     }
 
+    #[inline]
     pub fn eval_common_opcode(&mut self, instruction_pointer: &mut usize) -> Option<ReturnValue> {
         match self.instructions[*instruction_pointer] {
             Instruction::IADD { lhs, rhs, target } => {
@@ -351,6 +352,7 @@ impl Evaluator {
         args: &[RegisterId],
         functions: &[ExternalFnRecord],
     ) -> Box<dyn Any> {
+        #[allow(unreachable_patterns)]
         match &functions[head.0].fun {
             Function::ExternalFn0(fun) => fun().unwrap(),
             Function::ExternalFn1(fun) => {
