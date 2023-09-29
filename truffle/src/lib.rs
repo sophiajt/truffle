@@ -26,4 +26,4 @@ pub use crate::typechecker::Function;
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 #[doc(inline)]
-pub use truffle_attributes::register_async_fn;
+pub use truffle_attributes::{register_async_fn, register_fn};
