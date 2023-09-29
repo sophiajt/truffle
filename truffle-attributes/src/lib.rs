@@ -44,7 +44,7 @@ pub fn register_fn(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn register_async_fn(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn export(_attr: TokenStream, item: TokenStream) -> TokenStream {
     foo(item).unwrap().into()
 }
 

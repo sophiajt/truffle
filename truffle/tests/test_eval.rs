@@ -10,12 +10,12 @@ use truffle::{
 pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
     use futures::executor::block_on;
 
-    #[truffle::register_async_fn]
+    #[truffle::export]
     async fn modify_this(this: i64) -> i64 {
         this + 100
     }
 
-    #[truffle::register_async_fn]
+    #[truffle::export]
     async fn modify_that(that: i64) -> i64 {
         that - 50
     }
@@ -85,13 +85,13 @@ pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
 }
 
 // Script Builtins
-#[truffle::register_async_fn]
+#[cfg_attr(feature = "async", truffle::export)]
 pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
     lhs + rhs
 }
 
 #[allow(unused)]
-#[truffle::register_async_fn]
+#[cfg_attr(feature = "async", truffle::export)]
 pub fn print<T: std::fmt::Display>(value: T) {
     println!("value: {value}")
 }
