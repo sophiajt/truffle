@@ -1033,6 +1033,7 @@ where
     }
 }
 
+#[cfg(not(feature = "async"))]
 #[macro_export]
 macro_rules! register_fn {
     ( $typechecker:expr, $name: expr, $fun:expr ) => {{

@@ -207,10 +207,12 @@ where
     Some(())
 }
 
+#[cfg_attr(feature = "async", truffle::export)]
 pub fn print<T: std::fmt::Display>(value: T) {
     println!("value: {value}")
 }
 
+#[cfg_attr(feature = "async", truffle::export)]
 pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
     lhs + rhs
 }
@@ -220,16 +222,19 @@ pub struct Env {
 }
 
 impl Env {
+    #[cfg_attr(feature = "async", truffle::export)]
     pub fn new_env() -> Env {
         Env {
             vars: HashMap::new(),
         }
     }
 
+    #[cfg_attr(feature = "async", truffle::export)]
     pub fn set_var(&mut self, var: i64, value: i64) {
         self.vars.insert(var, value);
     }
 
+    #[cfg_attr(feature = "async", truffle::export)]
     pub fn read_var(&self, var: i64) -> i64 {
         *self.vars.get(&var).unwrap()
     }

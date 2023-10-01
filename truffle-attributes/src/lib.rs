@@ -1,27 +1,81 @@
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::ItemFn;
+use quote::{quote, format_ident};
+use syn::{ItemFn, Expr, parse_macro_input, parse::Parse, Token, ExprPath};
+
+struct RegisterFnInput {
+    typechecker: Expr,
+    name: Expr,
+    fun: ExprPath,
+}
+
+impl Parse for RegisterFnInput {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let typechecker = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let name = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let fun = input.parse()?;
+        Ok(RegisterFnInput { typechecker, name, fun })
+    }
+}
+
+#[proc_macro]
+pub fn register_fn(input: TokenStream) -> TokenStream {
+    let RegisterFnInput { typechecker, name, fun } = parse_macro_input!(input);
+    let fun_is_async = {
+        let mut path = fun.path.clone();
+        let ident_segment = path.segments.last_mut().expect("path should always have at least one segment");
+        ident_segment.ident = format_ident!("{}_is_async", ident_segment.ident);
+        path
+    };
+    let register_fun = {
+        let mut path = fun.path.clone();
+        let ident_segment = path.segments.last_mut().expect("path should always have at least one segment");
+        ident_segment.ident = format_ident!("register_{}", ident_segment.ident);
+        path
+    };
+    quote! {
+        if #fun_is_async() {
+            #typechecker.with(#register_fun())
+        } else {
+            #typechecker.register_fn(#name, #fun, #fun as *const u8)
+        }
+    }.into()
+}
 
 #[proc_macro_attribute]
-pub fn register_async_fn(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn export(_attr: TokenStream, item: TokenStream) -> TokenStream {
     foo(item).unwrap().into()
 }
 
 fn foo(item: TokenStream) -> Result<proc_macro2::TokenStream, syn::Error> {
     let input = syn::parse::<ItemFn>(item.clone())?;
-    let register_fn = generate::register_fn(input.clone())?;
+    let output = if input.sig.asyncness.is_some() {
+        let register_fn = generate::register_fn(input.clone())?;
+        let fn_is_async = generate::fn_is_async(input.clone())?;
 
-    let output = quote! {
-        #input
+        quote! {
+            #input
 
-        #register_fn
+            #register_fn
+            #fn_is_async
+        }
+    } else {
+        let register_fn = generate::register_fn_stub(input.clone()).expect("stub should generate");
+        let fn_is_async = generate::fn_is_async(input.clone())?;
+        quote! {
+            #input
+
+            #register_fn
+            #fn_is_async
+        }
     };
     Ok(output)
 }
 
 mod generate {
     use proc_macro2::TokenStream;
-    use syn::{ItemFn, token::Mut};
+    use syn::{ItemFn, token::Mut, parse_quote};
     use quote::{quote, format_ident};
 
     pub fn register_fn(input: ItemFn) -> Result<TokenStream, syn::Error> {
@@ -38,6 +92,38 @@ mod generate {
 
                 #registration_closure
             }
+        })
+    }
+
+    pub fn register_fn_stub(input: ItemFn) -> Result<TokenStream, syn::Error> {
+        let wrapped_fn_name = input.sig.ident.to_string();
+        let mut register_fn_stub = input;
+        register_fn_stub.sig.ident = format_ident!("register_{wrapped_fn_name}");
+        register_fn_stub.sig.output = syn::parse_str("-> impl Fn(&mut truffle::TypeChecker)").expect("this should parse as a return type");
+        register_fn_stub.sig.inputs = Default::default();
+        register_fn_stub.block = syn::parse_str("{|typechecker| unreachable!(\"register fn should only be called for async fns\")}").expect("this should parse as a block body for a function");
+
+        Ok(quote! {
+            #register_fn_stub
+        })
+    }
+
+    pub fn fn_is_async(input: ItemFn) -> Result<TokenStream, syn::Error> {
+        let wrapped_fn_name = input.sig.ident.to_string();
+        let is_async = input.sig.asyncness.is_some();
+        let mut fn_is_async = input;
+        fn_is_async.sig.asyncness = None;
+        fn_is_async.sig.ident = format_ident!("{wrapped_fn_name}_is_async");
+        fn_is_async.sig.output = syn::parse_str("-> bool").expect("this should parse as a return type");
+        fn_is_async.sig.inputs = Default::default();
+        fn_is_async.block = parse_quote! {
+            {
+                #is_async
+            }
+        };
+
+        Ok(quote! {
+            #fn_is_async
         })
     }
 
@@ -69,7 +155,7 @@ mod generate {
                         _ => todo!(),
                     }
 
-                    pattype.ty = Box::new(syn::parse_str("Box<dyn std::any::Any + Send>").unwrap());
+                    pattype.ty = Box::new(syn::parse_str("Box<dyn std::any::Any + Send>").expect("input should be a valid rust type"));
                 }
             }
             arg
@@ -107,7 +193,7 @@ mod generate {
 
         let converted_args = idents
             .clone()
-            .map(|ident| quote! { let #ident = #ident.downcast_mut().unwrap(); });
+            .map(|ident| quote! { let #ident = #ident.downcast_mut().expect("downcast type should match the actual type"); });
 
         Ok(quote! {
             fn wrapped_fn(
@@ -135,7 +221,7 @@ mod generate {
                 }
             }
         }).map(|ty| {
-            quote! { typechecker.get_type::<#ty>().unwrap() }
+            quote! { typechecker.get_type::<#ty>().expect("typechecker should already know about this type") }
         });
 
         let ret_type = match input.sig.output {
@@ -147,7 +233,7 @@ mod generate {
             |typechecker: &mut TypeChecker| {
                 typechecker.add_async_call(
                     vec![#(#param_types)*],
-                    typechecker.get_type::<#ret_type>().unwrap(),
+                    typechecker.get_type::<#ret_type>().expect("typechecker should already know about this type"),
                     Function::ExternalAsyncFn1(wrapped_fn),
                     #wrapped_fn_name,
                 );
