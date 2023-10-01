@@ -137,54 +137,6 @@ where
         }
     }
 
-    // JT: FIXME
-    // let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
-
-    // let tokens = match lexer.lex() {
-    //     Ok(tokens) => tokens,
-    //     Err(errors) => {
-    //         errors.print_with(fname, contents);
-    //         return None;
-    //     }
-    // };
-
-    // let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
-
-    // match parser.parse() {
-    //     Ok(()) => {}
-    //     Err(errors) => {
-    //         errors.print_with(fname, contents);
-    //         return None;
-    //     }
-    // }
-    // if debug_output {
-    //     parser.results.print();
-    // }
-
-    // let mut typechecker = TypeChecker::new(parser.results);
-
-    // match typechecker.typecheck() {
-    //     Ok(_) => {}
-    //     Err(errors) => {
-    //         errors.print_with(fname, contents);
-    //         return None;
-    //     }
-    // }
-
-    // let mut translater = Translater::new(typechecker);
-
-    // #[allow(unused_mut)]
-    // let mut output = translater.translate();
-
-    // // output.debug_output();
-
-    // let mut evaluator = Evaluator::default();
-    // evaluator.add_function(output);
-
-    // let result = evaluator.eval(FunctionId(0), &translater.typechecker.local_functions);
-
-    // print_result(&translater.typechecker, fname, result, source.as_bytes());
-
     Some(())
 }
 
@@ -222,20 +174,20 @@ impl Env {
 }
 
 // FIXME: test functions
-#[cfg(feature = "async")]
-async fn modify_this(this: i64) -> i64 {
-    this + 100
-}
+// #[cfg(feature = "async")]
+// async fn modify_this(this: i64) -> i64 {
+//     this + 100
+// }
 
-#[cfg(feature = "async")]
-fn wrapped_fn(
-    mut this: Box<dyn std::any::Any + Send>,
-) -> futures::future::BoxFuture<'static, Result<Box<dyn std::any::Any>, String>> {
-    use futures::FutureExt;
+// #[cfg(feature = "async")]
+// fn wrapped_fn(
+//     mut this: Box<dyn std::any::Any + Send>,
+// ) -> futures::future::BoxFuture<'static, Result<Box<dyn std::any::Any>, String>> {
+//     use futures::FutureExt;
 
-    async move {
-        let this = this.downcast_mut().unwrap();
-        Ok(Box::new(modify_this(*this).await) as Box<dyn std::any::Any>)
-    }
-    .boxed()
-}
+//     async move {
+//         let this = this.downcast_mut().unwrap();
+//         Ok(Box::new(modify_this(*this).await) as Box<dyn std::any::Any>)
+//     }
+//     .boxed()
+// }

@@ -101,15 +101,6 @@ impl Engine {
 
         let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
 
-        // register_fn!(typechecker, "print", print::<i64>);
-        // register_fn!(typechecker, "print", print::<f64>);
-        // register_fn!(typechecker, "print", print::<bool>);
-        // register_fn!(typechecker, "add", add::<i64>);
-        // register_fn!(typechecker, "add", add::<f64>);
-        // register_fn!(typechecker, "new_env", Env::new_env);
-        // register_fn!(typechecker, "set_var", Env::set_var);
-        // register_fn!(typechecker, "read_var", Env::read_var);
-
         match typechecker.typecheck() {
             Ok(_) => {}
             Err(errors) => {
