@@ -1,6 +1,7 @@
 use std::{any::Any, collections::HashMap, fmt};
 
 use crate::{
+    engine::{ExternalFnRecord, PermanentDefinitions},
     errors::{ErrorBatch, ScriptError},
     parser::{AstNode, NodeId, ParseResults},
 };
@@ -85,18 +86,10 @@ pub struct Variable {
     is_mutable: bool,
 }
 
-pub struct TypeChecker {
-    // Used by TypeId
-    pub types: Vec<std::any::TypeId>,
-
-    // Names of each types
-    pub typenames: Vec<String>,
-
-    // Type relationships via references
-    pub reference_of_map: HashMap<TypeId, TypeId>,
-
-    // Map between future and its output
-    pub future_of_map: HashMap<TypeId, TypeId>,
+pub struct TypeChecker<'permanent> {
+    // The globally registered definitions that are available before
+    // we start typechecking the current script
+    pub permanent_definitions: &'permanent PermanentDefinitions,
 
     // Based on NodeId
     pub node_types: Vec<TypeId>,
@@ -110,14 +103,12 @@ pub struct TypeChecker {
     // Mapping betwen definition node id and the full variable definition
     pub variable_info: HashMap<NodeId, Variable>,
 
-    // List of all registered functions
-    pub functions: Vec<ExternalFnRecord>,
+    // List of local functions
+    // note: local functions not yet supported
+    // pub local_functions: Vec<ExternalFnRecord>,
 
     // Call resolution
     pub call_resolution: HashMap<NodeId, ExternalFunctionId>,
-
-    // Externally-registered functions
-    pub external_functions: HashMap<Vec<u8>, Vec<ExternalFunctionId>>,
 
     pub errors: ErrorBatch,
     pub scope: Vec<Scope>,
@@ -137,25 +128,12 @@ pub const STRING_TYPE: TypeId = TypeId(4); // <-- last known builtin type id (af
                                            // assumption of last builtin
 pub const UNKNOWN_TYPE: TypeId = TypeId(usize::MAX);
 
-impl TypeChecker {
-    pub fn new(parse_results: ParseResults) -> Self {
+impl<'permanent> TypeChecker<'permanent> {
+    pub fn new(
+        parse_results: ParseResults,
+        permanent_definitions: &'permanent PermanentDefinitions,
+    ) -> Self {
         Self {
-            types: vec![
-                std::any::TypeId::of::<()>(),
-                std::any::TypeId::of::<i64>(),
-                std::any::TypeId::of::<f64>(),
-                std::any::TypeId::of::<bool>(),
-                std::any::TypeId::of::<String>(),
-            ],
-            typenames: vec![
-                "void".into(), //std::any::type_name::<()>().to_string(),
-                std::any::type_name::<i64>().to_string(),
-                std::any::type_name::<f64>().to_string(),
-                std::any::type_name::<bool>().to_string(),
-                std::any::type_name::<String>().to_string(),
-            ],
-            reference_of_map: HashMap::new(),
-            future_of_map: HashMap::new(),
             errors: ErrorBatch::empty(),
 
             parse_results,
@@ -165,10 +143,9 @@ impl TypeChecker {
             variable_info: HashMap::new(),
 
             call_resolution: HashMap::new(),
-            external_functions: HashMap::new(),
-            functions: vec![],
 
             scope: vec![Scope::new()],
+            permanent_definitions,
         }
     }
 
@@ -184,7 +161,11 @@ impl TypeChecker {
     }
 
     pub fn reference_of(&self, ref_type_id: TypeId, type_id: TypeId) -> bool {
-        if let Some(tid) = self.reference_of_map.get(&ref_type_id) {
+        if let Some(tid) = self
+            .permanent_definitions
+            .reference_of_map
+            .get(&ref_type_id)
+        {
             tid == &type_id
         } else {
             false
@@ -283,13 +264,13 @@ impl TypeChecker {
 
                 let inner_type_id = self.node_types[inner_node_id.0];
 
-                if let Some(value) = self.future_of_map.get(&inner_type_id) {
+                if let Some(value) = self.permanent_definitions.future_of_map.get(&inner_type_id) {
                     self.node_types[node_id.0] = *value;
                 } else {
                     self.error(
                         format!(
                             "expected future type for .await, found {}",
-                            &self.typenames[inner_type_id.0]
+                            &self.permanent_definitions.typenames[inner_type_id.0]
                         ),
                         node_id,
                     )
@@ -495,24 +476,6 @@ impl TypeChecker {
         }
     }
 
-    #[cfg(feature = "async")]
-    pub fn add_async_call(&mut self, params: Vec<TypeId>, ret: TypeId, fun: Function, name: &str) {
-        self.functions.push(ExternalFnRecord {
-            params,
-            ret,
-            fun,
-            raw_ptr: None,
-        });
-
-        let id = self.functions.len() - 1;
-
-        let ent = self
-            .external_functions
-            .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
-        (*ent).push(ExternalFunctionId(id));
-    }
-
     pub fn with<F>(&mut self, f: F)
     where
         F: Fn(&mut TypeChecker),
@@ -546,6 +509,18 @@ impl TypeChecker {
 
     //     self.node_types[node_id.0] = type_id
     // }
+    // pub fn create_or_find_type(&mut self, ty: std::any::TypeId) -> TypeId {
+    //     let mut idx = 0;
+    //     while idx < self.permanent_definitions.types.len() {
+    //         if self.permanent_definitions.types[idx] == ty {
+    //             return TypeId(idx);
+    //         }
+    //         idx += 1;
+    //     }
+    //     self.permanent_definitions.types.push(ty);
+
+    //     TypeId(self.permanent_definitions.types.len() - 1)
+    // }
 
     pub fn typecheck_call(&mut self, head: NodeId, args: &[NodeId], node_id: NodeId) {
         for node_id in args {
@@ -555,9 +530,10 @@ impl TypeChecker {
         let call_name = &self.parse_results.contents
             [self.parse_results.span_start[head.0]..self.parse_results.span_end[head.0]];
 
-        if let Some(defs) = self.external_functions.get(call_name) {
+        if let Some(defs) = self.permanent_definitions.external_functions.get(call_name) {
             'outer: for &def in defs {
-                let ExternalFnRecord { params, ret, .. } = &self.functions[def.0];
+                let ExternalFnRecord { params, ret, .. } =
+                    &self.permanent_definitions.functions[def.0];
                 {
                     if args.len() != params.len() {
                         // self.error(format!("expected {} argument(s)", params.len()), head);
@@ -658,19 +634,6 @@ impl TypeChecker {
         None
     }
 
-    pub fn create_or_find_type(&mut self, ty: std::any::TypeId) -> TypeId {
-        let mut idx = 0;
-        while idx < self.types.len() {
-            if self.types[idx] == ty {
-                return TypeId(idx);
-            }
-            idx += 1;
-        }
-        self.types.push(ty);
-
-        TypeId(self.types.len() - 1)
-    }
-
     pub fn enter_scope(&mut self) {
         self.scope.push(Scope::new());
     }
@@ -688,52 +651,25 @@ impl TypeChecker {
         }
     }
 
-    pub fn register_type<T>(&mut self) -> TypeId
-    where
-        T: Any,
-    {
-        self.types.push(std::any::TypeId::of::<T>());
-        self.typenames.push(std::any::type_name::<T>().to_string());
-
-        let type_id = TypeId(self.types.len() - 1);
-
-        // also register the reference
-        let ref_type = self.get_type::<&T>();
-        if let Some(ref_type_id) = ref_type {
-            self.reference_of_map.insert(ref_type_id, type_id);
-        } else {
-            self.types.push(std::any::TypeId::of::<&T>());
-            self.typenames.push(std::any::type_name::<&T>().to_string());
-            let ref_type_id = TypeId(self.types.len() - 1);
-            self.reference_of_map.insert(ref_type_id, type_id);
-        }
-
-        type_id
-    }
-
     pub fn get_type<T>(&self) -> Option<TypeId>
     where
         T: Any,
     {
-        for (idx, tid) in self.types.iter().enumerate() {
-            if tid == &std::any::TypeId::of::<T>() {
-                return Some(TypeId(idx));
-            }
-        }
-
-        None
+        // Since the user can't create types in the script (currently), defer
+        // type lookup to the permanent state
+        self.permanent_definitions.get_type::<T>()
     }
 
     pub fn stringify_type(&self, type_id: TypeId) -> String {
         if type_id == UNKNOWN_TYPE {
             String::from("<UNKNOWN TYPE>")
         } else {
-            self.typenames[type_id.0].clone()
+            self.permanent_definitions.typenames[type_id.0].clone()
         }
     }
 
     pub fn stringify_function_name(&self, name: &[u8], function_id: ExternalFunctionId) -> String {
-        let fun_def = &self.functions[function_id.0];
+        let fun_def = &self.permanent_definitions.functions[function_id.0];
 
         let mut fun_name = String::from_utf8_lossy(name).to_string();
 
@@ -743,300 +679,4 @@ impl TypeChecker {
         }
         fun_name
     }
-}
-
-pub struct ExternalFnRecord {
-    pub params: Vec<TypeId>,
-    pub ret: TypeId,
-    pub fun: Function,
-    pub raw_ptr: Option<*const u8>,
-}
-
-pub trait FnRegister<A, RetVal, Args> {
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8);
-}
-
-impl<A, U> FnRegister<A, U, ()> for TypeChecker
-where
-    A: 'static + Fn() -> U,
-    U: Any,
-{
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
-        let wrapped: Box<dyn Fn() -> Result<Box<dyn Any>, String>> =
-            Box::new(move || Ok(Box::new(fun()) as Box<dyn Any>));
-
-        let ret = if let Some(id) = self.get_type::<U>() {
-            id
-        } else {
-            self.register_type::<U>()
-        };
-
-        self.functions.push(ExternalFnRecord {
-            params: vec![],
-            ret,
-            fun: Function::ExternalFn0(wrapped),
-            raw_ptr: Some(fun_ptr),
-        });
-
-        let id = self.functions.len() - 1;
-
-        let ent = self
-            .external_functions
-            .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
-        (*ent).push(ExternalFunctionId(id));
-    }
-}
-
-impl<A, T, U> FnRegister<A, U, (T,)> for TypeChecker
-where
-    A: 'static + Fn(T) -> U,
-    T: Clone + Any,
-    U: Any,
-{
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
-        let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
-            Box::new(move |arg: &mut Box<dyn Any>| {
-                let inside = (*arg).downcast_mut() as Option<&mut T>;
-                match inside {
-                    Some(b) => Ok(Box::new(fun(b.clone())) as Box<dyn Any>),
-                    None => Err("ErrorFunctionArgMismatch1".into()),
-                }
-            });
-
-        let param1 = if let Some(id) = self.get_type::<T>() {
-            id
-        } else {
-            self.register_type::<T>()
-        };
-
-        let ret = if let Some(id) = self.get_type::<U>() {
-            id
-        } else {
-            self.register_type::<U>()
-        };
-
-        self.functions.push(ExternalFnRecord {
-            params: vec![param1],
-            ret,
-            fun: Function::ExternalFn1(wrapped),
-            raw_ptr: Some(fun_ptr),
-        });
-
-        let id = self.functions.len() - 1;
-
-        let ent = self
-            .external_functions
-            .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
-        (*ent).push(ExternalFunctionId(id));
-    }
-}
-
-impl<A, T, U, V> FnRegister<A, V, (T, U)> for TypeChecker
-where
-    A: 'static + Fn(T, U) -> V,
-    T: Clone + Any,
-    U: Clone + Any,
-    V: Any,
-{
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
-        let wrapped: Box<
-            dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
-        > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>| {
-            let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
-            let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
-
-            match (inside1, inside2) {
-                (Some(b), Some(c)) => Ok(Box::new(fun(b.clone(), c.clone())) as Box<dyn Any>),
-                _ => Err("ErrorFunctionArgMismatch2".into()),
-            }
-        });
-
-        let param1 = if let Some(id) = self.get_type::<T>() {
-            id
-        } else {
-            self.register_type::<T>()
-        };
-
-        let param2 = if let Some(id) = self.get_type::<U>() {
-            id
-        } else {
-            self.register_type::<U>()
-        };
-
-        let ret = if let Some(id) = self.get_type::<V>() {
-            id
-        } else {
-            self.register_type::<V>()
-        };
-
-        let fn_record = ExternalFnRecord {
-            params: vec![param1, param2],
-            ret,
-            fun: Function::ExternalFn2(wrapped),
-            raw_ptr: Some(fun_ptr),
-        };
-        self.functions.push(fn_record);
-
-        let id = self.functions.len() - 1;
-
-        let ent = self
-            .external_functions
-            .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
-        (*ent).push(ExternalFunctionId(id));
-    }
-}
-
-impl<'a, A, T, U, V, W> FnRegister<A, V, (&'a T, U, W)> for TypeChecker
-where
-    A: 'static + Fn(T, U, W) -> V,
-    T: Clone + Any,
-    U: Clone + Any,
-    W: Clone + Any,
-    V: Any,
-{
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
-        let wrapped: Box<
-            dyn Fn(
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
-            ) -> Result<Box<dyn Any>, String>,
-        > = Box::new(
-            move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>, arg3: &mut Box<dyn Any>| {
-                let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
-                let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
-                let inside3 = (*arg3).downcast_mut() as Option<&mut W>;
-
-                match (inside1, inside2, inside3) {
-                    (Some(b), Some(c), Some(d)) => {
-                        Ok(Box::new(fun(b.clone(), c.clone(), d.clone())) as Box<dyn Any>)
-                    }
-                    _ => Err("ErrorFunctionArgMismatch3".into()),
-                }
-            },
-        );
-
-        let param1 = if let Some(id) = self.get_type::<T>() {
-            id
-        } else {
-            self.register_type::<T>()
-        };
-
-        let param2 = if let Some(id) = self.get_type::<U>() {
-            id
-        } else {
-            self.register_type::<U>()
-        };
-
-        let param3 = if let Some(id) = self.get_type::<W>() {
-            id
-        } else {
-            self.register_type::<W>()
-        };
-
-        let ret = if let Some(id) = self.get_type::<V>() {
-            id
-        } else {
-            self.register_type::<V>()
-        };
-
-        let fn_record = ExternalFnRecord {
-            params: vec![param1, param2, param3],
-            ret,
-            fun: Function::ExternalFn3(wrapped),
-            raw_ptr: Some(fun_ptr),
-        };
-        self.functions.push(fn_record);
-
-        let id = self.functions.len() - 1;
-
-        let ent = self
-            .external_functions
-            .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
-        (*ent).push(ExternalFunctionId(id));
-    }
-}
-
-impl<A, T, U, V, W> FnRegister<A, V, (&mut T, U, W)> for TypeChecker
-where
-    A: 'static + Fn(&mut T, U, W) -> V,
-    T: Any,
-    U: Clone + Any,
-    W: Clone + Any,
-    V: Any,
-{
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
-        let wrapped: Box<
-            dyn Fn(
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
-            ) -> Result<Box<dyn Any>, String>,
-        > = Box::new(
-            move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>, arg3: &mut Box<dyn Any>| {
-                let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
-                let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
-                let inside3 = (*arg3).downcast_mut() as Option<&mut W>;
-
-                match (inside1, inside2, inside3) {
-                    (Some(b), Some(c), Some(d)) => {
-                        Ok(Box::new(fun(b, c.clone(), d.clone())) as Box<dyn Any>)
-                    }
-                    _ => Err("ErrorFunctionArgMismatch3Mut".into()),
-                }
-            },
-        );
-
-        let param1 = if let Some(id) = self.get_type::<T>() {
-            id
-        } else {
-            self.register_type::<T>()
-        };
-
-        let param2 = if let Some(id) = self.get_type::<U>() {
-            id
-        } else {
-            self.register_type::<U>()
-        };
-
-        let param3 = if let Some(id) = self.get_type::<W>() {
-            id
-        } else {
-            self.register_type::<W>()
-        };
-
-        let ret = if let Some(id) = self.get_type::<V>() {
-            id
-        } else {
-            self.register_type::<V>()
-        };
-
-        let fn_record = ExternalFnRecord {
-            params: vec![param1, param2, param3],
-            ret,
-            fun: Function::ExternalFn3(wrapped),
-            raw_ptr: Some(fun_ptr),
-        };
-        self.functions.push(fn_record);
-
-        let id = self.functions.len() - 1;
-
-        let ent = self
-            .external_functions
-            .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
-        (*ent).push(ExternalFunctionId(id));
-    }
-}
-
-#[cfg(not(feature = "async"))]
-#[macro_export]
-macro_rules! register_fn {
-    ( $typechecker:expr, $name: expr, $fun:expr ) => {{
-        $typechecker.register_fn($name, $fun, $fun as *const u8)
-    }};
 }

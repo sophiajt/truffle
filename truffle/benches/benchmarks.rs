@@ -49,7 +49,7 @@ fn run_file(filename: &str) {
     let mut evaluator = Evaluator::default();
     evaluator.add_function(output);
 
-    let _ = evaluator.eval(FunctionId(0), &translater.typechecker.functions);
+    let _ = evaluator.eval(FunctionId(0), &translater.typechecker.local_functions);
 }
 
 fn parser_benchmark(c: &mut Criterion) {

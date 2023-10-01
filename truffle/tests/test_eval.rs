@@ -1,10 +1,4 @@
-
-use std::any::Any;
-use truffle::Function;
-use truffle::{
-    register_fn, ErrorBatch, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue,
-    Translater, TypeChecker,
-};
+use truffle::{register_fn, Engine, ErrorBatch, FnRegister, ReturnValue};
 
 #[cfg(feature = "async")]
 pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
@@ -20,68 +14,82 @@ pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
         that - 50
     }
 
-    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
+    // let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
 
-    let tokens = lexer.lex()?;
-    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
-    parser.parse()?;
+    // let tokens = lexer.lex()?;
+    // let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
+    // parser.parse()?;
 
-    let mut typechecker = TypeChecker::new(parser.results);
-    register_fn!(typechecker, "print", print::<i64>);
-    register_fn!(typechecker, "print", print::<f64>);
-    register_fn!(typechecker, "print", print::<bool>);
-    register_fn!(typechecker, "print", print::<String>);
-    register_fn!(typechecker, "add", add::<i64>);
-    register_fn!(typechecker, "add", add::<f64>);
-    register_fn!(typechecker, "modify_this", modify_this);
-    register_fn!(typechecker, "modify_that", modify_that);
+    // let mut typechecker = TypeChecker::new(parser.results);
+    let mut engine = Engine::new();
+    register_fn!(engine, "print", print::<i64>);
+    register_fn!(engine, "print", print::<f64>);
+    register_fn!(engine, "print", print::<bool>);
+    register_fn!(engine, "print", print::<String>);
+    register_fn!(engine, "add", add::<i64>);
+    register_fn!(engine, "add", add::<f64>);
+    register_fn!(engine, "modify_this", modify_this);
+    register_fn!(engine, "modify_that", modify_that);
 
-    typechecker.typecheck()?;
+    block_on(engine.eval_source_async("test", source.as_bytes(), false))
 
-    let mut translater = Translater::new(typechecker);
+    // typechecker.typecheck()?;
 
-    #[allow(unused_mut)]
-    let mut output = translater.translate();
+    // let mut translater = Translater::new(typechecker);
 
-    let mut evaluator = Evaluator::default();
-    evaluator.add_function(output);
+    // #[allow(unused_mut)]
+    // let mut output = translater.translate();
 
-    match block_on(evaluator.eval_async(FunctionId(0), &translater.typechecker.functions)) {
-        ReturnValue::Error(error) => Err(error.into()),
-        return_value => Ok(return_value),
-    }
+    // let mut evaluator = Evaluator::default();
+    // evaluator.add_function(output);
+
+    // match block_on(evaluator.eval_async(FunctionId(0), &translater.typechecker.functions)) {
+    //     ReturnValue::Error(error) => Err(error.into()),
+    //     return_value => Ok(return_value),
+    // }
 }
 
 #[cfg(not(feature = "async"))]
 pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
-    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
+    // let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
 
-    let tokens = lexer.lex()?;
-    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
-    parser.parse()?;
+    // let tokens = lexer.lex()?;
+    // let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
+    // parser.parse()?;
 
-    let mut typechecker = TypeChecker::new(parser.results);
-    register_fn!(typechecker, "print", print::<i64>);
-    register_fn!(typechecker, "print", print::<f64>);
-    register_fn!(typechecker, "print", print::<bool>);
-    register_fn!(typechecker, "print", print::<String>);
-    register_fn!(typechecker, "add", add::<i64>);
-    register_fn!(typechecker, "add", add::<f64>);
+    // let mut typechecker = TypeChecker::new(parser.results);
+    // register_fn!(typechecker, "print", print::<i64>);
+    // register_fn!(typechecker, "print", print::<f64>);
+    // register_fn!(typechecker, "print", print::<bool>);
+    // register_fn!(typechecker, "print", print::<String>);
+    // register_fn!(typechecker, "add", add::<i64>);
+    // register_fn!(typechecker, "add", add::<f64>);
 
-    typechecker.typecheck()?;
+    // typechecker.typecheck()?;
 
-    let mut translater = Translater::new(typechecker);
+    // let mut translater = Translater::new(typechecker);
 
-    #[allow(unused_mut)]
-    let mut output = translater.translate();
+    // #[allow(unused_mut)]
+    // let mut output = translater.translate();
 
-    let mut evaluator = Evaluator::default();
-    evaluator.add_function(output);
+    // let mut evaluator = Evaluator::default();
+    // evaluator.add_function(output);
 
-    match evaluator.eval(FunctionId(0), &translater.typechecker.functions) {
-        ReturnValue::Error(error) => Err(error.into()),
-        return_value => Ok(return_value),
-    }
+    // match evaluator.eval(FunctionId(0), &translater.typechecker.local_functions) {
+    //     ReturnValue::Error(error) => Err(error.into()),
+    //     return_value => Ok(return_value),
+    // }
+    // JT: FIXME
+
+    let mut engine = Engine::new();
+    register_fn!(engine, "print", print::<i64>);
+    register_fn!(engine, "print", print::<f64>);
+    register_fn!(engine, "print", print::<bool>);
+    register_fn!(engine, "print", print::<String>);
+    register_fn!(engine, "add", add::<i64>);
+    register_fn!(engine, "add", add::<f64>);
+
+    engine.eval_source("test", source.as_bytes(), false)
 }
 
 // Script Builtins

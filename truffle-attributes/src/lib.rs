@@ -1,46 +1,53 @@
 use proc_macro::TokenStream;
-use quote::{quote, format_ident};
-use syn::{ItemFn, Expr, parse_macro_input, parse::Parse, Token, ExprPath};
+use quote::{format_ident, quote};
+use syn::{parse::Parse, parse_macro_input, Expr, ExprPath, ItemFn, Token};
 
 struct RegisterFnInput {
-    typechecker: Expr,
+    engine: Expr,
     name: Expr,
     fun: ExprPath,
 }
 
 impl Parse for RegisterFnInput {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let typechecker = input.parse()?;
+        let engine = input.parse()?;
         input.parse::<Token![,]>()?;
         let name = input.parse()?;
         input.parse::<Token![,]>()?;
         let fun = input.parse()?;
-        Ok(RegisterFnInput { typechecker, name, fun })
+        Ok(RegisterFnInput { engine, name, fun })
     }
 }
 
 #[proc_macro]
 pub fn register_fn(input: TokenStream) -> TokenStream {
-    let RegisterFnInput { typechecker, name, fun } = parse_macro_input!(input);
+    let RegisterFnInput { engine, name, fun } = parse_macro_input!(input);
     let fun_is_async = {
         let mut path = fun.path.clone();
-        let ident_segment = path.segments.last_mut().expect("path should always have at least one segment");
+        let ident_segment = path
+            .segments
+            .last_mut()
+            .expect("path should always have at least one segment");
         ident_segment.ident = format_ident!("{}_is_async", ident_segment.ident);
         path
     };
     let register_fun = {
         let mut path = fun.path.clone();
-        let ident_segment = path.segments.last_mut().expect("path should always have at least one segment");
+        let ident_segment = path
+            .segments
+            .last_mut()
+            .expect("path should always have at least one segment");
         ident_segment.ident = format_ident!("register_{}", ident_segment.ident);
         path
     };
     quote! {
         if #fun_is_async() {
-            #typechecker.with(#register_fun())
+            #engine.with(#register_fun())
         } else {
-            #typechecker.register_fn(#name, #fun, #fun as *const u8)
+            #engine.register_fn(#name, #fun, #fun as *const u8)
         }
-    }.into()
+    }
+    .into()
 }
 
 #[proc_macro_attribute]
@@ -75,8 +82,8 @@ fn foo(item: TokenStream) -> Result<proc_macro2::TokenStream, syn::Error> {
 
 mod generate {
     use proc_macro2::TokenStream;
-    use syn::{ItemFn, token::Mut, parse_quote};
-    use quote::{quote, format_ident};
+    use quote::{format_ident, quote};
+    use syn::{parse_quote, token::Mut, ItemFn};
 
     pub fn register_fn(input: ItemFn) -> Result<TokenStream, syn::Error> {
         let wrapped_fn_name = input.sig.ident.to_string();
@@ -85,7 +92,7 @@ mod generate {
         let registration_closure = registration_closure(input)?;
 
         Ok(quote! {
-            fn #register_fn_name() -> impl Fn(&mut truffle::TypeChecker) {
+            fn #register_fn_name() -> impl Fn(&mut truffle::Engine) {
                 use futures::FutureExt;
 
                 #wrapped_fn
@@ -99,9 +106,13 @@ mod generate {
         let wrapped_fn_name = input.sig.ident.to_string();
         let mut register_fn_stub = input;
         register_fn_stub.sig.ident = format_ident!("register_{wrapped_fn_name}");
-        register_fn_stub.sig.output = syn::parse_str("-> impl Fn(&mut truffle::TypeChecker)").expect("this should parse as a return type");
+        register_fn_stub.sig.output = syn::parse_str("-> impl Fn(&mut truffle::Engine)")
+            .expect("this should parse as a return type");
         register_fn_stub.sig.inputs = Default::default();
-        register_fn_stub.block = syn::parse_str("{|typechecker| unreachable!(\"register fn should only be called for async fns\")}").expect("this should parse as a block body for a function");
+        register_fn_stub.block = syn::parse_str(
+            "{|engine| unreachable!(\"register fn should only be called for async fns\")}",
+        )
+        .expect("this should parse as a block body for a function");
 
         Ok(quote! {
             #register_fn_stub
@@ -114,7 +125,8 @@ mod generate {
         let mut fn_is_async = input;
         fn_is_async.sig.asyncness = None;
         fn_is_async.sig.ident = format_ident!("{wrapped_fn_name}_is_async");
-        fn_is_async.sig.output = syn::parse_str("-> bool").expect("this should parse as a return type");
+        fn_is_async.sig.output =
+            syn::parse_str("-> bool").expect("this should parse as a return type");
         fn_is_async.sig.inputs = Default::default();
         fn_is_async.block = parse_quote! {
             {
@@ -155,40 +167,37 @@ mod generate {
                         _ => todo!(),
                     }
 
-                    pattype.ty = Box::new(syn::parse_str("Box<dyn std::any::Any + Send>").expect("input should be a valid rust type"));
+                    pattype.ty = Box::new(
+                        syn::parse_str("Box<dyn std::any::Any + Send>")
+                            .expect("input should be a valid rust type"),
+                    );
                 }
             }
             arg
         });
 
-        let idents = input.sig.inputs.iter().map(|arg| {
-            match arg {
-                syn::FnArg::Receiver(_) => todo!(),
-                syn::FnArg::Typed(pattype) => {
-                    match &*pattype.pat {
-                        syn::Pat::Const(_) => todo!(),
-                        syn::Pat::Ident(patident) => {
-                            &patident.ident
-                        }
-                        syn::Pat::Lit(_) => todo!(),
-                        syn::Pat::Macro(_) => todo!(),
-                        syn::Pat::Or(_) => todo!(),
-                        syn::Pat::Paren(_) => todo!(),
-                        syn::Pat::Path(_) => todo!(),
-                        syn::Pat::Range(_) => todo!(),
-                        syn::Pat::Reference(_) => todo!(),
-                        syn::Pat::Rest(_) => todo!(),
-                        syn::Pat::Slice(_) => todo!(),
-                        syn::Pat::Struct(_) => todo!(),
-                        syn::Pat::Tuple(_) => todo!(),
-                        syn::Pat::TupleStruct(_) => todo!(),
-                        syn::Pat::Type(_) => todo!(),
-                        syn::Pat::Verbatim(_) => todo!(),
-                        syn::Pat::Wild(_) => todo!(),
-                        _ => todo!(),
-                    }
-                }
-            }
+        let idents = input.sig.inputs.iter().map(|arg| match arg {
+            syn::FnArg::Receiver(_) => todo!(),
+            syn::FnArg::Typed(pattype) => match &*pattype.pat {
+                syn::Pat::Const(_) => todo!(),
+                syn::Pat::Ident(patident) => &patident.ident,
+                syn::Pat::Lit(_) => todo!(),
+                syn::Pat::Macro(_) => todo!(),
+                syn::Pat::Or(_) => todo!(),
+                syn::Pat::Paren(_) => todo!(),
+                syn::Pat::Path(_) => todo!(),
+                syn::Pat::Range(_) => todo!(),
+                syn::Pat::Reference(_) => todo!(),
+                syn::Pat::Rest(_) => todo!(),
+                syn::Pat::Slice(_) => todo!(),
+                syn::Pat::Struct(_) => todo!(),
+                syn::Pat::Tuple(_) => todo!(),
+                syn::Pat::TupleStruct(_) => todo!(),
+                syn::Pat::Type(_) => todo!(),
+                syn::Pat::Verbatim(_) => todo!(),
+                syn::Pat::Wild(_) => todo!(),
+                _ => todo!(),
+            },
         });
 
         let converted_args = idents
@@ -198,12 +207,12 @@ mod generate {
         Ok(quote! {
             fn wrapped_fn(
                 #(#wrapped_params)*
-            ) -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>> {
+            ) -> futures::future::BoxFuture<'static, Result<Box<dyn std::any::Any>, String>> {
                 async move {
                     #(
                     #converted_args
                     )*
-                    Ok(Box::new(#wrapped_fn_name(#(*#idents),*).await) as Box<dyn Any>)
+                    Ok(Box::new(#wrapped_fn_name(#(*#idents),*).await) as Box<dyn std::any::Any>)
                 }
                 .boxed()
             }
@@ -221,7 +230,7 @@ mod generate {
                 }
             }
         }).map(|ty| {
-            quote! { typechecker.get_type::<#ty>().expect("typechecker should already know about this type") }
+            quote! { engine.get_type::<#ty>().expect("engine should already know about this type") }
         });
 
         let ret_type = match input.sig.output {
@@ -230,10 +239,12 @@ mod generate {
         };
 
         Ok(quote! {
-            |typechecker: &mut TypeChecker| {
-                typechecker.add_async_call(
+            |engine: &mut Engine| {
+                use truffle::Function;
+
+                engine.add_async_call(
                     vec![#(#param_types)*],
-                    typechecker.get_type::<#ret_type>().expect("typechecker should already know about this type"),
+                    engine.get_type::<#ret_type>().expect("engine should already know about this type"),
                     Function::ExternalAsyncFn1(wrapped_fn),
                     #wrapped_fn_name,
                 );

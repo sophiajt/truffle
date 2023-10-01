@@ -101,7 +101,10 @@ fn typecheck_errors() {
 
 #[test]
 fn runtime_errors() {
-    eval_source("3 / 0")
+    let result = eval_source("3 / 0");
+
+    eprintln!("{:?}", result);
+    result
         .expect_err("it should not be possible to divide by zero")
         .assert_contains("division by zero");
 }

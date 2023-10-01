@@ -2,8 +2,9 @@ use std::any::Any;
 
 use crate::{
     codegen::{FunctionCodegen, Instruction, InstructionId, RegisterId, RegisterValue},
+    engine::ExternalFnRecord,
     parser::NodeId,
-    typechecker::{ExternalFnRecord, ExternalFunctionId, Function, FunctionId, STRING_TYPE},
+    typechecker::{ExternalFunctionId, Function, FunctionId, STRING_TYPE},
     ScriptError, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, UNIT_TYPE,
 };
 
@@ -52,7 +53,6 @@ pub enum ReturnValue {
     Bool(bool),
     String(String),
     Custom(Box<dyn Any>),
-    Error(ScriptError),
 }
 
 impl Evaluator {
@@ -123,7 +123,10 @@ impl Evaluator {
     }
 
     #[inline]
-    pub fn eval_common_opcode(&mut self, instruction_pointer: &mut usize) -> Option<ReturnValue> {
+    pub fn eval_common_opcode(
+        &mut self,
+        instruction_pointer: &mut usize,
+    ) -> Option<Result<ReturnValue, ScriptError>> {
         match self.instructions[*instruction_pointer] {
             Instruction::IADD { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].i64 =
@@ -144,8 +147,8 @@ impl Evaluator {
             }
             Instruction::IDIV { lhs, rhs, target } => {
                 if self.get_reg_i64(rhs) == 0 {
-                    return Some(ReturnValue::Error(
-                        self.error("division by zero", self.source_map[*instruction_pointer]),
+                    return Some(Err(
+                        self.error("division by zero", self.source_map[*instruction_pointer])
                     ));
                 }
                 self.stack_frames[self.current_frame].register_values[target.0].i64 =
@@ -197,8 +200,8 @@ impl Evaluator {
             }
             Instruction::FDIV { lhs, rhs, target } => {
                 if self.get_reg_f64(rhs) == 0.0 {
-                    return Some(ReturnValue::Error(
-                        self.error("division by zero", self.source_map[*instruction_pointer]),
+                    return Some(Err(
+                        self.error("division by zero", self.source_map[*instruction_pointer])
                     ));
                 }
 
@@ -261,19 +264,23 @@ impl Evaluator {
                         self.stack_frames[self.current_frame].instruction_pointer.0;
                 } else {
                     match self.stack_frames[self.current_frame].register_types[0] {
-                        UNIT_TYPE => return Some(ReturnValue::Unit),
+                        UNIT_TYPE => return Some(Ok(ReturnValue::Unit)),
                         BOOL_TYPE => {
-                            return Some(ReturnValue::Bool(self.get_reg_bool(RegisterId(0))))
+                            return Some(Ok(ReturnValue::Bool(self.get_reg_bool(RegisterId(0)))))
                         }
-                        I64_TYPE => return Some(ReturnValue::I64(self.get_reg_i64(RegisterId(0)))),
-                        F64_TYPE => return Some(ReturnValue::F64(self.get_reg_f64(RegisterId(0)))),
+                        I64_TYPE => {
+                            return Some(Ok(ReturnValue::I64(self.get_reg_i64(RegisterId(0)))))
+                        }
+                        F64_TYPE => {
+                            return Some(Ok(ReturnValue::F64(self.get_reg_f64(RegisterId(0)))))
+                        }
                         STRING_TYPE => {
                             let string = self.get_reg_string(RegisterId(0));
-                            return Some(ReturnValue::String(*string));
+                            return Some(Ok(ReturnValue::String(*string)));
                         }
                         _ => {
                             let value = self.get_user_type(RegisterId(0));
-                            return Some(ReturnValue::Custom(value));
+                            return Some(Ok(ReturnValue::Custom(value)));
                         }
                     }
                 }
@@ -290,7 +297,7 @@ impl Evaluator {
         &mut self,
         starting_function: FunctionId,
         external_functions: &[ExternalFnRecord],
-    ) -> ReturnValue {
+    ) -> Result<ReturnValue, ScriptError> {
         self.current_frame = self.stack_frames.len();
         self.stack_frames
             .push(self.functions[starting_function.0].clone());
@@ -321,7 +328,7 @@ impl Evaluator {
         &mut self,
         starting_function: FunctionId,
         external_functions: &[ExternalFnRecord],
-    ) -> ReturnValue {
+    ) -> Result<ReturnValue, ScriptError> {
         self.current_frame = self.stack_frames.len();
         self.stack_frames
             .push(self.functions[starting_function.0].clone());
