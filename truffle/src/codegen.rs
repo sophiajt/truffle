@@ -436,13 +436,13 @@ impl FunctionCodegen {
     }
 }
 
-pub struct Translater {
+pub struct Translater<'permanent> {
     var_lookup: HashMap<NodeId, RegisterId>,
-    pub typechecker: TypeChecker,
+    pub typechecker: TypeChecker<'permanent>,
 }
 
-impl Translater {
-    pub fn new(typechecker: TypeChecker) -> Self {
+impl<'permanent> Translater<'permanent> {
+    pub fn new(typechecker: TypeChecker<'permanent>) -> Self {
         Translater {
             var_lookup: HashMap::new(),
             typechecker,

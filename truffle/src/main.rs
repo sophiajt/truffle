@@ -4,10 +4,7 @@ use std::{collections::HashMap, path::Path};
 
 use line_editor::{LineEditor, ReadLineOutput};
 
-use truffle::{
-    register_fn, ErrorBatch, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue,
-    Translater, TypeChecker,
-};
+use truffle::{register_fn, FnRegister, ReturnValue};
 
 fn main() {
     let args = std::env::args();
@@ -49,7 +46,7 @@ fn main() {
     }
 }
 
-fn print_result(_typechecker: &TypeChecker, fname: &Path, result: ReturnValue, contents: &[u8]) {
+fn print_result(result: ReturnValue) {
     match result {
         ReturnValue::Unit => {
             println!("result -> () (unit)");
@@ -69,10 +66,6 @@ fn print_result(_typechecker: &TypeChecker, fname: &Path, result: ReturnValue, c
         ReturnValue::Custom(_) => {
             println!("result -> <?> (Custom User Type)");
         }
-        ReturnValue::Error(script_error) => {
-            let errors = ErrorBatch::from(script_error);
-            errors.print_with(fname, contents);
-        }
     }
 }
 
@@ -82,62 +75,32 @@ where
     P: AsRef<Path>,
 {
     use futures::executor::block_on;
-    let contents = source.as_bytes();
+    use truffle::Engine;
+
     let fname = fname.as_ref();
+    let contents = source.as_bytes();
 
-    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
-    let tokens = match lexer.lex() {
-        Ok(tokens) => tokens,
-        Err(errors) => {
-            errors.print_with(fname, contents);
-            return None;
+    let mut engine = Engine::new();
+
+    register_fn!(engine, "print", print::<i64>);
+    register_fn!(engine, "print", print::<f64>);
+    register_fn!(engine, "print", print::<bool>);
+    register_fn!(engine, "add", add::<i64>);
+    register_fn!(engine, "add", add::<f64>);
+    register_fn!(engine, "new_env", Env::new_env);
+    register_fn!(engine, "set_var", Env::set_var);
+    register_fn!(engine, "read_var", Env::read_var);
+
+    let result = block_on(engine.eval_source_async(fname, source.as_bytes(), debug_output));
+    match result {
+        Ok(result) => {
+            print_result(result);
         }
-    };
-
-    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
-    match parser.parse() {
-        Ok(()) => {}
-        Err(errors) => {
-            errors.print_with(fname, contents);
-            return None;
-        }
-    }
-    if debug_output {
-        parser.results.print();
-    }
-
-    let mut typechecker = TypeChecker::new(parser.results);
-    register_fn!(typechecker, "print", print::<i64>);
-    register_fn!(typechecker, "print", print::<f64>);
-    register_fn!(typechecker, "print", print::<bool>);
-    register_fn!(typechecker, "add", add::<i64>);
-    register_fn!(typechecker, "add", add::<f64>);
-    register_fn!(typechecker, "new_env", Env::new_env);
-    register_fn!(typechecker, "set_var", Env::set_var);
-    register_fn!(typechecker, "read_var", Env::read_var);
-
-    match typechecker.typecheck() {
-        Ok(_) => {}
         Err(errors) => {
             errors.print_with(fname, contents);
             return None;
         }
     }
-    if debug_output {
-        typechecker.print_node_types();
-    }
-
-    let mut translater = Translater::new(typechecker);
-
-    #[allow(unused_mut)]
-    let mut output = translater.translate();
-
-    let mut evaluator = Evaluator::default();
-    evaluator.add_function(output);
-
-    let result = block_on(evaluator.eval_async(FunctionId(0), &translater.typechecker.functions));
-
-    print_result(&translater.typechecker, fname, result, source.as_bytes());
 
     Some(())
 }
@@ -147,62 +110,32 @@ fn run_line<P>(fname: P, source: &str, debug_output: bool) -> Option<()>
 where
     P: AsRef<Path>,
 {
+    use truffle::Engine;
+
     let fname = fname.as_ref();
     let contents = source.as_bytes();
-    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
 
-    let tokens = match lexer.lex() {
-        Ok(tokens) => tokens,
-        Err(errors) => {
-            errors.print_with(fname, contents);
-            return None;
+    let mut engine = Engine::new();
+
+    register_fn!(engine, "print", print::<i64>);
+    register_fn!(engine, "print", print::<f64>);
+    register_fn!(engine, "print", print::<bool>);
+    register_fn!(engine, "add", add::<i64>);
+    register_fn!(engine, "add", add::<f64>);
+    register_fn!(engine, "new_env", Env::new_env);
+    register_fn!(engine, "set_var", Env::set_var);
+    register_fn!(engine, "read_var", Env::read_var);
+
+    let result = engine.eval_source(fname, contents, debug_output);
+    match result {
+        Ok(result) => {
+            print_result(result);
         }
-    };
-
-    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
-
-    match parser.parse() {
-        Ok(()) => {}
-        Err(errors) => {
-            errors.print_with(fname, contents);
-            return None;
-        }
-    }
-    if debug_output {
-        parser.results.print();
-    }
-
-    let mut typechecker = TypeChecker::new(parser.results);
-    register_fn!(typechecker, "print", print::<i64>);
-    register_fn!(typechecker, "print", print::<f64>);
-    register_fn!(typechecker, "print", print::<bool>);
-    register_fn!(typechecker, "add", add::<i64>);
-    register_fn!(typechecker, "add", add::<f64>);
-    register_fn!(typechecker, "new_env", Env::new_env);
-    register_fn!(typechecker, "set_var", Env::set_var);
-    register_fn!(typechecker, "read_var", Env::read_var);
-
-    match typechecker.typecheck() {
-        Ok(_) => {}
         Err(errors) => {
             errors.print_with(fname, contents);
             return None;
         }
     }
-
-    let mut translater = Translater::new(typechecker);
-
-    #[allow(unused_mut)]
-    let mut output = translater.translate();
-
-    // output.debug_output();
-
-    let mut evaluator = Evaluator::default();
-    evaluator.add_function(output);
-
-    let result = evaluator.eval(FunctionId(0), &translater.typechecker.functions);
-
-    print_result(&translater.typechecker, fname, result, source.as_bytes());
 
     Some(())
 }
@@ -238,23 +171,4 @@ impl Env {
     pub fn read_var(&self, var: i64) -> i64 {
         *self.vars.get(&var).unwrap()
     }
-}
-
-// FIXME: test functions
-#[cfg(feature = "async")]
-async fn modify_this(this: i64) -> i64 {
-    this + 100
-}
-
-#[cfg(feature = "async")]
-fn wrapped_fn(
-    mut this: Box<dyn std::any::Any + Send>,
-) -> futures::future::BoxFuture<'static, Result<Box<dyn std::any::Any>, String>> {
-    use futures::FutureExt;
-
-    async move {
-        let this = this.downcast_mut().unwrap();
-        Ok(Box::new(modify_this(*this).await) as Box<dyn std::any::Any>)
-    }
-    .boxed()
 }

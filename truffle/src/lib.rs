@@ -1,6 +1,7 @@
 #![allow(clippy::type_complexity)]
 
 mod codegen;
+mod engine;
 mod errors;
 mod eval;
 mod lexer;
@@ -11,13 +12,12 @@ pub use crate::codegen::Translater;
 
 pub use crate::{
     codegen::FunctionCodegen,
+    engine::{Engine, FnRegister},
     errors::{ErrorBatch, ScriptError},
     eval::{Evaluator, ReturnValue},
     lexer::Lexer,
     parser::{ParseResults, Parser},
-    typechecker::{
-        FnRegister, FunctionId, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, UNIT_TYPE,
-    },
+    typechecker::{FunctionId, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, UNIT_TYPE},
 };
 
 // TODO: remove this, it's just a temporary hack while massaging APIs

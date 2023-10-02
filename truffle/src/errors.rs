@@ -155,6 +155,12 @@ impl ErrorBatch {
         ErrorBatch { errors: vec![] }
     }
 
+    pub fn one(error: ScriptError) -> ErrorBatch {
+        ErrorBatch {
+            errors: vec![error],
+        }
+    }
+
     pub fn push(&mut self, error: ScriptError) {
         self.errors.push(error);
     }
