@@ -172,22 +172,3 @@ impl Env {
         *self.vars.get(&var).unwrap()
     }
 }
-
-// FIXME: test functions
-// #[cfg(feature = "async")]
-// async fn modify_this(this: i64) -> i64 {
-//     this + 100
-// }
-
-// #[cfg(feature = "async")]
-// fn wrapped_fn(
-//     mut this: Box<dyn std::any::Any + Send>,
-// ) -> futures::future::BoxFuture<'static, Result<Box<dyn std::any::Any>, String>> {
-//     use futures::FutureExt;
-
-//     async move {
-//         let this = this.downcast_mut().unwrap();
-//         Ok(Box::new(modify_this(*this).await) as Box<dyn std::any::Any>)
-//     }
-//     .boxed()
-// }
