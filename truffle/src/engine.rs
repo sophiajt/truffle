@@ -5,12 +5,15 @@ use crate::{
     ReturnValue, Translater, TypeChecker, TypeId,
 };
 
+#[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
 pub struct Engine {
     permanent_definitions: PermanentDefinitions,
 }
 
+#[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
 pub struct PermanentDefinitions {
     // Used by TypeId
+    #[cfg_attr(feature = "lsp", serde(skip))]
     pub types: Vec<std::any::TypeId>,
 
     // Names of each types
@@ -219,7 +222,6 @@ impl Engine {
             params,
             ret,
             fun,
-            raw_ptr: None,
         });
 
         let id = self.permanent_definitions.functions.len() - 1;
@@ -240,15 +242,16 @@ impl Engine {
     }
 }
 
+#[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
 pub struct ExternalFnRecord {
     pub params: Vec<TypeId>,
     pub ret: TypeId,
+    #[cfg_attr(feature = "lsp", serde(skip))]
     pub fun: Function,
-    pub raw_ptr: Option<*const u8>,
 }
 
 pub trait FnRegister<A, RetVal, Args> {
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8);
+    fn register_fn(&mut self, name: &str, fun: A);
 }
 
 impl<A, U> FnRegister<A, U, ()> for Engine
@@ -256,7 +259,7 @@ where
     A: 'static + Fn() -> U,
     U: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
+    fn register_fn(&mut self, name: &str, fun: A) {
         let wrapped: Box<dyn Fn() -> Result<Box<dyn Any>, String>> =
             Box::new(move || Ok(Box::new(fun()) as Box<dyn Any>));
 
@@ -270,7 +273,6 @@ where
             params: vec![],
             ret,
             fun: Function::ExternalFn0(wrapped),
-            raw_ptr: Some(fun_ptr),
         });
 
         let id = self.permanent_definitions.functions.len() - 1;
@@ -290,7 +292,7 @@ where
     T: Clone + Any,
     U: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
+    fn register_fn(&mut self, name: &str, fun: A) {
         let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
             Box::new(move |arg: &mut Box<dyn Any>| {
                 let inside = (*arg).downcast_mut() as Option<&mut T>;
@@ -316,7 +318,6 @@ where
             params: vec![param1],
             ret,
             fun: Function::ExternalFn1(wrapped),
-            raw_ptr: Some(fun_ptr),
         });
 
         let id = self.permanent_definitions.functions.len() - 1;
@@ -337,7 +338,7 @@ where
     U: Clone + Any,
     V: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
+    fn register_fn(&mut self, name: &str, fun: A) {
         let wrapped: Box<
             dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
         > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>| {
@@ -372,7 +373,6 @@ where
             params: vec![param1, param2],
             ret,
             fun: Function::ExternalFn2(wrapped),
-            raw_ptr: Some(fun_ptr),
         };
         self.permanent_definitions.functions.push(fn_record);
 
@@ -395,7 +395,7 @@ where
     W: Clone + Any,
     V: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
+    fn register_fn(&mut self, name: &str, fun: A) {
         let wrapped: Box<
             dyn Fn(
                 &mut Box<dyn Any>,
@@ -445,7 +445,6 @@ where
             params: vec![param1, param2, param3],
             ret,
             fun: Function::ExternalFn3(wrapped),
-            raw_ptr: Some(fun_ptr),
         };
         self.permanent_definitions.functions.push(fn_record);
 
@@ -468,7 +467,7 @@ where
     W: Clone + Any,
     V: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
+    fn register_fn(&mut self, name: &str, fun: A) {
         let wrapped: Box<
             dyn Fn(
                 &mut Box<dyn Any>,
@@ -518,7 +517,6 @@ where
             params: vec![param1, param2, param3],
             ret,
             fun: Function::ExternalFn3(wrapped),
-            raw_ptr: Some(fun_ptr),
         };
         self.permanent_definitions.functions.push(fn_record);
 
@@ -537,6 +535,6 @@ where
 #[macro_export]
 macro_rules! register_fn {
     ( $typechecker:expr, $name: expr, $fun:expr ) => {{
-        $typechecker.register_fn($name, $fun, $fun as *const u8)
+        $typechecker.register_fn($name, $fun)
     }};
 }

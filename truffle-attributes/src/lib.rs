@@ -44,7 +44,7 @@ pub fn register_fn(input: TokenStream) -> TokenStream {
         if #fun_is_async() {
             #engine.with(#register_fun())
         } else {
-            #engine.register_fn(#name, #fun, #fun as *const u8)
+            #engine.register_fn(#name, #fun)
         }
     }
     .into()
