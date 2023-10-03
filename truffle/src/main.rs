@@ -168,7 +168,7 @@ impl Env {
     }
 
     #[cfg_attr(feature = "async", truffle::export)]
-    pub fn read_var(&mut self, var: i64) -> i64 {
+    pub fn read_var(&self, var: i64) -> i64 {
         *self.vars.get(&var).unwrap()
     }
 }

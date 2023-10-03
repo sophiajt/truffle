@@ -339,7 +339,12 @@ impl Evaluator {
                 Instruction::EXTERNALCALL { head, args, target } => {
                     let target = *target;
 
-                    let output = self.eval_external_call(*head, args, external_functions);
+                    let output = self.eval_external_call(
+                        instruction_pointer,
+                        *head,
+                        args,
+                        external_functions,
+                    )?;
 
                     println!("output is: {:?}", output);
 
@@ -357,17 +362,24 @@ impl Evaluator {
 
     fn eval_external_call(
         &self,
+        instruction_pointer: usize,
         head: ExternalFunctionId,
         args: &[RegisterId],
         functions: &[ExternalFnRecord],
-    ) -> Box<dyn Any> {
+    ) -> Result<Box<dyn Any>, ScriptError> {
         #[allow(unreachable_patterns)]
         match &functions[head.0].fun {
-            Function::ExternalFn0(fun) => fun().unwrap(),
+            Function::ExternalFn0(fun) => match fun() {
+                Ok(val) => Ok(val),
+                Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+            },
             Function::ExternalFn1(fun) => {
                 let mut arg0 = self.box_register(args[0]);
 
-                let result = fun(&mut arg0).unwrap();
+                let result = match fun(&mut arg0) {
+                    Ok(val) => Ok(val),
+                    Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+                };
 
                 if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
@@ -380,7 +392,10 @@ impl Evaluator {
                 let mut arg0 = self.box_register(args[0]);
                 let mut arg1 = self.box_register(args[1]);
 
-                let result = fun(&mut arg0, &mut arg1).unwrap();
+                let result = match fun(&mut arg0, &mut arg1) {
+                    Ok(val) => Ok(val),
+                    Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+                };
 
                 if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
@@ -398,7 +413,10 @@ impl Evaluator {
                 let mut arg1 = self.box_register(args[1]);
                 let mut arg2 = self.box_register(args[2]);
 
-                let result = fun(&mut arg0, &mut arg1, &mut arg2).unwrap();
+                let result = match fun(&mut arg0, &mut arg1, &mut arg2) {
+                    Ok(val) => Ok(val),
+                    Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+                };
 
                 if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
