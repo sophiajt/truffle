@@ -298,7 +298,10 @@ where
                 let inside = (*arg).downcast_mut() as Option<&mut T>;
                 match inside {
                     Some(b) => Ok(Box::new(fun(b.clone())) as Box<dyn Any>),
-                    None => Err("ErrorFunctionArgMismatch1".into()),
+                    None => Err(format!(
+                        "can't convert first argument to {}",
+                        std::any::type_name::<T>()
+                    )),
                 }
             });
 
@@ -348,7 +351,14 @@ where
 
             match (inside1, inside2) {
                 (Some(b), Some(c)) => Ok(Box::new(fun(b, c.clone())) as Box<dyn Any>),
-                _ => Err("ErrorFunctionArgMismatch2Mut".into()),
+                (Some(_), None) => Err(format!(
+                    "can't convert second argument to {}",
+                    std::any::type_name::<U>()
+                )),
+                (None, _) => Err(format!(
+                    "can't convert first argument to {}",
+                    std::any::type_name::<T>()
+                )),
             }
         });
 
@@ -478,7 +488,18 @@ where
                     (Some(b), Some(c), Some(d)) => {
                         Ok(Box::new(fun(b.clone(), c.clone(), d.clone())) as Box<dyn Any>)
                     }
-                    _ => Err("ErrorFunctionArgMismatch3".into()),
+                    (Some(_), Some(_), None) => Err(format!(
+                        "can't convert third argument to {}",
+                        std::any::type_name::<W>()
+                    )),
+                    (Some(_), None, _) => Err(format!(
+                        "can't convert second argument to {}",
+                        std::any::type_name::<U>()
+                    )),
+                    (None, _, _) => Err(format!(
+                        "can't convert first argument to {}",
+                        std::any::type_name::<T>()
+                    )),
                 }
             },
         );
@@ -551,7 +572,18 @@ where
                     (Some(b), Some(c), Some(d)) => {
                         Ok(Box::new(fun(b, c.clone(), d.clone())) as Box<dyn Any>)
                     }
-                    _ => Err("ErrorFunctionArgMismatch3Mut".into()),
+                    (Some(_), Some(_), None) => Err(format!(
+                        "can't convert third argument to {}",
+                        std::any::type_name::<W>()
+                    )),
+                    (Some(_), None, _) => Err(format!(
+                        "can't convert second argument to {}",
+                        std::any::type_name::<U>()
+                    )),
+                    (None, _, _) => Err(format!(
+                        "can't convert first argument to {}",
+                        std::any::type_name::<T>()
+                    )),
                 }
             },
         );
