@@ -346,8 +346,6 @@ impl Evaluator {
                         external_functions,
                     )?;
 
-                    println!("output is: {:?}", output);
-
                     self.unbox_to_register(output, target);
                     instruction_pointer += 1;
                 }

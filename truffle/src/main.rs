@@ -9,7 +9,7 @@ use truffle::{register_fn, FnRegister, ReturnValue};
 fn main() {
     let args = std::env::args();
 
-    let mut debug_output = false;
+    let mut debug_output = true;
 
     if args.len() > 1 {
         for arg in args.skip(1) {
