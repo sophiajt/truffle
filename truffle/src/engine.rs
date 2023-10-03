@@ -113,7 +113,9 @@ impl Engine {
         #[allow(unused_mut)]
         let mut output = translater.translate();
 
-        // output.debug_output();
+        if debug_output {
+            output.debug_output();
+        }
 
         let mut evaluator = Evaluator::default();
         evaluator.add_function(output);
@@ -330,7 +332,64 @@ where
     }
 }
 
-impl<A, T, U, V> FnRegister<A, V, (T, U)> for Engine
+impl<A, T, U, V> FnRegister<A, V, (&mut T, U)> for Engine
+where
+    A: 'static + Fn(&mut T, U) -> V,
+    T: Any,
+    U: Clone + Any,
+    V: Any,
+{
+    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
+        let wrapped: Box<
+            dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
+        > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>| {
+            let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
+            let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
+
+            match (inside1, inside2) {
+                (Some(b), Some(c)) => Ok(Box::new(fun(b, c.clone())) as Box<dyn Any>),
+                _ => Err("ErrorFunctionArgMismatch2Mut".into()),
+            }
+        });
+
+        let param1 = if let Some(id) = self.permanent_definitions.get_type::<T>() {
+            id
+        } else {
+            self.register_type::<T>()
+        };
+
+        let param2 = if let Some(id) = self.permanent_definitions.get_type::<U>() {
+            id
+        } else {
+            self.register_type::<U>()
+        };
+
+        let ret = if let Some(id) = self.permanent_definitions.get_type::<V>() {
+            id
+        } else {
+            self.register_type::<V>()
+        };
+
+        let fn_record = ExternalFnRecord {
+            params: vec![param1, param2],
+            ret,
+            fun: Function::ExternalFn2(wrapped),
+            raw_ptr: Some(fun_ptr),
+        };
+        self.permanent_definitions.functions.push(fn_record);
+
+        let id = self.permanent_definitions.functions.len() - 1;
+
+        let ent = self
+            .permanent_definitions
+            .external_functions
+            .entry(name.as_bytes().to_vec())
+            .or_insert(Vec::new());
+        (*ent).push(ExternalFunctionId(id));
+    }
+}
+
+impl<'a, A, T, U, V> FnRegister<A, V, (&'a T, U)> for Engine
 where
     A: 'static + Fn(T, U) -> V,
     T: Clone + Any,
@@ -346,7 +405,14 @@ where
 
             match (inside1, inside2) {
                 (Some(b), Some(c)) => Ok(Box::new(fun(b.clone(), c.clone())) as Box<dyn Any>),
-                _ => Err("ErrorFunctionArgMismatch2".into()),
+                (Some(_), None) => Err(format!(
+                    "can't convert second argument to {}",
+                    std::any::type_name::<U>()
+                )),
+                (None, _) => Err(format!(
+                    "can't convert first argument to {}",
+                    std::any::type_name::<T>()
+                )),
             }
         });
 

@@ -341,6 +341,8 @@ impl Evaluator {
 
                     let output = self.eval_external_call(*head, args, external_functions);
 
+                    println!("output is: {:?}", output);
+
                     self.unbox_to_register(output, target);
                     instruction_pointer += 1;
                 }
@@ -514,6 +516,10 @@ impl Evaluator {
     }
 
     pub fn unbox_to_register(&mut self, value: Box<dyn Any>, target: RegisterId) {
+        println!(
+            "unboxing as: {:?}",
+            self.stack_frames[self.current_frame].register_types[target.0]
+        );
         if self.stack_frames[self.current_frame].register_types[target.0] == F64_TYPE {
             if let Ok(value) = value.downcast::<f64>() {
                 self.stack_frames[self.current_frame].register_values[target.0].f64 = *value;
@@ -538,15 +544,24 @@ impl Evaluator {
             self.maybe_free_register(target);
             self.stack_frames[self.current_frame].register_values[target.0].i64 =
                 unsafe { std::mem::transmute::<Box<Box<dyn Any>>, i64>(Box::new(value)) };
-
-            println!("setting {} into {}", target.0, self.get_reg_i64(target))
+            println!(
+                "setting register #{} to be {}",
+                target.0,
+                self.get_reg_i64(target)
+            );
         }
     }
 
     fn maybe_free_register(&mut self, target: RegisterId) {
         if self.is_string_type(target) {
             let _ = self.get_reg_string(target);
-        } else if self.is_user_type(target) {
+        } else if self.is_user_type(target)
+            && unsafe { self.stack_frames[self.current_frame].register_values[target.0].i64 != 0 }
+            && unsafe {
+                self.stack_frames[self.current_frame].register_values[target.0].i64
+                    != self.stack_frames[self.current_frame].register_values[0].i64
+            }
+        {
             let _ = self.get_user_type(target);
         }
     }
