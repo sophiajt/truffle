@@ -104,11 +104,6 @@ impl Evaluator {
     ///
     /// TODO: we need to either mark this function unsafe or change how we do this in the future
     pub fn get_user_type(&self, register_id: RegisterId) -> Box<dyn Any> {
-        println!(
-            "transmuting: {} with {}",
-            register_id.0,
-            self.get_reg_i64(register_id)
-        );
         let boxed = unsafe {
             std::mem::transmute::<i64, Box<Box<dyn Any>>>(
                 self.stack_frames[self.current_frame].register_values[register_id.0].i64,
@@ -532,10 +527,6 @@ impl Evaluator {
     }
 
     pub fn unbox_to_register(&mut self, value: Box<dyn Any>, target: RegisterId) {
-        println!(
-            "unboxing as: {:?}",
-            self.stack_frames[self.current_frame].register_types[target.0]
-        );
         if self.stack_frames[self.current_frame].register_types[target.0] == F64_TYPE {
             if let Ok(value) = value.downcast::<f64>() {
                 self.stack_frames[self.current_frame].register_values[target.0].f64 = *value;
@@ -560,11 +551,6 @@ impl Evaluator {
             self.maybe_free_register(target);
             self.stack_frames[self.current_frame].register_values[target.0].i64 =
                 unsafe { std::mem::transmute::<Box<Box<dyn Any>>, i64>(Box::new(value)) };
-            println!(
-                "setting register #{} to be {}",
-                target.0,
-                self.get_reg_i64(target)
-            );
         }
     }
 
