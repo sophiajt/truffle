@@ -104,11 +104,6 @@ impl Evaluator {
     ///
     /// TODO: we need to either mark this function unsafe or change how we do this in the future
     pub fn get_user_type(&self, register_id: RegisterId) -> Box<dyn Any> {
-        println!(
-            "transmuting: {} with {}",
-            register_id.0,
-            self.get_reg_i64(register_id)
-        );
         let boxed = unsafe {
             std::mem::transmute::<i64, Box<Box<dyn Any>>>(
                 self.stack_frames[self.current_frame].register_values[register_id.0].i64,
@@ -339,7 +334,12 @@ impl Evaluator {
                 Instruction::EXTERNALCALL { head, args, target } => {
                     let target = *target;
 
-                    let output = self.eval_external_call(*head, args, external_functions);
+                    let output = self.eval_external_call(
+                        instruction_pointer,
+                        *head,
+                        args,
+                        external_functions,
+                    )?;
 
                     self.unbox_to_register(output, target);
                     instruction_pointer += 1;
@@ -355,17 +355,24 @@ impl Evaluator {
 
     fn eval_external_call(
         &self,
+        instruction_pointer: usize,
         head: ExternalFunctionId,
         args: &[RegisterId],
         functions: &[ExternalFnRecord],
-    ) -> Box<dyn Any> {
+    ) -> Result<Box<dyn Any>, ScriptError> {
         #[allow(unreachable_patterns)]
         match &functions[head.0].fun {
-            Function::ExternalFn0(fun) => fun().unwrap(),
+            Function::ExternalFn0(fun) => match fun() {
+                Ok(val) => Ok(val),
+                Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+            },
             Function::ExternalFn1(fun) => {
                 let mut arg0 = self.box_register(args[0]);
 
-                let result = fun(&mut arg0).unwrap();
+                let result = match fun(&mut arg0) {
+                    Ok(val) => Ok(val),
+                    Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+                };
 
                 if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
@@ -378,7 +385,10 @@ impl Evaluator {
                 let mut arg0 = self.box_register(args[0]);
                 let mut arg1 = self.box_register(args[1]);
 
-                let result = fun(&mut arg0, &mut arg1).unwrap();
+                let result = match fun(&mut arg0, &mut arg1) {
+                    Ok(val) => Ok(val),
+                    Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+                };
 
                 if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
@@ -396,7 +406,10 @@ impl Evaluator {
                 let mut arg1 = self.box_register(args[1]);
                 let mut arg2 = self.box_register(args[2]);
 
-                let result = fun(&mut arg0, &mut arg1, &mut arg2).unwrap();
+                let result = match fun(&mut arg0, &mut arg1, &mut arg2) {
+                    Ok(val) => Ok(val),
+                    Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+                };
 
                 if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
@@ -539,15 +552,19 @@ impl Evaluator {
             self.maybe_free_register(target);
             self.stack_frames[self.current_frame].register_values[target.0].i64 =
                 unsafe { std::mem::transmute::<Box<Box<dyn Any>>, i64>(Box::new(value)) };
-
-            println!("setting {} into {}", target.0, self.get_reg_i64(target))
         }
     }
 
     fn maybe_free_register(&mut self, target: RegisterId) {
         if self.is_string_type(target) {
             let _ = self.get_reg_string(target);
-        } else if self.is_user_type(target) {
+        } else if self.is_user_type(target)
+            && unsafe { self.stack_frames[self.current_frame].register_values[target.0].i64 != 0 }
+            && unsafe {
+                self.stack_frames[self.current_frame].register_values[target.0].i64
+                    != self.stack_frames[self.current_frame].register_values[0].i64
+            }
+        {
             let _ = self.get_user_type(target);
         }
     }

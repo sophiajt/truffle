@@ -93,6 +93,14 @@ fn external_call() {
 }
 
 #[test]
+fn method_and_mutation() {
+    assert_matches!(
+        eval_source(r#"let env = new_env(); env.set_var("kris", 3); env.read_var("kris")"#),
+        Ok(ReturnValue::I64(3))
+    );
+}
+
+#[test]
 fn typecheck_errors() {
     eval_source("let x = 123; x = 4566")
         .expect_err("test should fail due to missing mut")

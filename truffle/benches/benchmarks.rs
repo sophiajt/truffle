@@ -20,7 +20,7 @@ fn run_file(filename: &str) {
 
     let engine = Engine::new();
 
-    let _ = block_on(engine.eval_source(filename, &contents, false));
+    let _ = engine.eval_source(filename, &contents, false);
 }
 
 fn parser_benchmark(c: &mut Criterion) {

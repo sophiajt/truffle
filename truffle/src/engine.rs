@@ -116,7 +116,9 @@ impl Engine {
         #[allow(unused_mut)]
         let mut output = translater.translate();
 
-        // output.debug_output();
+        if debug_output {
+            output.debug_output();
+        }
 
         let mut evaluator = Evaluator::default();
         evaluator.add_function(output);
@@ -218,11 +220,9 @@ impl Engine {
 
     #[cfg(feature = "async")]
     pub fn add_async_call(&mut self, params: Vec<TypeId>, ret: TypeId, fun: Function, name: &str) {
-        self.permanent_definitions.functions.push(ExternalFnRecord {
-            params,
-            ret,
-            fun,
-        });
+        self.permanent_definitions
+            .functions
+            .push(ExternalFnRecord { params, ret, fun });
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -298,7 +298,10 @@ where
                 let inside = (*arg).downcast_mut() as Option<&mut T>;
                 match inside {
                     Some(b) => Ok(Box::new(fun(b.clone())) as Box<dyn Any>),
-                    None => Err("ErrorFunctionArgMismatch1".into()),
+                    None => Err(format!(
+                        "can't convert first argument to {}",
+                        std::any::type_name::<T>()
+                    )),
                 }
             });
 
@@ -331,7 +334,70 @@ where
     }
 }
 
-impl<A, T, U, V> FnRegister<A, V, (T, U)> for Engine
+impl<A, T, U, V> FnRegister<A, V, (&mut T, U)> for Engine
+where
+    A: 'static + Fn(&mut T, U) -> V,
+    T: Any,
+    U: Clone + Any,
+    V: Any,
+{
+    fn register_fn(&mut self, name: &str, fun: A) {
+        let wrapped: Box<
+            dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
+        > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>| {
+            let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
+            let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
+
+            match (inside1, inside2) {
+                (Some(b), Some(c)) => Ok(Box::new(fun(b, c.clone())) as Box<dyn Any>),
+                (Some(_), None) => Err(format!(
+                    "can't convert second argument to {}",
+                    std::any::type_name::<U>()
+                )),
+                (None, _) => Err(format!(
+                    "can't convert first argument to {}",
+                    std::any::type_name::<T>()
+                )),
+            }
+        });
+
+        let param1 = if let Some(id) = self.permanent_definitions.get_type::<T>() {
+            id
+        } else {
+            self.register_type::<T>()
+        };
+
+        let param2 = if let Some(id) = self.permanent_definitions.get_type::<U>() {
+            id
+        } else {
+            self.register_type::<U>()
+        };
+
+        let ret = if let Some(id) = self.permanent_definitions.get_type::<V>() {
+            id
+        } else {
+            self.register_type::<V>()
+        };
+
+        let fn_record = ExternalFnRecord {
+            params: vec![param1, param2],
+            ret,
+            fun: Function::ExternalFn2(wrapped),
+        };
+        self.permanent_definitions.functions.push(fn_record);
+
+        let id = self.permanent_definitions.functions.len() - 1;
+
+        let ent = self
+            .permanent_definitions
+            .external_functions
+            .entry(name.as_bytes().to_vec())
+            .or_insert(Vec::new());
+        (*ent).push(ExternalFunctionId(id));
+    }
+}
+
+impl<'a, A, T, U, V> FnRegister<A, V, (&'a T, U)> for Engine
 where
     A: 'static + Fn(T, U) -> V,
     T: Clone + Any,
@@ -347,7 +413,14 @@ where
 
             match (inside1, inside2) {
                 (Some(b), Some(c)) => Ok(Box::new(fun(b.clone(), c.clone())) as Box<dyn Any>),
-                _ => Err("ErrorFunctionArgMismatch2".into()),
+                (Some(_), None) => Err(format!(
+                    "can't convert second argument to {}",
+                    std::any::type_name::<U>()
+                )),
+                (None, _) => Err(format!(
+                    "can't convert first argument to {}",
+                    std::any::type_name::<T>()
+                )),
             }
         });
 
@@ -412,7 +485,18 @@ where
                     (Some(b), Some(c), Some(d)) => {
                         Ok(Box::new(fun(b.clone(), c.clone(), d.clone())) as Box<dyn Any>)
                     }
-                    _ => Err("ErrorFunctionArgMismatch3".into()),
+                    (Some(_), Some(_), None) => Err(format!(
+                        "can't convert third argument to {}",
+                        std::any::type_name::<W>()
+                    )),
+                    (Some(_), None, _) => Err(format!(
+                        "can't convert second argument to {}",
+                        std::any::type_name::<U>()
+                    )),
+                    (None, _, _) => Err(format!(
+                        "can't convert first argument to {}",
+                        std::any::type_name::<T>()
+                    )),
                 }
             },
         );
@@ -484,7 +568,18 @@ where
                     (Some(b), Some(c), Some(d)) => {
                         Ok(Box::new(fun(b, c.clone(), d.clone())) as Box<dyn Any>)
                     }
-                    _ => Err("ErrorFunctionArgMismatch3Mut".into()),
+                    (Some(_), Some(_), None) => Err(format!(
+                        "can't convert third argument to {}",
+                        std::any::type_name::<W>()
+                    )),
+                    (Some(_), None, _) => Err(format!(
+                        "can't convert second argument to {}",
+                        std::any::type_name::<U>()
+                    )),
+                    (None, _, _) => Err(format!(
+                        "can't convert first argument to {}",
+                        std::any::type_name::<T>()
+                    )),
                 }
             },
         );
