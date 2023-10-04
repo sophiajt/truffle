@@ -7,6 +7,7 @@ use crate::{
 };
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
 pub struct TypeId(pub usize);
 
 impl fmt::Debug for TypeId {
@@ -57,6 +58,7 @@ pub enum Function {
             Box<dyn Any + Send>,
         ) -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>>,
     ),
+    RemoteFn,
 }
 
 #[cfg(not(feature = "async"))]
@@ -73,9 +75,17 @@ pub enum Function {
             ) -> Result<Box<dyn Any>, String>,
         >,
     ),
+    RemoteFn,
+}
+
+impl Default for Function {
+    fn default() -> Self {
+        Function::RemoteFn
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
 pub struct ExternalFunctionId(pub usize);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

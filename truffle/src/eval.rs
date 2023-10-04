@@ -506,6 +506,7 @@ impl Evaluator {
                 //     Box::leak(arg0);
                 // }
             }
+            Function::RemoteFn => unreachable!("lsp instances of engines cannot evaluate scripts or remotely invoke registered functions"),
         }
     }
 
