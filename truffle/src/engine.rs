@@ -220,11 +220,9 @@ impl Engine {
 
     #[cfg(feature = "async")]
     pub fn add_async_call(&mut self, params: Vec<TypeId>, ret: TypeId, fun: Function, name: &str) {
-        self.permanent_definitions.functions.push(ExternalFnRecord {
-            params,
-            ret,
-            fun,
-        });
+        self.permanent_definitions
+            .functions
+            .push(ExternalFnRecord { params, ret, fun });
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -343,7 +341,7 @@ where
     U: Clone + Any,
     V: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A, fun_ptr: *const u8) {
+    fn register_fn(&mut self, name: &str, fun: A) {
         let wrapped: Box<
             dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
         > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>| {
@@ -385,7 +383,6 @@ where
             params: vec![param1, param2],
             ret,
             fun: Function::ExternalFn2(wrapped),
-            raw_ptr: Some(fun_ptr),
         };
         self.permanent_definitions.functions.push(fn_record);
 
