@@ -61,7 +61,7 @@ pub fn print<T: std::fmt::Display>(value: T) {
 }
 
 pub struct Env {
-    vars: HashMap<i64, i64>,
+    vars: HashMap<String, i64>,
 }
 
 impl Env {
@@ -73,12 +73,12 @@ impl Env {
     }
 
     #[cfg_attr(feature = "async", truffle::export)]
-    pub fn set_var(&mut self, var: i64, value: i64) {
+    pub fn set_var(&mut self, var: String, value: i64) {
         self.vars.insert(var, value);
     }
 
     #[cfg_attr(feature = "async", truffle::export)]
-    pub fn read_var(&mut self, var: i64) -> i64 {
+    pub fn read_var(&mut self, var: String) -> i64 {
         *self.vars.get(&var).unwrap()
     }
 }

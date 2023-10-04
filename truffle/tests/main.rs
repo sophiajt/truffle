@@ -95,7 +95,7 @@ fn external_call() {
 #[test]
 fn method_and_mutation() {
     assert_matches!(
-        eval_source("let env = new_env(); env.set_var(4, 3); env.read_var(4)"),
+        eval_source(r#"let env = new_env(); env.set_var("kris", 3); env.read_var("kris")"#),
         Ok(ReturnValue::I64(3))
     );
 }
