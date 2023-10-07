@@ -460,6 +460,10 @@ impl Parser {
         }
     }
 
+    pub fn get_span_end(&self, node_id: NodeId) -> usize {
+        self.results.span_end[node_id.0]
+    }
+
     pub fn error(&mut self, message: impl Into<String>) -> NodeId {
         if let Some(Token {
             span_start,
@@ -503,6 +507,8 @@ impl Parser {
 
     pub fn block(&mut self, expect_parens: bool) -> NodeId {
         let span_start = self.position();
+        let mut span_end = self.position();
+
         let mut code_body = vec![];
         if expect_parens {
             self.lcurly();
@@ -510,6 +516,7 @@ impl Parser {
 
         while self.has_tokens() {
             if self.is_rcurly() && expect_parens {
+                span_end = self.position() + 1;
                 self.rcurly();
                 break;
             } else if self.is_semicolon() {
@@ -539,7 +546,7 @@ impl Parser {
             } else {
                 let span_start = self.position();
                 let expression = self.expression();
-                let span_end = self.position();
+                let span_end = self.get_span_end(expression);
 
                 if self.is_semicolon() {
                     // This is a statement, not an expression
@@ -554,7 +561,6 @@ impl Parser {
                 }
             }
         }
-        let span_end = self.position();
 
         self.create_node(AstNode::Block(code_body), span_start, span_end)
     }
@@ -569,7 +575,7 @@ impl Parser {
 
         let block = self.block(true);
 
-        let span_end = self.position();
+        let span_end = self.get_span_end(block);
 
         self.create_node(
             AstNode::Fn {
@@ -593,9 +599,9 @@ impl Parser {
         self.lparen();
         let mut args = self.args_list();
         args.insert(0, receiver);
+        let span_end = self.position() + 1;
         self.rparen();
 
-        let span_end = self.position();
         self.create_node(AstNode::Call { head, args }, span_start, span_end)
     }
 
@@ -718,7 +724,7 @@ impl Parser {
             self.next();
 
             let rhs = self.simple_expression();
-            let span_end = self.position();
+            let span_end = self.get_span_end(rhs);
 
             self.create_node(AstNode::Range { lhs: expr, rhs }, span_start, span_end)
         } else if self.is_dot() {
@@ -912,6 +918,7 @@ impl Parser {
 
     pub fn params(&mut self) -> NodeId {
         let span_start = self.position();
+
         let param_list = {
             self.lparen();
             let output = self.param_list();
@@ -946,7 +953,7 @@ impl Parser {
 
                 let ty = self.name();
 
-                let span_end = self.position();
+                let span_end = self.get_span_end(ty);
 
                 params.push(self.create_node(
                     AstNode::Param { name, ty: Some(ty) },
@@ -954,7 +961,7 @@ impl Parser {
                     span_end,
                 ))
             } else {
-                let span_end = self.position();
+                let span_end = self.get_span_end(name);
                 params.push(self.create_node(
                     AstNode::Param { name, ty: None },
                     span_start,
@@ -992,6 +999,8 @@ impl Parser {
     /// expression.
     pub fn if_expression(&mut self) -> NodeId {
         let span_start = self.position();
+        let span_end;
+
         self.keyword(b"if");
 
         let condition = self.expression();
@@ -1000,11 +1009,13 @@ impl Parser {
 
         let else_expression = if self.is_keyword(b"else") {
             self.next();
-            Some(self.expression())
+            let expr = self.expression();
+            span_end = self.get_span_end(expr);
+            Some(expr)
         } else {
+            span_end = self.get_span_end(then_block);
             None
         };
-        let span_end = self.position();
 
         self.create_node(
             AstNode::If {
@@ -1043,7 +1054,7 @@ impl Parser {
 
         let initializer = self.expression();
 
-        let span_end = self.position();
+        let span_end = self.get_span_end(initializer);
 
         self.create_node(
             AstNode::Let {
@@ -1063,7 +1074,7 @@ impl Parser {
 
         let condition = self.expression();
         let block = self.block(true);
-        let span_end = self.position();
+        let span_end = self.get_span_end(block);
 
         self.create_node(AstNode::While { condition, block }, span_start, span_end)
     }
@@ -1077,7 +1088,7 @@ impl Parser {
 
         let range = self.simple_expression();
         let block = self.block(true);
-        let span_end = self.position();
+        let span_end = self.get_span_end(block);
 
         self.create_node(
             AstNode::For {
