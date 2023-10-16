@@ -263,8 +263,11 @@ impl Engine {
             Ok(tokens) => tokens,
             Err(_) => return String::new(),
         };
-        let parser = Parser::new(tokens, contents.to_vec(), 0);
-        let typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+        let mut parser = Parser::new(tokens, contents.to_vec(), 0);
+        let _ = parser.parse();
+
+        let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+        let _ = typechecker.typecheck();
 
         let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
 
@@ -283,8 +286,11 @@ impl Engine {
             Ok(tokens) => tokens,
             Err(_) => return None,
         };
-        let parser = Parser::new(tokens, contents.to_vec(), 0);
-        let typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+        let mut parser = Parser::new(tokens, contents.to_vec(), 0);
+        let _ = parser.parse();
+
+        let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+        let _ = typechecker.typecheck();
 
         let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
 
@@ -339,8 +345,16 @@ impl Engine {
             Ok(tokens) => tokens,
             Err(_) => return None,
         };
-        let parser = Parser::new(tokens, contents.to_vec(), 0);
-        let typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+
+        eprintln!("tokens: {:?}", tokens);
+
+        let mut parser = Parser::new(tokens, contents.to_vec(), 0);
+        let _ = parser.parse();
+
+        eprintln!("parse results: {:?}", parser.results);
+
+        let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+        let _ = typechecker.typecheck();
 
         let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
 

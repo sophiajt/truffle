@@ -197,8 +197,13 @@ impl Lexer {
 
     pub fn skip_comment(&mut self) {
         let mut current_position = self.span_offset;
-        while current_position < self.source.len() && self.source[current_position] != b'\n' {
-            current_position += 1;
+        while current_position < self.source.len() {
+            if self.source[current_position] == b'\n' {
+                current_position += 1;
+                break;
+            } else {
+                current_position += 1;
+            }
         }
         self.span_offset = current_position;
     }
