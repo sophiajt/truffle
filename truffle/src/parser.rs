@@ -562,6 +562,14 @@ impl Parser {
             }
         }
 
+        if span_end == span_start && !code_body.is_empty() {
+            span_end = self.get_span_end(
+                *code_body
+                    .last()
+                    .expect("internal error: expected ast nodes"),
+            );
+        }
+
         self.create_node(AstNode::Block(code_body), span_start, span_end)
     }
 

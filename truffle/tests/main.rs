@@ -3,7 +3,7 @@ mod test_eval;
 
 use assert_matches::assert_matches;
 use test_eval::*;
-use truffle::ReturnValue;
+use truffle::{Engine, ErrorBatch, ReturnValue, ScriptError};
 
 #[test]
 fn math() {
@@ -112,4 +112,45 @@ fn runtime_errors() {
     eval_source("3 / 0")
         .expect_err("it should not be possible to divide by zero")
         .assert_contains("division by zero");
+}
+
+#[test]
+fn lsp_hover() {
+    let engine = Engine::new();
+    let hover = engine.lsp_hover(2, b"1234567");
+
+    assert_eq!(hover, "i64")
+}
+
+#[test]
+fn lsp_goto_definition() {
+    let engine = Engine::new();
+    let result = engine.lsp_goto_definition(16, b"let abc = 123\nabc");
+
+    assert_eq!(result, Some((4, 7)))
+}
+
+#[test]
+fn lsp_find_all_references() {
+    let engine = Engine::new();
+    let result = engine.lsp_find_all_references(16, b"let abc = 123\nabc");
+
+    assert_eq!(result, Some(vec![(4, 7), (14, 17)]))
+}
+
+#[test]
+fn lsp_check_script() {
+    let engine = Engine::new();
+    let result = engine.lsp_check_script(b"let abc = \n");
+
+    eprintln!("result: {:?}", result);
+
+    assert_eq!(
+        result,
+        Some(ErrorBatch::one(ScriptError {
+            message: "incomplete math expression".into(),
+            span_start: 11,
+            span_end: 11
+        }))
+    )
 }

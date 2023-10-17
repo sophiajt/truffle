@@ -1,8 +1,8 @@
 use std::{any::Any, collections::HashMap, path::PathBuf};
 
 use crate::{
-    typechecker::ExternalFunctionId, ErrorBatch, Evaluator, Function, FunctionId, Lexer, Parser,
-    ReturnValue, Translater, TypeChecker, TypeId,
+    parser::NodeId, typechecker::ExternalFunctionId, ErrorBatch, Evaluator, Function, FunctionId,
+    Lexer, ParseResults, Parser, ReturnValue, Translater, TypeChecker, TypeId,
 };
 
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
@@ -239,6 +239,148 @@ impl Engine {
         F: Fn(&mut Engine),
     {
         f(self)
+    }
+
+    pub fn get_node_id_at_location(
+        &self,
+        location: usize,
+        parse_results: &ParseResults,
+    ) -> Option<NodeId> {
+        for node_id in 0..parse_results.span_start.len() {
+            if location >= parse_results.span_start[node_id]
+                && location < parse_results.span_end[node_id]
+            {
+                return Some(NodeId(node_id));
+            }
+        }
+
+        None
+    }
+
+    pub fn lsp_hover(&self, location: usize, contents: &[u8]) -> String {
+        let mut lexer = Lexer::new(contents.to_vec(), 0);
+        let tokens = match lexer.lex() {
+            Ok(tokens) => tokens,
+            Err(_) => return String::new(),
+        };
+        let mut parser = Parser::new(tokens, contents.to_vec(), 0);
+        let _ = parser.parse();
+
+        let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+        let _ = typechecker.typecheck();
+
+        let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
+
+        if let Some(node_id) = node_id {
+            let type_id = typechecker.node_types[node_id.0];
+
+            typechecker.stringify_type(type_id)
+        } else {
+            String::new()
+        }
+    }
+
+    pub fn lsp_goto_definition(&self, location: usize, contents: &[u8]) -> Option<(usize, usize)> {
+        let mut lexer = Lexer::new(contents.to_vec(), 0);
+        let tokens = match lexer.lex() {
+            Ok(tokens) => tokens,
+            Err(_) => return None,
+        };
+        let mut parser = Parser::new(tokens, contents.to_vec(), 0);
+        let _ = parser.parse();
+
+        let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+        let _ = typechecker.typecheck();
+
+        let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
+
+        if let Some(node_id) = node_id {
+            if let Some(def_site_node_id) = typechecker.variable_def_site.get(&node_id) {
+                Some((
+                    typechecker.parse_results.span_start[def_site_node_id.0],
+                    typechecker.parse_results.span_end[def_site_node_id.0],
+                ))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn lsp_check_script(&self, contents: &[u8]) -> Option<ErrorBatch> {
+        let mut lexer = Lexer::new(contents.to_vec(), 0);
+
+        let tokens = match lexer.lex() {
+            Ok(tokens) => tokens,
+            Err(errors) => {
+                return Some(errors);
+            }
+        };
+
+        let mut parser = Parser::new(tokens, contents.to_vec(), 0);
+
+        match parser.parse() {
+            Ok(()) => {}
+            Err(errors) => {
+                return Some(errors);
+            }
+        }
+
+        let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+
+        match typechecker.typecheck() {
+            Ok(_) => None,
+            Err(errors) => Some(errors),
+        }
+    }
+
+    pub fn lsp_find_all_references(
+        &self,
+        location: usize,
+        contents: &[u8],
+    ) -> Option<Vec<(usize, usize)>> {
+        let mut lexer = Lexer::new(contents.to_vec(), 0);
+        let tokens = match lexer.lex() {
+            Ok(tokens) => tokens,
+            Err(_) => return None,
+        };
+
+        eprintln!("tokens: {:?}", tokens);
+
+        let mut parser = Parser::new(tokens, contents.to_vec(), 0);
+        let _ = parser.parse();
+
+        eprintln!("parse results: {:?}", parser.results);
+
+        let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+        let _ = typechecker.typecheck();
+
+        let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
+
+        if let Some(node_id) = node_id {
+            if let Some(def_site_node_id) = typechecker.variable_def_site.get(&node_id) {
+                let mut output = vec![(
+                    typechecker.parse_results.span_start[def_site_node_id.0],
+                    typechecker.parse_results.span_end[def_site_node_id.0],
+                )];
+
+                for (key, value) in typechecker.variable_def_site.iter() {
+                    if value == def_site_node_id {
+                        output.push((
+                            typechecker.parse_results.span_start[key.0],
+                            typechecker.parse_results.span_end[key.0],
+                        ))
+                    }
+                }
+
+                Some(output)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 }
 
