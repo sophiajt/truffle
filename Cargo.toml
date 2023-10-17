@@ -3,6 +3,7 @@
 members = [
     "truffle",
     "truffle-attributes",
+    "truffle-lsp",
 ]
 
 resolver = "2"
