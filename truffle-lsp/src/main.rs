@@ -48,7 +48,8 @@ use std::sync::Mutex;
 
 use clap::Parser;
 use lsp_server::{Connection, ExtractError, Message, Request, RequestId, Response};
-use lsp_types::{Location, OneOf, Position, Range};
+use lsp_types::request::{HoverRequest, References};
+use lsp_types::{Location, OneOf, Position, Range, Hover, Url};
 use lsp_types::{
     request::GotoDefinition, GotoDefinitionResponse, InitializeParams, ServerCapabilities,
 };
@@ -104,6 +105,8 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     // Run the server and wait for the two threads to end (typically by trigger LSP Exit event).
     let server_capabilities = serde_json::to_value(&ServerCapabilities {
         definition_provider: Some(OneOf::Left(true)),
+        hover_provider: Some(lsp_types::HoverProviderCapability::Simple(true)),
+        references_provider: Some(OneOf::Left(true)),
         ..Default::default()
     })
     .unwrap();
@@ -146,6 +149,13 @@ impl LineLookupTable {
             character: character as u32,
         }
     }
+
+    fn to_location(&self, uri: Url, (start, end): (usize, usize)) -> Location {
+        let start = self.to_position(start);
+        let end = self.to_position(end);
+        let range = Range { start, end };
+        Location { uri, range }
+    }
 }
 
 fn main_loop(
@@ -163,41 +173,105 @@ fn main_loop(
                     return Ok(());
                 }
                 info!("got request: {req:?}");
-                match cast::<GotoDefinition>(req) {
-                    Ok((id, params)) => {
-                        info!("got gotoDefinition request #{id}: {params:?}");
-                        let path = params
-                            .text_document_position_params
-                            .text_document
-                            .uri
-                            .to_file_path()
-                            .unwrap();
-                        let contents = std::fs::read_to_string(path).unwrap();
-                        let lookup = LineLookupTable::new(&contents);
-                        info!("lookup table: {lookup:?}");
-                        let location =
-                            lookup.from_position(params.text_document_position_params.position);
-                        let (start, end) = engine
-                            .lsp_goto_definition(location, contents.as_bytes())
-                            .unwrap();
-                        let uri = params.text_document_position_params.text_document.uri;
-                        let start = lookup.to_position(start);
-                        let end = lookup.to_position(end);
-                        let range = Range { start, end };
-                        let result = Some(GotoDefinitionResponse::Scalar(Location { uri, range }));
-                        let result = serde_json::to_value(&result).unwrap();
-                        let resp = Response {
-                            id,
-                            result: Some(result),
-                            error: None,
+                match req.method.as_str() {
+                    "textDocument/definition" => {
+                        match cast::<GotoDefinition>(req) {
+                            Ok((id, params)) => {
+                                info!("got gotoDefinition request #{id}: {params:?}");
+                                let path = params
+                                    .text_document_position_params
+                                    .text_document
+                                    .uri
+                                    .to_file_path()
+                                    .unwrap();
+                                let contents = std::fs::read_to_string(path).unwrap();
+                                let lookup = LineLookupTable::new(&contents);
+                                info!("lookup table: {lookup:?}");
+                                let location =
+                                    lookup.from_position(params.text_document_position_params.position);
+                                let location = engine
+                                    .lsp_goto_definition(location, contents.as_bytes())
+                                    .unwrap();
+                                let uri = params.text_document_position_params.text_document.uri;
+                                let result = Some(GotoDefinitionResponse::Scalar(lookup.to_location(uri, location)));
+                                let result = serde_json::to_value(&result).unwrap();
+                                let resp = Response {
+                                    id,
+                                    result: Some(result),
+                                    error: None,
+                                };
+                                connection.sender.send(Message::Response(resp))?;
+                                continue;
+                            }
+                            Err(err @ ExtractError::JsonError { .. }) => panic!("{err:?}"),
+                            Err(ExtractError::MethodMismatch(req)) => req,
                         };
-                        connection.sender.send(Message::Response(resp))?;
-                        continue;
                     }
-                    Err(err @ ExtractError::JsonError { .. }) => panic!("{err:?}"),
-                    Err(ExtractError::MethodMismatch(req)) => req,
-                };
-                // ...
+                    "textDocument/hover" => {
+                        match cast::<HoverRequest>(req) {
+                            Ok((id, params)) => {
+                                let path = params
+                                    .text_document_position_params
+                                    .text_document
+                                    .uri
+                                    .to_file_path()
+                                    .unwrap();
+                                let contents = std::fs::read_to_string(path).unwrap();
+                                let lookup = LineLookupTable::new(&contents);
+                                info!("lookup table: {lookup:?}");
+                                let location =
+                                    lookup.from_position(params.text_document_position_params.position);
+                                let markdown = engine.lsp_hover(location, contents.as_bytes());
+                                let contents = lsp_types::MarkedString::from_markdown(markdown);
+                                let contents = lsp_types::HoverContents::Scalar(contents);
+                                let range = None;
+                                let result = Hover { contents, range };
+                                let result = serde_json::to_value(&result).unwrap();
+                                let resp = Response {
+                                    id,
+                                    result: Some(result),
+                                    error: None,
+                                };
+                                connection.sender.send(Message::Response(resp))?;
+                                continue;
+                            }
+                            Err(err @ ExtractError::JsonError { .. }) => panic!("{err:?}"),
+                            Err(ExtractError::MethodMismatch(req)) => req,
+                        };
+                    }
+                    "textDocument/references" => {
+                        match cast::<References>(req) {
+                            Ok((id, params)) => {
+                                let path = params
+                                    .text_document_position
+                                    .text_document
+                                    .uri
+                                    .to_file_path()
+                                    .unwrap();
+                                let contents = std::fs::read_to_string(path).unwrap();
+                                let lookup = LineLookupTable::new(&contents);
+                                info!("lookup table: {lookup:?}");
+                                let location =
+                                    lookup.from_position(params.text_document_position.position);
+                                let references = engine.lsp_find_all_references(location, contents.as_bytes());
+                                let result = references.map(|references| {
+                                    references.into_iter().map(|location| lookup.to_location(params.text_document_position.text_document.uri.clone(), location)).collect::<Vec<_>>()
+                                });
+                                let result = serde_json::to_value(&result).unwrap();
+                                let resp = Response {
+                                    id,
+                                    result: Some(result),
+                                    error: None,
+                                };
+                                connection.sender.send(Message::Response(resp))?;
+                                continue;
+                            }
+                            Err(err @ ExtractError::JsonError { .. }) => panic!("{err:?}"),
+                            Err(ExtractError::MethodMismatch(req)) => req,
+                        };
+                    }
+                    method => panic!("unsupported request method: {method}"),
+                }
             }
             Message::Response(resp) => {
                 info!("got response: {resp:?}");
