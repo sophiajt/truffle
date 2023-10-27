@@ -89,7 +89,12 @@ fn main_loop(
     connection: Connection,
     params: serde_json::Value,
 ) -> Result<(), Box<dyn Error + Sync + Send>> {
-    let engine = Engine::new();
+    let engine = if let Ok(bytes) = std::fs::read("./truffle.lsp.data") {
+        dbg!(());
+        postcard::from_bytes(&bytes).unwrap()
+    } else {
+        Engine::new()
+    };
     let _params: InitializeParams = serde_json::from_value(params).unwrap();
     info!("starting example main loop");
     for msg in &connection.receiver {
@@ -158,10 +163,11 @@ fn main_loop(
                     "textDocument/diagnostic" => {
                         match cast::<DocumentDiagnosticRequest>(req) {
                             Ok((id, params)) => {
-                                let result = engine.lsp_check_script(params).map(|report| serde_json::to_value(&report).unwrap());
+                                let report = engine.lsp_check_script(params);
+                                let result = serde_json::to_value(&report).unwrap();
                                 let resp = Response {
                                     id,
-                                    result,
+                                    result: Some(result),
                                     error: None,
                                 };
                                 connection.sender.send(Message::Response(resp))?;

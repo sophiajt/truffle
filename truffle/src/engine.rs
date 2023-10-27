@@ -354,25 +354,27 @@ impl Engine {
     }
 
     #[cfg(feature = "lsp")]
-    pub fn lsp_check_script(&self, params: DocumentDiagnosticParams) -> Option<DocumentDiagnosticReport> {
+    pub fn lsp_check_script(&self, params: DocumentDiagnosticParams) -> DocumentDiagnosticReport {
         let path = params
             .text_document
             .uri
             .to_file_path()
             .unwrap();
         let contents = std::fs::read_to_string(&path).unwrap();
-        self.check_script(contents.as_bytes()).map(|items| {
-            let result_id = None;
-            let full_document_diagnostic_report = FullDocumentDiagnosticReport {
-                result_id,
-                items: items.as_diagnostics_with(&path, contents.as_bytes()),
-            };
-            let result = RelatedFullDocumentDiagnosticReport {
-                related_documents: None,
-                full_document_diagnostic_report,
-            };
-            DocumentDiagnosticReport::Full(result)
-        })
+        let items = match self.check_script(contents.as_bytes()) {
+            Some(items) => items.as_diagnostics_with(&path, contents.as_bytes()),
+            None => vec![],
+        };
+        let result_id = None;
+        let full_document_diagnostic_report = FullDocumentDiagnosticReport {
+            result_id,
+            items,
+        };
+        let result = RelatedFullDocumentDiagnosticReport {
+            related_documents: None,
+            full_document_diagnostic_report,
+        };
+        DocumentDiagnosticReport::Full(result)
     }
 
     #[cfg(feature = "lsp")]
@@ -474,6 +476,13 @@ impl Engine {
             dbg!(());
             None
         }
+    }
+
+    #[cfg(feature = "lsp")]
+    pub fn lsp_cache_writer(&self) -> std::io::BufWriter<std::fs::File> {
+        let path = std::path::Path::new("./truffle.lsp.data");
+        let file = std::fs::File::create(path).unwrap();
+        std::io::BufWriter::new(file)
     }
 }
 
@@ -864,8 +873,13 @@ where
 #[cfg(not(feature = "async"))]
 #[macro_export]
 macro_rules! register_fn {
-    ( $typechecker:expr, $name: expr, $fun:expr ) => {{
-        $typechecker.register_fn($name, $fun)
+    ( $engine:expr, $name: expr, $fun:expr ) => {{
+        $engine.register_fn($name, $fun);
+        #[cfg(feature = "lsp")]
+        {
+            let writer = $engine.lsp_cache_writer();
+            let data = postcard::to_io(&$engine, writer).unwrap();
+        }
     }};
 }
 
