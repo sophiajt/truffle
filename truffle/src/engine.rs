@@ -1,9 +1,11 @@
 use std::{any::Any, collections::HashMap, path::PathBuf};
 
 #[cfg(feature = "lsp")]
-use lsp_types::{HoverParams, Position, Range, Location, Url, GotoDefinitionParams,
-ReferenceParams, Hover, GotoDefinitionResponse, DocumentDiagnosticReport, DocumentDiagnosticParams,
-FullDocumentDiagnosticReport, RelatedFullDocumentDiagnosticReport};
+use lsp_types::{
+    DocumentDiagnosticParams, DocumentDiagnosticReport, FullDocumentDiagnosticReport,
+    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams, Location, Position, Range,
+    ReferenceParams, RelatedFullDocumentDiagnosticReport, Url,
+};
 // use std::path::Path;
 
 use crate::{
@@ -265,13 +267,8 @@ impl Engine {
 
     #[cfg(feature = "lsp")]
     pub fn lsp_hover(&self, params: HoverParams) -> Hover {
-        let uri = params
-            .text_document_position_params
-            .text_document
-            .uri;
-        let path = uri
-            .to_file_path()
-            .unwrap();
+        let uri = params.text_document_position_params.text_document.uri;
+        let path = uri.to_file_path().unwrap();
         let contents = std::fs::read_to_string(path).unwrap();
         let lookup = LineLookupTable::new(&contents);
         let contents = contents.as_bytes();
@@ -308,7 +305,10 @@ impl Engine {
     }
 
     #[cfg(feature = "lsp")]
-    pub fn lsp_goto_definition(&self, params: GotoDefinitionParams) -> Option<GotoDefinitionResponse> {
+    pub fn lsp_goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> Option<GotoDefinitionResponse> {
         let path = params
             .text_document_position_params
             .text_document
@@ -317,11 +317,12 @@ impl Engine {
             .unwrap();
         let contents = std::fs::read_to_string(path).unwrap();
         let lookup = LineLookupTable::new(&contents);
-        let location =
-            lookup.from_position(params.text_document_position_params.position);
+        let location = lookup.from_position(params.text_document_position_params.position);
         let location = self.goto_definition(location, contents.as_bytes()).unwrap();
         let uri = params.text_document_position_params.text_document.uri;
-        Some(GotoDefinitionResponse::Scalar(lookup.to_location(uri, location)))
+        Some(GotoDefinitionResponse::Scalar(
+            lookup.to_location(uri, location),
+        ))
     }
 
     #[cfg(feature = "lsp")]
@@ -355,21 +356,14 @@ impl Engine {
 
     #[cfg(feature = "lsp")]
     pub fn lsp_check_script(&self, params: DocumentDiagnosticParams) -> DocumentDiagnosticReport {
-        let path = params
-            .text_document
-            .uri
-            .to_file_path()
-            .unwrap();
+        let path = params.text_document.uri.to_file_path().unwrap();
         let contents = std::fs::read_to_string(&path).unwrap();
         let items = match self.check_script(contents.as_bytes()) {
             Some(items) => items.as_diagnostics_with(&path, contents.as_bytes()),
             None => vec![],
         };
         let result_id = None;
-        let full_document_diagnostic_report = FullDocumentDiagnosticReport {
-            result_id,
-            items,
-        };
+        let full_document_diagnostic_report = FullDocumentDiagnosticReport { result_id, items };
         let result = RelatedFullDocumentDiagnosticReport {
             related_documents: None,
             full_document_diagnostic_report,
@@ -379,7 +373,6 @@ impl Engine {
 
     #[cfg(feature = "lsp")]
     pub fn check_script(&self, contents: &[u8]) -> Option<ErrorBatch> {
-
         let mut lexer = Lexer::new(contents.to_vec(), 0);
 
         let tokens = match lexer.lex() {
@@ -407,10 +400,7 @@ impl Engine {
     }
 
     #[cfg(feature = "lsp")]
-    pub fn lsp_find_all_references(
-        &self,
-        params: ReferenceParams
-    ) -> Option<Vec<Location>> {
+    pub fn lsp_find_all_references(&self, params: ReferenceParams) -> Option<Vec<Location>> {
         let path = params
             .text_document_position
             .text_document
@@ -419,11 +409,18 @@ impl Engine {
             .unwrap();
         let contents = std::fs::read_to_string(path).unwrap();
         let lookup = LineLookupTable::new(&contents);
-        let location =
-            lookup.from_position(params.text_document_position.position);
+        let location = lookup.from_position(params.text_document_position.position);
         let references = self.find_all_references(location, contents.as_bytes());
         references.map(|references| {
-            references.into_iter().map(|location| lookup.to_location(params.text_document_position.text_document.uri.clone(), location)).collect::<Vec<_>>()
+            references
+                .into_iter()
+                .map(|location| {
+                    lookup.to_location(
+                        params.text_document_position.text_document.uri.clone(),
+                        location,
+                    )
+                })
+                .collect::<Vec<_>>()
         })
     }
 

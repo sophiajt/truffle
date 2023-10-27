@@ -5,11 +5,9 @@ use std::sync::Mutex;
 
 use clap::Parser;
 use lsp_server::{Connection, ExtractError, Message, Request, RequestId, Response};
-use lsp_types::request::{HoverRequest, References, DocumentDiagnosticRequest};
-use lsp_types::{OneOf, DiagnosticOptions, WorkDoneProgressOptions};
-use lsp_types::{
-    request::GotoDefinition, InitializeParams, ServerCapabilities,
-};
+use lsp_types::request::{DocumentDiagnosticRequest, HoverRequest, References};
+use lsp_types::{request::GotoDefinition, InitializeParams, ServerCapabilities};
+use lsp_types::{DiagnosticOptions, OneOf, WorkDoneProgressOptions};
 use tracing::info;
 use tracing_subscriber::fmt::writer::Tee;
 use tracing_subscriber::prelude::*;
@@ -63,7 +61,9 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
         identifier: Some("truffle-lsp".to_string()),
         inter_file_dependencies: true,
         workspace_diagnostics: false,
-        work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
+        work_done_progress_options: WorkDoneProgressOptions {
+            work_done_progress: None,
+        },
     };
 
     // Run the server and wait for the two threads to end (typically by trigger LSP Exit event).
@@ -71,7 +71,9 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
         definition_provider: Some(OneOf::Left(true)),
         hover_provider: Some(lsp_types::HoverProviderCapability::Simple(true)),
         references_provider: Some(OneOf::Left(true)),
-        diagnostic_provider: Some(lsp_types::DiagnosticServerCapabilities::Options(diagnostic_options)),
+        diagnostic_provider: Some(lsp_types::DiagnosticServerCapabilities::Options(
+            diagnostic_options,
+        )),
         ..Default::default()
     })
     .unwrap();
@@ -83,7 +85,6 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     info!("shutting down server");
     Ok(())
 }
-
 
 fn main_loop(
     connection: Connection,
@@ -110,9 +111,7 @@ fn main_loop(
                         match cast::<GotoDefinition>(req) {
                             Ok((id, params)) => {
                                 info!("got gotoDefinition request #{id}: {params:?}");
-                                let definition = engine
-                                    .lsp_goto_definition(params)
-                                    .unwrap();
+                                let definition = engine.lsp_goto_definition(params).unwrap();
                                 let result = serde_json::to_value(&definition).unwrap();
                                 let resp = Response {
                                     id,
