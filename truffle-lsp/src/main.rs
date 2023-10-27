@@ -1,46 +1,3 @@
-//! A minimal example LSP server that can only respond to the `gotoDefinition` request. To use
-//! this example, execute it and then send an `initialize` request.
-//!
-//! ```no_run
-//! Content-Length: 85
-//!
-//! {"jsonrpc": "2.0", "method": "initialize", "id": 1, "params": {"capabilities": {}}}
-//! ```
-//!
-//! This will respond with a server response. Then send it a `initialized` notification which will
-//! have no response.
-//!
-//! ```no_run
-//! Content-Length: 59
-//!
-//! {"jsonrpc": "2.0", "method": "initialized", "params": {}}
-//! ```
-//!
-//! Once these two are sent, then we enter the main loop of the server. The only request this
-//! example can handle is `gotoDefinition`:
-//!
-//! ```no_run
-//! Content-Length: 159
-//!
-//! {"jsonrpc": "2.0", "method": "textDocument/definition", "id": 2, "params": {"textDocument": {"uri": "file://temp"}, "position": {"line": 1, "character": 1}}}
-//! ```
-//!
-//! To finish up without errors, send a shutdown request:
-//!
-//! ```no_run
-//! Content-Length: 67
-//!
-//! {"jsonrpc": "2.0", "method": "shutdown", "id": 3, "params": null}
-//! ```
-//!
-//! The server will exit the main loop and finally we send a `shutdown` notification to stop
-//! the server.
-//!
-//! ```
-//! Content-Length: 54
-//!
-//! {"jsonrpc": "2.0", "method": "exit", "params": null}
-//! ```
 use std::error::Error;
 use std::fs::File;
 use std::path::PathBuf;
@@ -48,10 +5,10 @@ use std::sync::Mutex;
 
 use clap::Parser;
 use lsp_server::{Connection, ExtractError, Message, Request, RequestId, Response};
-use lsp_types::request::{HoverRequest, References};
-use lsp_types::{Location, OneOf, Position, Range, Hover, Url};
+use lsp_types::request::{HoverRequest, References, DocumentDiagnosticRequest};
+use lsp_types::{OneOf, DiagnosticOptions, WorkDoneProgressOptions};
 use lsp_types::{
-    request::GotoDefinition, GotoDefinitionResponse, InitializeParams, ServerCapabilities,
+    request::GotoDefinition, InitializeParams, ServerCapabilities,
 };
 use tracing::info;
 use tracing_subscriber::fmt::writer::Tee;
@@ -102,11 +59,19 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     // also be implemented to use sockets or HTTP.
     let (connection, io_threads) = Connection::stdio();
 
+    let diagnostic_options = DiagnosticOptions {
+        identifier: Some("truffle-lsp".to_string()),
+        inter_file_dependencies: true,
+        workspace_diagnostics: false,
+        work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
+    };
+
     // Run the server and wait for the two threads to end (typically by trigger LSP Exit event).
     let server_capabilities = serde_json::to_value(&ServerCapabilities {
         definition_provider: Some(OneOf::Left(true)),
         hover_provider: Some(lsp_types::HoverProviderCapability::Simple(true)),
         references_provider: Some(OneOf::Left(true)),
+        diagnostic_provider: Some(lsp_types::DiagnosticServerCapabilities::Options(diagnostic_options)),
         ..Default::default()
     })
     .unwrap();
@@ -119,44 +84,6 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     Ok(())
 }
 
-#[derive(Debug)]
-struct LineLookupTable {
-    /// array of character indexes for each consecutive newline in the input file
-    line_starts: Vec<usize>,
-}
-
-impl LineLookupTable {
-    fn new(contents: &str) -> Self {
-        let mut line_starts: Vec<_> = contents
-            .encode_utf16()
-            .enumerate()
-            .filter(|&(_, c)| c == '\n' as u16)
-            .map(|(i, _)| i + 1)
-            .collect();
-        line_starts.insert(0, 0);
-        Self { line_starts }
-    }
-
-    fn from_position(&self, Position { line, character }: Position) -> usize {
-        self.line_starts[line as usize] + character as usize
-    }
-
-    fn to_position(&self, position: usize) -> Position {
-        let line = self.line_starts.partition_point(|&ind| ind < position) - 1;
-        let character = position - self.line_starts[line];
-        Position {
-            line: line as u32,
-            character: character as u32,
-        }
-    }
-
-    fn to_location(&self, uri: Url, (start, end): (usize, usize)) -> Location {
-        let start = self.to_position(start);
-        let end = self.to_position(end);
-        let range = Range { start, end };
-        Location { uri, range }
-    }
-}
 
 fn main_loop(
     connection: Connection,
@@ -178,23 +105,10 @@ fn main_loop(
                         match cast::<GotoDefinition>(req) {
                             Ok((id, params)) => {
                                 info!("got gotoDefinition request #{id}: {params:?}");
-                                let path = params
-                                    .text_document_position_params
-                                    .text_document
-                                    .uri
-                                    .to_file_path()
+                                let definition = engine
+                                    .lsp_goto_definition(params)
                                     .unwrap();
-                                let contents = std::fs::read_to_string(path).unwrap();
-                                let lookup = LineLookupTable::new(&contents);
-                                info!("lookup table: {lookup:?}");
-                                let location =
-                                    lookup.from_position(params.text_document_position_params.position);
-                                let location = engine
-                                    .lsp_goto_definition(location, contents.as_bytes())
-                                    .unwrap();
-                                let uri = params.text_document_position_params.text_document.uri;
-                                let result = Some(GotoDefinitionResponse::Scalar(lookup.to_location(uri, location)));
-                                let result = serde_json::to_value(&result).unwrap();
+                                let result = serde_json::to_value(&definition).unwrap();
                                 let resp = Response {
                                     id,
                                     result: Some(result),
@@ -210,23 +124,8 @@ fn main_loop(
                     "textDocument/hover" => {
                         match cast::<HoverRequest>(req) {
                             Ok((id, params)) => {
-                                let path = params
-                                    .text_document_position_params
-                                    .text_document
-                                    .uri
-                                    .to_file_path()
-                                    .unwrap();
-                                let contents = std::fs::read_to_string(path).unwrap();
-                                let lookup = LineLookupTable::new(&contents);
-                                info!("lookup table: {lookup:?}");
-                                let location =
-                                    lookup.from_position(params.text_document_position_params.position);
-                                let markdown = engine.lsp_hover(location, contents.as_bytes());
-                                let contents = lsp_types::MarkedString::from_markdown(markdown);
-                                let contents = lsp_types::HoverContents::Scalar(contents);
-                                let range = None;
-                                let result = Hover { contents, range };
-                                let result = serde_json::to_value(&result).unwrap();
+                                let hover = engine.lsp_hover(params);
+                                let result = serde_json::to_value(&hover).unwrap();
                                 let resp = Response {
                                     id,
                                     result: Some(result),
@@ -242,25 +141,27 @@ fn main_loop(
                     "textDocument/references" => {
                         match cast::<References>(req) {
                             Ok((id, params)) => {
-                                let path = params
-                                    .text_document_position
-                                    .text_document
-                                    .uri
-                                    .to_file_path()
-                                    .unwrap();
-                                let contents = std::fs::read_to_string(path).unwrap();
-                                let lookup = LineLookupTable::new(&contents);
-                                info!("lookup table: {lookup:?}");
-                                let location =
-                                    lookup.from_position(params.text_document_position.position);
-                                let references = engine.lsp_find_all_references(location, contents.as_bytes());
-                                let result = references.map(|references| {
-                                    references.into_iter().map(|location| lookup.to_location(params.text_document_position.text_document.uri.clone(), location)).collect::<Vec<_>>()
-                                });
+                                let result = engine.lsp_find_all_references(params);
                                 let result = serde_json::to_value(&result).unwrap();
                                 let resp = Response {
                                     id,
                                     result: Some(result),
+                                    error: None,
+                                };
+                                connection.sender.send(Message::Response(resp))?;
+                                continue;
+                            }
+                            Err(err @ ExtractError::JsonError { .. }) => panic!("{err:?}"),
+                            Err(ExtractError::MethodMismatch(req)) => req,
+                        };
+                    }
+                    "textDocument/diagnostic" => {
+                        match cast::<DocumentDiagnosticRequest>(req) {
+                            Ok((id, params)) => {
+                                let result = engine.lsp_check_script(params).map(|report| serde_json::to_value(&report).unwrap());
+                                let resp = Response {
+                                    id,
+                                    result,
                                     error: None,
                                 };
                                 connection.sender.send(Message::Response(resp))?;

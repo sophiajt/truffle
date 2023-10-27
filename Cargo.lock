@@ -1340,6 +1340,7 @@ dependencies = [
  "criterion",
  "futures",
  "libtest-mimic",
+ "lsp-types",
  "postcard",
  "reedline",
  "serde",

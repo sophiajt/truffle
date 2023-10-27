@@ -1,7 +1,7 @@
 let mut x = 0
 
 while x < 10 {
-  x = add(x, 1)
+  x = add(x, 2)
 }
 
 print(x)

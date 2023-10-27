@@ -1,5 +1,9 @@
 use std::{fmt, path::Path, slice::Iter};
 
+use lsp_types::Diagnostic;
+
+use crate::engine::LineLookupTable;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScriptError {
     pub message: String,
@@ -131,6 +135,10 @@ impl ScriptError {
             contents,
         }
     }
+
+    pub fn range(&self) -> (usize, usize) {
+        (self.span_start, self.span_end)
+    }
 }
 
 pub struct ResolvedScriptError<'a> {
@@ -187,6 +195,19 @@ impl ErrorBatch {
             fname,
             contents,
         }
+    }
+
+    pub fn as_diagnostics_with(&self, fname: &Path, contents: &[u8]) -> Vec<Diagnostic> {
+        let mut diagnostics = vec![];
+        let lookup = LineLookupTable::from_bytes(contents);
+        for error in self {
+            let range = error.range();
+            let range = lookup.to_range(range);
+            let message = error.display_with(fname, contents).to_string();
+            let diagnostic = Diagnostic::new_simple(range, message);
+            diagnostics.push(diagnostic);
+        }
+        diagnostics
     }
 }
 

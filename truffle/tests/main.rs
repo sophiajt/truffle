@@ -117,7 +117,7 @@ fn runtime_errors() {
 #[test]
 fn lsp_hover() {
     let engine = Engine::new();
-    let hover = engine.lsp_hover(2, b"1234567");
+    let hover = engine.hover(2, b"1234567");
 
     assert_eq!(hover, "i64")
 }
@@ -125,7 +125,7 @@ fn lsp_hover() {
 #[test]
 fn lsp_goto_definition() {
     let engine = Engine::new();
-    let result = engine.lsp_goto_definition(16, b"let abc = 123\nabc");
+    let result = engine.goto_definition(16, b"let abc = 123\nabc");
 
     assert_eq!(result, Some((4, 7)))
 }
@@ -133,7 +133,7 @@ fn lsp_goto_definition() {
 #[test]
 fn lsp_find_all_references() {
     let engine = Engine::new();
-    let result = engine.lsp_find_all_references(16, b"let abc = 123\nabc");
+    let result = engine.find_all_references(16, b"let abc = 123\nabc");
 
     assert_eq!(result, Some(vec![(4, 7), (14, 17)]))
 }
@@ -141,7 +141,7 @@ fn lsp_find_all_references() {
 #[test]
 fn lsp_check_script() {
     let engine = Engine::new();
-    let result = engine.lsp_check_script(b"let abc = \n");
+    let result = engine.check_script(b"let abc = \n");
 
     eprintln!("result: {:?}", result);
 
