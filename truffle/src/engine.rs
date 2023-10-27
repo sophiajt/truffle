@@ -6,7 +6,6 @@ use lsp_types::{
     GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams, Location, Position, Range,
     ReferenceParams, RelatedFullDocumentDiagnosticReport, Url,
 };
-// use std::path::Path;
 
 use crate::{
     parser::NodeId, typechecker::ExternalFunctionId, ErrorBatch, Evaluator, Function, FunctionId,
