@@ -160,13 +160,11 @@ impl<'permanent> TypeChecker<'permanent> {
     }
 
     pub fn error(&mut self, message: impl Into<String>, node_id: NodeId) {
-        let span_start = self.parse_results.span_start[node_id.0];
-        let span_end = self.parse_results.span_end[node_id.0];
+        let span = self.parse_results.spans[node_id.0];
 
         self.errors.push(ScriptError {
             message: message.into(),
-            span_start,
-            span_end,
+            span,
         })
     }
 
@@ -220,10 +218,9 @@ impl<'permanent> TypeChecker<'permanent> {
                 }
             }
             AstNode::Type => {
-                let span_start = self.parse_results.span_start[node_id.0];
-                let span_end = self.parse_results.span_end[node_id.0];
+                let span = self.parse_results.spans[node_id.0];
 
-                let contents = &self.parse_results.contents[span_start..span_end];
+                let contents = &self.parse_results.contents[span.start..span.end];
 
                 match contents {
                     b"i64" => self.node_types[node_id.0] = I64_TYPE,
@@ -538,7 +535,7 @@ impl<'permanent> TypeChecker<'permanent> {
         }
 
         let call_name = &self.parse_results.contents
-            [self.parse_results.span_start[head.0]..self.parse_results.span_end[head.0]];
+            [self.parse_results.spans[head.0].start..self.parse_results.spans[head.0].end];
 
         if let Some(defs) = self.permanent_definitions.external_functions.get(call_name) {
             'outer: for &def in defs {
@@ -596,9 +593,8 @@ impl<'permanent> TypeChecker<'permanent> {
         type_id: TypeId,
         is_mutable: bool,
     ) {
-        let variable_name = &self.parse_results.contents[self.parse_results.span_start
-            [variable_name_node_id.0]
-            ..self.parse_results.span_end[variable_name_node_id.0]];
+        let span = self.parse_results.spans[variable_name_node_id.0];
+        let variable_name = &self.parse_results.contents[span.start..span.end];
         self.scope
             .last_mut()
             .expect("internal error: missing expected scope frame")
@@ -615,9 +611,8 @@ impl<'permanent> TypeChecker<'permanent> {
     }
 
     pub fn resolve_variable(&mut self, unbound_node_id: NodeId) {
-        let variable_name = &self.parse_results.contents[self.parse_results.span_start
-            [unbound_node_id.0]
-            ..self.parse_results.span_end[unbound_node_id.0]];
+        let span = self.parse_results.spans[unbound_node_id.0];
+        let variable_name = &self.parse_results.contents[span.start..span.end];
 
         if let Some(node_id) = self.find_variable(variable_name) {
             self.variable_def_site.insert(unbound_node_id, node_id);

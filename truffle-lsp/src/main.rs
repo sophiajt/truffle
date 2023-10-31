@@ -50,11 +50,8 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
         }
     };
 
-    // Note that  we must have our logging only write out to stderr.
-    info!("starting generic LSP server");
+    info!("starting truffle LSP server");
 
-    // Create the transport. Includes the stdio (stdin and stdout) versions but this could
-    // also be implemented to use sockets or HTTP.
     let (connection, io_threads) = Connection::stdio();
 
     let diagnostic_options = DiagnosticOptions {
@@ -66,7 +63,6 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
         },
     };
 
-    // Run the server and wait for the two threads to end (typically by trigger LSP Exit event).
     let server_capabilities = serde_json::to_value(&ServerCapabilities {
         definition_provider: Some(OneOf::Left(true)),
         hover_provider: Some(lsp_types::HoverProviderCapability::Simple(true)),
@@ -81,7 +77,6 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     main_loop(connection, initialization_params)?;
     io_threads.join()?;
 
-    // Shut down gracefully.
     info!("shutting down server");
     Ok(())
 }
@@ -91,7 +86,6 @@ fn main_loop(
     params: serde_json::Value,
 ) -> Result<(), Box<dyn Error + Sync + Send>> {
     let engine = if let Ok(bytes) = std::fs::read("./truffle.lsp.data") {
-        dbg!(());
         postcard::from_bytes(&bytes).unwrap()
     } else {
         Engine::new()

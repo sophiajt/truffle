@@ -16,7 +16,7 @@ pub use crate::{
     errors::{ErrorBatch, ScriptError},
     eval::{Evaluator, ReturnValue},
     lexer::Lexer,
-    parser::{ParseResults, Parser},
+    parser::{ParseResults, Parser, Span},
     typechecker::{FunctionId, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, UNIT_TYPE},
 };
 

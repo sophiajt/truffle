@@ -1,14 +1,16 @@
 use std::{fmt, path::Path, slice::Iter};
 
+#[cfg(feature = "lsp")]
+use crate::engine::LineLookupTable;
+#[cfg(feature = "lsp")]
 use lsp_types::Diagnostic;
 
-use crate::engine::LineLookupTable;
+use crate::parser::Span;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScriptError {
     pub message: String,
-    pub span_start: usize,
-    pub span_end: usize,
+    pub span: Span,
 }
 
 fn write_error(
@@ -17,14 +19,10 @@ fn write_error(
     contents: &[u8],
     f: &mut fmt::Formatter<'_>,
 ) -> fmt::Result {
-    let ScriptError {
-        message,
-        span_start,
-        span_end,
-    } = script_error;
+    let ScriptError { message, span } = script_error;
 
-    let span_start = *span_start;
-    let span_end = *span_end;
+    let span_start = span.start;
+    let span_end = span.end;
 
     let filename = fname.display();
     let file_span_start = 0;
@@ -135,10 +133,6 @@ impl ScriptError {
             contents,
         }
     }
-
-    pub fn range(&self) -> (usize, usize) {
-        (self.span_start, self.span_end)
-    }
 }
 
 pub struct ResolvedScriptError<'a> {
@@ -197,12 +191,12 @@ impl ErrorBatch {
         }
     }
 
+    #[cfg(feature = "lsp")]
     pub fn as_diagnostics_with(&self, fname: &Path, contents: &[u8]) -> Vec<Diagnostic> {
         let mut diagnostics = vec![];
         let lookup = LineLookupTable::from_bytes(contents);
         for error in self {
-            let range = error.range();
-            let range = lookup.to_range(range);
+            let range = lookup.to_range(error.span);
             let message = error.display_with(fname, contents).to_string();
             let diagnostic = Diagnostic::new_simple(range, message);
             diagnostics.push(diagnostic);

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    parser::{AstNode, NodeId},
+    parser::{AstNode, NodeId, Span},
     typechecker::{
         ExternalFunctionId, TypeChecker, TypeId, BOOL_TYPE, I64_TYPE, STRING_TYPE, UNIT_TYPE,
     },
@@ -178,8 +178,7 @@ pub struct FunctionCodegen {
     pub register_types: Vec<TypeId>,
 
     // TODO: we may want a different permanent home, but this should work for now
-    pub span_start: Vec<usize>,
-    pub span_end: Vec<usize>,
+    pub spans: Vec<Span>,
 }
 
 impl FunctionCodegen {
@@ -455,8 +454,7 @@ impl<'permanent> Translater<'permanent> {
             source_map: vec![],
             register_values: vec![RegisterValue { i64: 0 }],
             register_types: vec![TypeId(0)],
-            span_start: self.typechecker.parse_results.span_start.clone(),
-            span_end: self.typechecker.parse_results.span_end.clone(),
+            spans: self.typechecker.parse_results.spans.clone(),
         };
         if !self.typechecker.parse_results.ast_nodes.is_empty() {
             let last = self.typechecker.parse_results.ast_nodes.len() - 1;
@@ -513,10 +511,8 @@ impl<'permanent> Translater<'permanent> {
     }
 
     pub fn translate_int(&mut self, builder: &mut FunctionCodegen, node_id: NodeId) -> RegisterId {
-        let contents =
-            &self.typechecker.parse_results.contents[self.typechecker.parse_results.span_start
-                [node_id.0]
-                ..self.typechecker.parse_results.span_end[node_id.0]];
+        let span = self.typechecker.parse_results.spans[node_id.0];
+        let contents = &self.typechecker.parse_results.contents[span.start..span.end];
 
         let constant = String::from_utf8_lossy(contents)
             .parse::<i64>()
@@ -530,10 +526,8 @@ impl<'permanent> Translater<'permanent> {
         builder: &mut FunctionCodegen,
         node_id: NodeId,
     ) -> RegisterId {
-        let contents =
-            &self.typechecker.parse_results.contents[self.typechecker.parse_results.span_start
-                [node_id.0]
-                ..self.typechecker.parse_results.span_end[node_id.0]];
+        let span = self.typechecker.parse_results.spans[node_id.0];
+        let contents = &self.typechecker.parse_results.contents[span.start..span.end];
 
         let constant = String::from_utf8_lossy(contents)
             .parse::<f64>()
@@ -547,10 +541,8 @@ impl<'permanent> Translater<'permanent> {
         builder: &mut FunctionCodegen,
         node_id: NodeId,
     ) -> RegisterId {
-        let contents =
-            &self.typechecker.parse_results.contents[self.typechecker.parse_results.span_start
-                [node_id.0]
-                ..self.typechecker.parse_results.span_end[node_id.0]];
+        let span = self.typechecker.parse_results.spans[node_id.0];
+        let contents = &self.typechecker.parse_results.contents[span.start..span.end];
 
         let s = String::from_utf8(contents.to_owned())
             .expect("internal error: string literal could not be parsed");

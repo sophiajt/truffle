@@ -1,6 +1,8 @@
 use std::{any::Any, collections::HashMap, path::PathBuf};
 
 #[cfg(feature = "lsp")]
+use crate::parser::Span;
+#[cfg(feature = "lsp")]
 use lsp_types::{
     DocumentDiagnosticParams, DocumentDiagnosticReport, FullDocumentDiagnosticReport,
     GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams, Location, Position, Range,
@@ -248,15 +250,15 @@ impl Engine {
         f(self)
     }
 
+    // TODO: replace location here with span
     pub fn get_node_id_at_location(
         &self,
         location: usize,
         parse_results: &ParseResults,
     ) -> Option<NodeId> {
-        for node_id in 0..parse_results.span_start.len() {
-            if location >= parse_results.span_start[node_id]
-                && location < parse_results.span_end[node_id]
-            {
+        for node_id in 0..parse_results.spans.len() {
+            let span = parse_results.spans[node_id];
+            if location >= span.start && location < span.end {
                 return Some(NodeId(node_id));
             }
         }
@@ -325,7 +327,7 @@ impl Engine {
     }
 
     #[cfg(feature = "lsp")]
-    pub fn goto_definition(&self, location: usize, contents: &[u8]) -> Option<(usize, usize)> {
+    pub fn goto_definition(&self, location: usize, contents: &[u8]) -> Option<Span> {
         let mut lexer = Lexer::new(contents.to_vec(), 0);
         let tokens = match lexer.lex() {
             Ok(tokens) => tokens,
@@ -341,10 +343,7 @@ impl Engine {
 
         if let Some(node_id) = node_id {
             if let Some(def_site_node_id) = typechecker.variable_def_site.get(&node_id) {
-                Some((
-                    typechecker.parse_results.span_start[def_site_node_id.0],
-                    typechecker.parse_results.span_end[def_site_node_id.0],
-                ))
+                Some(typechecker.parse_results.spans[def_site_node_id.0])
             } else {
                 None
             }
@@ -424,11 +423,7 @@ impl Engine {
     }
 
     #[cfg(feature = "lsp")]
-    pub fn find_all_references(
-        &self,
-        location: usize,
-        contents: &[u8],
-    ) -> Option<Vec<(usize, usize)>> {
+    pub fn find_all_references(&self, location: usize, contents: &[u8]) -> Option<Vec<Span>> {
         let mut lexer = Lexer::new(contents.to_vec(), 0);
         let tokens = match lexer.lex() {
             Ok(tokens) => tokens,
@@ -449,17 +444,11 @@ impl Engine {
 
         if let Some(node_id) = node_id {
             if let Some(def_site_node_id) = typechecker.variable_def_site.get(&node_id) {
-                let mut output = vec![(
-                    typechecker.parse_results.span_start[def_site_node_id.0],
-                    typechecker.parse_results.span_end[def_site_node_id.0],
-                )];
+                let mut output = vec![typechecker.parse_results.spans[def_site_node_id.0]];
 
                 for (key, value) in typechecker.variable_def_site.iter() {
                     if value == def_site_node_id {
-                        output.push((
-                            typechecker.parse_results.span_start[key.0],
-                            typechecker.parse_results.span_end[key.0],
-                        ))
+                        output.push(typechecker.parse_results.spans[key.0])
                     }
                 }
 
@@ -917,14 +906,14 @@ impl LineLookupTable {
         }
     }
 
-    pub(crate) fn to_range(&self, (start, end): (usize, usize)) -> Range {
-        let start = self.to_position(start);
-        let end = self.to_position(end);
+    pub(crate) fn to_range(&self, span: Span) -> Range {
+        let start = self.to_position(span.start);
+        let end = self.to_position(span.end);
         Range { start, end }
     }
 
-    pub(crate) fn to_location(&self, uri: Url, range: (usize, usize)) -> Location {
-        let range = self.to_range(range);
+    pub(crate) fn to_location(&self, uri: Url, span: Span) -> Location {
+        let range = self.to_range(span);
         Location { uri, range }
     }
 }

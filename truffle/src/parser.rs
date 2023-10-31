@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::errors::{ErrorBatch, ScriptError};
 use crate::lexer::{Token, TokenType};
 
@@ -120,6 +122,19 @@ impl AstNode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+/// A region of source code
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl Display for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.start, self.end)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Uniquely identifies a node in the Abstract Syntax Tree
 ///
@@ -156,8 +171,8 @@ impl Parser {
     }
 
     fn position(&mut self) -> usize {
-        if let Some(Token { span_start, .. }) = self.peek() {
-            span_start
+        if let Some(Token { span, .. }) = self.peek() {
+            span.start
         } else {
             self.content_length
         }
@@ -396,11 +411,10 @@ impl Parser {
     pub fn is_keyword(&self, keyword: &[u8]) -> bool {
         if let Some(Token {
             token_type: TokenType::Name,
-            span_start,
-            span_end,
+            span,
         }) = self.peek()
         {
-            if keyword == &self.results.contents[span_start..span_end] {
+            if keyword == &self.results.contents[span.start..span.end] {
                 return true;
             }
         }
@@ -461,53 +475,43 @@ impl Parser {
     }
 
     pub fn get_span_end(&self, node_id: NodeId) -> usize {
-        self.results.span_end[node_id.0]
+        self.results.spans[node_id.0].end
     }
 
     pub fn error(&mut self, message: impl Into<String>) -> NodeId {
-        if let Some(Token {
-            span_start,
-            span_end,
-            ..
-        }) = self.next()
-        {
-            let node_id = self.create_node(AstNode::Garbage, span_start, span_end);
+        if let Some(Token { span, .. }) = self.next() {
+            let node_id = self.create_node(AstNode::Garbage, span);
             self.errors.push(ScriptError {
                 message: message.into(),
-                span_start,
-                span_end,
+                span,
             });
 
             node_id
         } else {
-            let node_id =
-                self.create_node(AstNode::Garbage, self.content_length, self.content_length);
+            let span = Span {
+                start: self.content_length,
+                end: self.content_length,
+            };
+            let node_id = self.create_node(AstNode::Garbage, span);
             self.errors.push(ScriptError {
                 message: message.into(),
-                span_start: self.content_length,
-                span_end: self.content_length,
+                span,
             });
 
             node_id
         }
     }
 
-    pub fn create_node(
-        &mut self,
-        node_type: AstNode,
-        span_start: usize,
-        span_end: usize,
-    ) -> NodeId {
-        self.results.span_start.push(span_start);
-        self.results.span_end.push(span_end);
+    pub fn create_node(&mut self, node_type: AstNode, span: Span) -> NodeId {
+        self.results.spans.push(span);
         self.results.ast_nodes.push(node_type);
 
-        NodeId(self.results.span_start.len() - 1 + self.results.node_id_offset)
+        NodeId(self.results.spans.len() - 1 + self.results.node_id_offset)
     }
 
     pub fn block(&mut self, expect_parens: bool) -> NodeId {
-        let span_start = self.position();
-        let mut span_end = self.position();
+        let start = self.position();
+        let mut end = self.position();
 
         let mut code_body = vec![];
         if expect_parens {
@@ -516,7 +520,7 @@ impl Parser {
 
         while self.has_tokens() {
             if self.is_rcurly() && expect_parens {
-                span_end = self.position() + 1;
+                end = self.position() + 1;
                 self.rcurly();
                 break;
             } else if self.is_semicolon() {
@@ -544,37 +548,35 @@ impl Parser {
                 let result = self.for_statement();
                 code_body.push(result);
             } else {
-                let span_start = self.position();
+                let start = self.position();
                 let expression = self.expression();
-                let span_end = self.get_span_end(expression);
+                let end = self.get_span_end(expression);
+                let span = Span { start, end };
 
                 if self.is_semicolon() {
                     // This is a statement, not an expression
                     self.next();
-                    code_body.push(self.create_node(
-                        AstNode::Statement(expression),
-                        span_start,
-                        span_end,
-                    ))
+                    code_body.push(self.create_node(AstNode::Statement(expression), span))
                 } else {
                     code_body.push(expression);
                 }
             }
         }
 
-        if span_end == span_start && !code_body.is_empty() {
-            span_end = self.get_span_end(
+        if end == start && !code_body.is_empty() {
+            end = self.get_span_end(
                 *code_body
                     .last()
                     .expect("internal error: expected ast nodes"),
             );
         }
 
-        self.create_node(AstNode::Block(code_body), span_start, span_end)
+        let span = Span { start, end };
+        self.create_node(AstNode::Block(code_body), span)
     }
 
     pub fn fn_definition(&mut self) -> NodeId {
-        let span_start = self.position();
+        let start = self.position();
         self.keyword(b"fn");
 
         let name = self.name();
@@ -583,34 +585,34 @@ impl Parser {
 
         let block = self.block(true);
 
-        let span_end = self.get_span_end(block);
+        let end = self.get_span_end(block);
 
+        let span = Span { start, end };
         self.create_node(
             AstNode::Fn {
                 name,
                 params,
                 block,
             },
-            span_start,
-            span_end,
+            span,
         )
     }
 
-    pub fn method_call(&mut self, span_start: usize, receiver: NodeId) -> NodeId {
+    pub fn method_call(&mut self, start: usize, receiver: NodeId) -> NodeId {
         let method_name = self
             .next()
             .expect("internal error: missing token that was expected to be there");
-        let name_start = method_name.span_start;
-        let name_end = method_name.span_end;
-        let head = self.create_node(AstNode::Name, name_start, name_end);
+        let name_span = method_name.span;
+        let head = self.create_node(AstNode::Name, name_span);
 
         self.lparen();
         let mut args = self.args_list();
         args.insert(0, receiver);
-        let span_end = self.position() + 1;
+        let end = self.position() + 1;
         self.rparen();
 
-        self.create_node(AstNode::Call { head, args }, span_start, span_end)
+        let span = Span { start, end };
+        self.create_node(AstNode::Call { head, args }, span)
     }
 
     pub fn expression(&mut self) -> NodeId {
@@ -663,12 +665,8 @@ impl Parser {
                         .pop()
                         .expect("internal error: expression stack empty");
 
-                    let (span_start, span_end) = self.spanning(lhs, rhs);
-                    expr_stack.push(self.create_node(
-                        AstNode::BinaryOp { lhs, op, rhs },
-                        span_start,
-                        span_end,
-                    ))
+                    let span = self.spanning(lhs, rhs);
+                    expr_stack.push(self.create_node(AstNode::BinaryOp { lhs, op, rhs }, span))
                 }
 
                 expr_stack.push(op);
@@ -691,13 +689,9 @@ impl Parser {
                 .pop()
                 .expect("internal error: expression stack empty");
 
-            let (span_start, span_end) = self.spanning(lhs, rhs);
+            let span = self.spanning(lhs, rhs);
 
-            expr_stack.push(self.create_node(
-                AstNode::BinaryOp { lhs, op, rhs },
-                span_start,
-                span_end,
-            ))
+            expr_stack.push(self.create_node(AstNode::BinaryOp { lhs, op, rhs }, span))
         }
 
         expr_stack
@@ -706,7 +700,7 @@ impl Parser {
     }
 
     pub fn simple_expression(&mut self) -> NodeId {
-        let span_start = self.position();
+        let start = self.position();
 
         let expr = if self.is_lcurly() {
             self.block(true)
@@ -732,9 +726,10 @@ impl Parser {
             self.next();
 
             let rhs = self.simple_expression();
-            let span_end = self.get_span_end(rhs);
+            let end = self.get_span_end(rhs);
+            let span = Span { start, end };
 
-            self.create_node(AstNode::Range { lhs: expr, rhs }, span_start, span_end)
+            self.create_node(AstNode::Range { lhs: expr, rhs }, span)
         } else if self.is_dot() {
             self.next();
 
@@ -742,10 +737,11 @@ impl Parser {
                 // consume the 'await' keyword
                 self.next();
 
-                let span_end = self.position();
-                self.create_node(AstNode::Await(expr), span_start, span_end)
+                let end = self.position();
+                let span = Span { start, end };
+                self.create_node(AstNode::Await(expr), span)
             } else {
-                self.method_call(span_start, expr)
+                self.method_call(start, expr)
             }
         } else {
             expr
@@ -756,18 +752,17 @@ impl Parser {
         match self.peek() {
             Some(Token {
                 token_type: TokenType::Number,
-                span_start,
-                span_end,
+                span,
             }) => {
-                let contents = &self.results.contents[span_start..span_end];
+                let contents = &self.results.contents[span.start..span.end];
                 let is_float = contents.contains(&b'.');
 
                 self.next();
 
                 if is_float {
-                    self.create_node(AstNode::Float, span_start, span_end)
+                    self.create_node(AstNode::Float, span)
                 } else {
-                    self.create_node(AstNode::Int, span_start, span_end)
+                    self.create_node(AstNode::Int, span)
                 }
             }
             _ => self.error("expected: number"),
@@ -778,17 +773,16 @@ impl Parser {
         match self.peek() {
             Some(Token {
                 token_type: TokenType::Name,
-                span_start,
-                span_end,
+                span,
             }) => {
-                let contents = &self.results.contents[span_start..span_end];
+                let contents = &self.results.contents[span.start..span.end];
 
                 if contents == b"true" {
                     self.next();
-                    self.create_node(AstNode::True, span_start, span_end)
+                    self.create_node(AstNode::True, span)
                 } else if contents == b"false" {
                     self.next();
-                    self.create_node(AstNode::False, span_start, span_end)
+                    self.create_node(AstNode::False, span)
                 } else {
                     self.error("expected: boolean")
                 }
@@ -800,70 +794,67 @@ impl Parser {
     pub fn operator(&mut self) -> NodeId {
         match self.peek() {
             Some(Token {
-                token_type,
-                span_start,
-                span_end,
-                ..
+                token_type, span, ..
             }) => match token_type {
                 TokenType::Plus => {
                     self.next();
-                    self.create_node(AstNode::Plus, span_start, span_end)
+                    self.create_node(AstNode::Plus, span)
                 }
                 TokenType::PlusPlus => {
                     self.next();
-                    self.create_node(AstNode::Append, span_start, span_end)
+                    self.create_node(AstNode::Append, span)
                 }
                 TokenType::Dash => {
                     self.next();
-                    self.create_node(AstNode::Minus, span_start, span_end)
+                    self.create_node(AstNode::Minus, span)
                 }
                 TokenType::Asterisk => {
                     self.next();
-                    self.create_node(AstNode::Multiply, span_start, span_end)
+                    self.create_node(AstNode::Multiply, span)
                 }
                 TokenType::ForwardSlash => {
                     self.next();
-                    self.create_node(AstNode::Divide, span_start, span_end)
+                    self.create_node(AstNode::Divide, span)
                 }
                 TokenType::LessThan => {
                     self.next();
-                    self.create_node(AstNode::LessThan, span_start, span_end)
+                    self.create_node(AstNode::LessThan, span)
                 }
                 TokenType::LessThanEqual => {
                     self.next();
-                    self.create_node(AstNode::LessThanOrEqual, span_start, span_end)
+                    self.create_node(AstNode::LessThanOrEqual, span)
                 }
                 TokenType::GreaterThan => {
                     self.next();
-                    self.create_node(AstNode::GreaterThan, span_start, span_end)
+                    self.create_node(AstNode::GreaterThan, span)
                 }
                 TokenType::GreaterThanEqual => {
                     self.next();
-                    self.create_node(AstNode::GreaterThanOrEqual, span_start, span_end)
+                    self.create_node(AstNode::GreaterThanOrEqual, span)
                 }
                 TokenType::EqualsEquals => {
                     self.next();
-                    self.create_node(AstNode::Equal, span_start, span_end)
+                    self.create_node(AstNode::Equal, span)
                 }
                 TokenType::ExclamationEquals => {
                     self.next();
-                    self.create_node(AstNode::NotEqual, span_start, span_end)
+                    self.create_node(AstNode::NotEqual, span)
                 }
                 TokenType::AsteriskAsterisk => {
                     self.next();
-                    self.create_node(AstNode::Pow, span_start, span_end)
+                    self.create_node(AstNode::Pow, span)
                 }
                 TokenType::AmpersandAmpersand => {
                     self.next();
-                    self.create_node(AstNode::And, span_start, span_end)
+                    self.create_node(AstNode::And, span)
                 }
                 TokenType::PipePipe => {
                     self.next();
-                    self.create_node(AstNode::Or, span_start, span_end)
+                    self.create_node(AstNode::Or, span)
                 }
                 TokenType::Equals => {
                     self.next();
-                    self.create_node(AstNode::Assignment, span_start, span_end)
+                    self.create_node(AstNode::Assignment, span)
                 }
                 _ => self.error("expected: operator"),
             },
@@ -875,20 +866,21 @@ impl Parser {
         self.results.ast_nodes[operator.0].precedence()
     }
 
-    pub fn spanning(&mut self, from: NodeId, to: NodeId) -> (usize, usize) {
-        (self.results.span_start[from.0], self.results.span_end[to.0])
+    pub fn spanning(&mut self, from: NodeId, to: NodeId) -> Span {
+        let start = self.results.spans[from.0].start;
+        let end = self.results.spans[to.0].end;
+        Span { start, end }
     }
 
     pub fn string(&mut self) -> NodeId {
         match self.peek() {
             Some(Token {
                 token_type: TokenType::String,
-                span_start,
-                span_end,
+                span,
                 ..
             }) => {
                 self.next();
-                self.create_node(AstNode::String, span_start, span_end)
+                self.create_node(AstNode::String, span)
             }
             _ => self.error("expected: string"),
         }
@@ -898,12 +890,11 @@ impl Parser {
         match self.peek() {
             Some(Token {
                 token_type: TokenType::Name,
-                span_start,
-                span_end,
+                span,
                 ..
             }) => {
                 self.next();
-                self.create_node(AstNode::Name, span_start, span_end)
+                self.create_node(AstNode::Name, span)
             }
             _ => self.error("expect name"),
         }
@@ -913,19 +904,18 @@ impl Parser {
         match self.peek() {
             Some(Token {
                 token_type: TokenType::Name,
-                span_start,
-                span_end,
+                span,
                 ..
             }) => {
                 self.next();
-                self.create_node(AstNode::Type, span_start, span_end)
+                self.create_node(AstNode::Type, span)
             }
             _ => self.error("expect name"),
         }
     }
 
     pub fn params(&mut self) -> NodeId {
-        let span_start = self.position();
+        let start = self.position();
 
         let param_list = {
             self.lparen();
@@ -935,9 +925,10 @@ impl Parser {
             output
         };
 
-        let span_end = self.position();
+        let end = self.position();
 
-        self.create_node(AstNode::Params(param_list), span_start, span_end)
+        let span = Span { start, end };
+        self.create_node(AstNode::Params(param_list), span)
     }
 
     pub fn param_list(&mut self) -> Vec<NodeId> {
@@ -953,7 +944,7 @@ impl Parser {
             }
 
             // Parse param
-            let span_start = self.position();
+            let start = self.position();
             let name = self.name();
             if self.is_colon() {
                 // Optional type
@@ -961,20 +952,14 @@ impl Parser {
 
                 let ty = self.name();
 
-                let span_end = self.get_span_end(ty);
+                let end = self.get_span_end(ty);
+                let span = Span { start, end };
 
-                params.push(self.create_node(
-                    AstNode::Param { name, ty: Some(ty) },
-                    span_start,
-                    span_end,
-                ))
+                params.push(self.create_node(AstNode::Param { name, ty: Some(ty) }, span))
             } else {
-                let span_end = self.get_span_end(name);
-                params.push(self.create_node(
-                    AstNode::Param { name, ty: None },
-                    span_start,
-                    span_end,
-                ))
+                let end = self.get_span_end(name);
+                let span = Span { start, end };
+                params.push(self.create_node(AstNode::Param { name, ty: None }, span))
             }
         }
 
@@ -1006,8 +991,8 @@ impl Parser {
     /// AstNode for the parsed expression and yields a new NodeID for the parsed
     /// expression.
     pub fn if_expression(&mut self) -> NodeId {
-        let span_start = self.position();
-        let span_end;
+        let start = self.position();
+        let end;
 
         self.keyword(b"if");
 
@@ -1018,27 +1003,27 @@ impl Parser {
         let else_expression = if self.is_keyword(b"else") {
             self.next();
             let expr = self.expression();
-            span_end = self.get_span_end(expr);
+            end = self.get_span_end(expr);
             Some(expr)
         } else {
-            span_end = self.get_span_end(then_block);
+            end = self.get_span_end(then_block);
             None
         };
 
+        let span = Span { start, end };
         self.create_node(
             AstNode::If {
                 condition,
                 then_block,
                 else_expression,
             },
-            span_start,
-            span_end,
+            span,
         )
     }
 
     pub fn let_statement(&mut self) -> NodeId {
         let mut is_mutable = false;
-        let span_start = self.position();
+        let start = self.position();
 
         self.keyword(b"let");
 
@@ -1062,8 +1047,9 @@ impl Parser {
 
         let initializer = self.expression();
 
-        let span_end = self.get_span_end(initializer);
+        let end = self.get_span_end(initializer);
 
+        let span = Span { start, end };
         self.create_node(
             AstNode::Let {
                 variable_name,
@@ -1071,24 +1057,24 @@ impl Parser {
                 initializer,
                 is_mutable,
             },
-            span_start,
-            span_end,
+            span,
         )
     }
 
     pub fn while_statement(&mut self) -> NodeId {
-        let span_start = self.position();
+        let start = self.position();
         self.keyword(b"while");
 
         let condition = self.expression();
         let block = self.block(true);
-        let span_end = self.get_span_end(block);
+        let end = self.get_span_end(block);
 
-        self.create_node(AstNode::While { condition, block }, span_start, span_end)
+        let span = Span { start, end };
+        self.create_node(AstNode::While { condition, block }, span)
     }
 
     pub fn for_statement(&mut self) -> NodeId {
-        let span_start = self.position();
+        let start = self.position();
         self.keyword(b"for");
 
         let variable = self.variable();
@@ -1096,16 +1082,16 @@ impl Parser {
 
         let range = self.simple_expression();
         let block = self.block(true);
-        let span_end = self.get_span_end(block);
+        let end = self.get_span_end(block);
 
+        let span = Span { start, end };
         self.create_node(
             AstNode::For {
                 variable,
                 range,
                 block,
             },
-            span_start,
-            span_end,
+            span,
         )
     }
 
@@ -1114,9 +1100,8 @@ impl Parser {
             let name = self
                 .next()
                 .expect("internal error: missing token that was expected to be there");
-            let name_start = name.span_start;
-            let name_end = name.span_end;
-            self.create_node(AstNode::Variable, name_start, name_end)
+            let name_span = name.span;
+            self.create_node(AstNode::Variable, name_span)
         } else {
             self.error("expected variable")
         }
@@ -1124,26 +1109,24 @@ impl Parser {
 
     pub fn variable_or_call(&mut self) -> NodeId {
         if self.is_name() {
-            let span_start = self.position();
+            let start = self.position();
 
             let name = self
                 .next()
                 .expect("internal error: missing token that was expected to be there");
-            let name_start = name.span_start;
-            let name_end = name.span_end;
 
             if self.is_lparen() {
-                let head = self.create_node(AstNode::Name, name_start, name_end);
+                let head = self.create_node(AstNode::Name, name.span);
                 // We're a call
                 self.lparen();
                 let args = self.args_list();
                 self.rparen();
 
-                let span_end = self.position();
-                self.create_node(AstNode::Call { head, args }, span_start, span_end)
+                let end = self.position();
+                self.create_node(AstNode::Call { head, args }, Span { start, end })
             } else {
                 // We're a variable
-                self.create_node(AstNode::Variable, name_start, name_end)
+                self.create_node(AstNode::Variable, name.span)
             }
         } else {
             self.error("expected variable or call")
@@ -1153,11 +1136,10 @@ impl Parser {
     pub fn keyword(&mut self, keyword: &[u8]) {
         if let Some(Token {
             token_type: TokenType::Name,
-            span_start,
-            span_end,
+            span,
         }) = self.peek()
         {
-            let contents = &self.results.contents[span_start..span_end];
+            let contents = &self.results.contents[span.start..span.end];
 
             if contents == keyword {
                 self.next();
@@ -1258,8 +1240,7 @@ impl Parser {
 #[derive(Debug)]
 pub struct ParseResults {
     pub node_id_offset: usize,
-    pub span_start: Vec<usize>,
-    pub span_end: Vec<usize>,
+    pub spans: Vec<Span>,
     pub ast_nodes: Vec<AstNode>,
     pub contents: Vec<u8>,
 }
@@ -1268,8 +1249,7 @@ impl ParseResults {
     pub fn new(node_id_offset: usize, contents: Vec<u8>) -> Self {
         Self {
             node_id_offset,
-            span_start: vec![],
-            span_end: vec![],
+            spans: vec![],
             ast_nodes: vec![],
             contents,
         }
@@ -1295,10 +1275,7 @@ impl ParseResults {
                 initializer,
                 is_mutable,
             } => {
-                println!(
-                    "Let ({}, {}, mutable: {}):",
-                    self.span_start[node_id.0], self.span_end[node_id.0], is_mutable
-                );
+                println!("Let ({}, mutable: {}):", self.spans[node_id.0], is_mutable);
                 self.print_helper(variable_name, indent + 2);
                 if let Some(ty) = ty {
                     self.print_helper(ty, indent + 2);
@@ -1306,10 +1283,7 @@ impl ParseResults {
                 self.print_helper(initializer, indent + 2);
             }
             AstNode::Param { name, ty } => {
-                println!(
-                    "Param ({}, {}):",
-                    self.span_start[node_id.0], self.span_end[node_id.0],
-                );
+                println!("Param {}:", self.spans[node_id.0],);
                 self.print_helper(name, indent + 2);
                 if let Some(ty) = ty {
                     self.print_helper(ty, indent + 2);
@@ -1317,8 +1291,8 @@ impl ParseResults {
             }
             // AstNode::Closure { params, block } => {
             //     println!(
-            //         "Closure ({}, {}):",
-            //         self.span_start[node_id.0], self.span_end[node_id.0],
+            //         "Closure {}:",
+            //         self.spans[node_id.0],
             //     );
             //     self.print_helper(params, indent + 2);
             //     self.print_helper(block, indent + 2);
@@ -1334,19 +1308,13 @@ impl ParseResults {
                 self.print_helper(block, indent + 2);
             }
             AstNode::Block(nodes) => {
-                println!(
-                    "Block ({}, {}):",
-                    self.span_start[node_id.0], self.span_end[node_id.0],
-                );
+                println!("Block {}:", self.spans[node_id.0],);
                 for node in nodes {
                     self.print_helper(node, indent + 2);
                 }
             }
             AstNode::Params(nodes) => {
-                print!(
-                    "Params ({}, {}):",
-                    self.span_start[node_id.0], self.span_end[node_id.0],
-                );
+                print!("Params {}:", self.spans[node_id.0],);
                 if nodes.is_empty() {
                     println!(" <empty>");
                 } else {
@@ -1358,10 +1326,7 @@ impl ParseResults {
                 }
             }
             AstNode::Call { head, args } => {
-                println!(
-                    "Call ({}, {}):",
-                    self.span_start[node_id.0], self.span_end[node_id.0],
-                );
+                println!("Call {}:", self.spans[node_id.0],);
                 self.print_helper(head, indent + 2);
 
                 for arg in args {
@@ -1369,20 +1334,14 @@ impl ParseResults {
                 }
             }
             AstNode::BinaryOp { lhs, op, rhs } => {
-                println!(
-                    "BinaryOp ({}, {}):",
-                    self.span_start[node_id.0], self.span_end[node_id.0],
-                );
+                println!("BinaryOp {}:", self.spans[node_id.0],);
 
                 self.print_helper(lhs, indent + 2);
                 self.print_helper(op, indent + 2);
                 self.print_helper(rhs, indent + 2)
             }
             AstNode::Range { lhs, rhs } => {
-                println!(
-                    "Range ({}, {}):",
-                    self.span_start[node_id.0], self.span_end[node_id.0],
-                );
+                println!("Range {}:", self.spans[node_id.0],);
 
                 self.print_helper(lhs, indent + 2);
                 self.print_helper(rhs, indent + 2)
@@ -1392,10 +1351,7 @@ impl ParseResults {
                 then_block,
                 else_expression,
             } => {
-                println!(
-                    "If ({}, {}):",
-                    self.span_start[node_id.0], self.span_end[node_id.0],
-                );
+                println!("If {}:", self.spans[node_id.0],);
                 self.print_helper(condition, indent + 2);
                 self.print_helper(then_block, indent + 2);
                 if let Some(else_expression) = else_expression {
@@ -1403,10 +1359,7 @@ impl ParseResults {
                 }
             }
             x => {
-                println!(
-                    "{:?} ({}, {})",
-                    x, self.span_start[node_id.0], self.span_end[node_id.0],
-                )
+                println!("{:?} ({})", x, self.spans[node_id.0],)
             }
         }
     }

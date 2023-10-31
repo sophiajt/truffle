@@ -3,7 +3,9 @@ mod test_eval;
 
 use assert_matches::assert_matches;
 use test_eval::*;
-use truffle::{Engine, ErrorBatch, ReturnValue, ScriptError};
+use truffle::ReturnValue;
+#[cfg(feature = "lsp")]
+use truffle::{Engine, ErrorBatch, ScriptError, Span};
 
 #[test]
 fn math() {
@@ -115,6 +117,7 @@ fn runtime_errors() {
 }
 
 #[test]
+#[cfg(feature = "lsp")]
 fn lsp_hover() {
     let engine = Engine::new();
     let hover = engine.hover(2, b"1234567");
@@ -123,22 +126,28 @@ fn lsp_hover() {
 }
 
 #[test]
+#[cfg(feature = "lsp")]
 fn lsp_goto_definition() {
     let engine = Engine::new();
     let result = engine.goto_definition(16, b"let abc = 123\nabc");
 
-    assert_eq!(result, Some((4, 7)))
+    assert_eq!(result, Some(Span { start: 4, end: 7 }))
 }
 
 #[test]
+#[cfg(feature = "lsp")]
 fn lsp_find_all_references() {
     let engine = Engine::new();
     let result = engine.find_all_references(16, b"let abc = 123\nabc");
 
-    assert_eq!(result, Some(vec![(4, 7), (14, 17)]))
+    assert_eq!(
+        result,
+        Some(vec![Span { start: 4, end: 7 }, Span { start: 14, end: 17 }])
+    )
 }
 
 #[test]
+#[cfg(feature = "lsp")]
 fn lsp_check_script() {
     let engine = Engine::new();
     let result = engine.check_script(b"let abc = \n");
@@ -149,8 +158,7 @@ fn lsp_check_script() {
         result,
         Some(ErrorBatch::one(ScriptError {
             message: "incomplete math expression".into(),
-            span_start: 11,
-            span_end: 11
+            span: Span { start: 11, end: 11 }
         }))
     )
 }
