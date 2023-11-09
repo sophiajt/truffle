@@ -382,6 +382,72 @@ impl Engine {
             None
         }
     }
+
+    pub fn lsp_completion(&self, location: usize, contents: &[u8]) -> Vec<String> {
+        let mut output = vec![];
+
+        let mut lexer = Lexer::new(contents.to_vec(), 0);
+        let tokens = match lexer.lex() {
+            Ok(tokens) => tokens,
+            Err(_) => return output,
+        };
+
+        let mut prefix_start = location;
+
+        loop {
+            eprintln!("prefix build: {:?}", contents[prefix_start] as char);
+            if prefix_start == 0
+                || (!contents[prefix_start].is_ascii_digit()
+                    && !contents[prefix_start].is_ascii_alphabetic()
+                    && contents[prefix_start] != b'_')
+            {
+                prefix_start += 1;
+                break;
+            }
+
+            prefix_start -= 1;
+        }
+
+        let prefix = &contents[prefix_start..=location];
+
+        eprintln!("prefix: {:?}", prefix);
+
+        eprintln!("tokens: {:?}", tokens);
+
+        let mut parser = Parser::new(tokens, contents.to_vec(), 0);
+        let _ = parser.parse();
+
+        eprintln!("parse results: {:?}", parser.results);
+
+        let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+        let _ = typechecker.typecheck();
+
+        let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
+
+        if let Some(node_id) = node_id {
+            let node_start = typechecker.parse_results.span_start[node_id.0];
+            let node_end = typechecker.parse_results.span_end[node_id.0];
+
+            for scope in typechecker.scope.iter() {
+                let scope_start = typechecker.parse_results.span_start[scope.node_id.0];
+                let scope_end = typechecker.parse_results.span_end[scope.node_id.0];
+
+                if node_start >= scope_start && node_end < scope_end {
+                    for (var_name, var_node_id) in scope.variables.iter() {
+                        let var_end = typechecker.parse_results.span_end[var_node_id.0];
+
+                        if var_end <= location && var_name.starts_with(prefix) {
+                            // Variable is in scope and defined ahead of the completion location
+                            output.push(String::from_utf8_lossy(var_name).to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        output.sort();
+        output
+    }
 }
 
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]

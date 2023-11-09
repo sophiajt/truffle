@@ -154,3 +154,23 @@ fn lsp_check_script() {
         }))
     )
 }
+
+#[test]
+fn lsp_completion() {
+    let engine = Engine::new();
+    let result = engine.lsp_completion(43, b"let abc = 123\nlet abd = 456\nlet acd = 789; a + 10");
+
+    eprintln!("result: {:?}", result);
+
+    assert_eq!(result, vec!["abc", "abd", "acd"])
+}
+
+#[test]
+fn lsp_completion2() {
+    let engine = Engine::new();
+    let result = engine.lsp_completion(44, b"let abc = 123\nlet abd = 456\nlet acd = 789; ab + 10");
+
+    eprintln!("result: {:?}", result);
+
+    assert_eq!(result, vec!["abc", "abd"])
+}
