@@ -15,7 +15,7 @@ pub fn print<T: std::fmt::Display>(value: T) {
 
 #[test]
 pub fn serialize() -> Result<(), ErrorBatch> {
-    let mut engine = Engine::new();
+    let mut engine = Engine::new("test_serialize");
     register_fn!(engine, "print", print::<i64>);
     register_fn!(engine, "print", print::<f64>);
     register_fn!(engine, "print", print::<bool>);

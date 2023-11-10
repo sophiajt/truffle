@@ -15,3 +15,7 @@ tracing = "0.1.39"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 truffle = { version = "0.1.0", path = "../truffle", features = ["lsp"] }
 postcard = { version = "1.0.8", features = ["alloc", "use-std"]}
+color-eyre = "0.6.2"
+notify = "6.1.1"
+crossbeam-channel = "0.5.8"
+directories = "5.0.1"

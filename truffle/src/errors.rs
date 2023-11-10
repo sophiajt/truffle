@@ -1,9 +1,8 @@
 use std::{fmt, path::Path, slice::Iter};
 
 #[cfg(feature = "lsp")]
-use crate::engine::LineLookupTable;
-#[cfg(feature = "lsp")]
 use lsp_types::Diagnostic;
+use lsp_types::{Location, Position, Range, Url};
 
 use crate::parser::Span;
 
@@ -192,16 +191,66 @@ impl ErrorBatch {
     }
 
     #[cfg(feature = "lsp")]
-    pub fn as_diagnostics_with(&self, fname: &Path, contents: &[u8]) -> Vec<Diagnostic> {
+    pub fn as_diagnostics_with(&self, contents: &[u8]) -> Vec<Diagnostic> {
         let mut diagnostics = vec![];
         let lookup = LineLookupTable::from_bytes(contents);
         for error in self {
             let range = lookup.to_range(error.span);
-            let message = error.display_with(fname, contents).to_string();
+            let message = error.message.clone();
             let diagnostic = Diagnostic::new_simple(range, message);
             diagnostics.push(diagnostic);
         }
         diagnostics
+    }
+}
+
+#[derive(Debug)]
+#[cfg(feature = "lsp")]
+pub struct LineLookupTable {
+    /// array of character indexes for each consecutive newline in the input file
+    line_starts: Vec<usize>,
+}
+
+#[cfg(feature = "lsp")]
+impl LineLookupTable {
+    pub fn new(contents: &str) -> Self {
+        let mut line_starts: Vec<_> = contents
+            .encode_utf16()
+            .enumerate()
+            .filter(|&(_, c)| c == '\n' as u16)
+            .map(|(i, _)| i + 1)
+            .collect();
+        line_starts.insert(0, 0);
+        Self { line_starts }
+    }
+
+    pub fn from_bytes(contents: &[u8]) -> Self {
+        let contents = std::str::from_utf8(contents).unwrap();
+        Self::new(contents)
+    }
+
+    pub fn from_position(&self, Position { line, character }: Position) -> usize {
+        self.line_starts[line as usize] + character as usize
+    }
+
+    pub fn to_position(&self, position: usize) -> Position {
+        let line = self.line_starts.partition_point(|&ind| ind < position) - 1;
+        let character = position - self.line_starts[line];
+        Position {
+            line: line as u32,
+            character: character as u32,
+        }
+    }
+
+    pub fn to_range(&self, span: Span) -> Range {
+        let start = self.to_position(span.start);
+        let end = self.to_position(span.end);
+        Range { start, end }
+    }
+
+    pub fn to_location(&self, uri: Url, span: Span) -> Location {
+        let range = self.to_range(span);
+        Location { uri, range }
     }
 }
 

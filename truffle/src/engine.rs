@@ -2,12 +2,6 @@ use std::{any::Any, collections::HashMap, path::PathBuf};
 
 #[cfg(feature = "lsp")]
 use crate::parser::Span;
-#[cfg(feature = "lsp")]
-use lsp_types::{
-    DocumentDiagnosticParams, DocumentDiagnosticReport, FullDocumentDiagnosticReport,
-    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams, Location, Position, Range,
-    ReferenceParams, RelatedFullDocumentDiagnosticReport, Url,
-};
 
 use crate::{
     parser::NodeId, typechecker::ExternalFunctionId, ErrorBatch, Evaluator, Function, FunctionId,
@@ -17,6 +11,7 @@ use crate::{
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
 pub struct Engine {
     permanent_definitions: PermanentDefinitions,
+    app_name: String,
 }
 
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
@@ -57,7 +52,7 @@ impl PermanentDefinitions {
 }
 
 impl Engine {
-    pub fn new() -> Self {
+    pub fn new(app_name: &str) -> Self {
         let permanent_definitions = PermanentDefinitions {
             types: vec![
                 std::any::TypeId::of::<()>(),
@@ -81,6 +76,7 @@ impl Engine {
 
         Self {
             permanent_definitions,
+            app_name: app_name.to_string(),
         }
     }
 
@@ -267,21 +263,6 @@ impl Engine {
     }
 
     #[cfg(feature = "lsp")]
-    pub fn lsp_hover(&self, params: HoverParams) -> Hover {
-        let uri = params.text_document_position_params.text_document.uri;
-        let path = uri.to_file_path().unwrap();
-        let contents = std::fs::read_to_string(path).unwrap();
-        let lookup = LineLookupTable::new(&contents);
-        let contents = contents.as_bytes();
-        let location = lookup.from_position(params.text_document_position_params.position);
-        let markdown = self.hover(location, contents);
-        let contents = lsp_types::MarkedString::from_markdown(markdown);
-        let contents = lsp_types::HoverContents::Scalar(contents);
-        let range = None;
-        Hover { contents, range }
-    }
-
-    #[cfg(feature = "lsp")]
     pub fn hover(&self, location: usize, contents: &[u8]) -> String {
         let mut lexer = Lexer::new(contents.to_vec(), 0);
         let tokens = match lexer.lex() {
@@ -303,27 +284,6 @@ impl Engine {
         } else {
             String::new()
         }
-    }
-
-    #[cfg(feature = "lsp")]
-    pub fn lsp_goto_definition(
-        &self,
-        params: GotoDefinitionParams,
-    ) -> Option<GotoDefinitionResponse> {
-        let path = params
-            .text_document_position_params
-            .text_document
-            .uri
-            .to_file_path()
-            .unwrap();
-        let contents = std::fs::read_to_string(path).unwrap();
-        let lookup = LineLookupTable::new(&contents);
-        let location = lookup.from_position(params.text_document_position_params.position);
-        let location = self.goto_definition(location, contents.as_bytes()).unwrap();
-        let uri = params.text_document_position_params.text_document.uri;
-        Some(GotoDefinitionResponse::Scalar(
-            lookup.to_location(uri, location),
-        ))
     }
 
     #[cfg(feature = "lsp")]
@@ -353,23 +313,6 @@ impl Engine {
     }
 
     #[cfg(feature = "lsp")]
-    pub fn lsp_check_script(&self, params: DocumentDiagnosticParams) -> DocumentDiagnosticReport {
-        let path = params.text_document.uri.to_file_path().unwrap();
-        let contents = std::fs::read_to_string(&path).unwrap();
-        let items = match self.check_script(contents.as_bytes()) {
-            Some(items) => items.as_diagnostics_with(&path, contents.as_bytes()),
-            None => vec![],
-        };
-        let result_id = None;
-        let full_document_diagnostic_report = FullDocumentDiagnosticReport { result_id, items };
-        let result = RelatedFullDocumentDiagnosticReport {
-            related_documents: None,
-            full_document_diagnostic_report,
-        };
-        DocumentDiagnosticReport::Full(result)
-    }
-
-    #[cfg(feature = "lsp")]
     pub fn check_script(&self, contents: &[u8]) -> Option<ErrorBatch> {
         let mut lexer = Lexer::new(contents.to_vec(), 0);
 
@@ -395,31 +338,6 @@ impl Engine {
             Ok(_) => None,
             Err(errors) => Some(errors),
         }
-    }
-
-    #[cfg(feature = "lsp")]
-    pub fn lsp_find_all_references(&self, params: ReferenceParams) -> Option<Vec<Location>> {
-        let path = params
-            .text_document_position
-            .text_document
-            .uri
-            .to_file_path()
-            .unwrap();
-        let contents = std::fs::read_to_string(path).unwrap();
-        let lookup = LineLookupTable::new(&contents);
-        let location = lookup.from_position(params.text_document_position.position);
-        let references = self.find_all_references(location, contents.as_bytes());
-        references.map(|references| {
-            references
-                .into_iter()
-                .map(|location| {
-                    lookup.to_location(
-                        params.text_document_position.text_document.uri.clone(),
-                        location,
-                    )
-                })
-                .collect::<Vec<_>>()
-        })
     }
 
     #[cfg(feature = "lsp")]
@@ -465,7 +383,11 @@ impl Engine {
 
     #[cfg(feature = "lsp")]
     pub fn lsp_cache_writer(&self) -> std::io::BufWriter<std::fs::File> {
-        let path = std::path::Path::new("./truffle.lsp.data");
+        let dirs = directories::ProjectDirs::from("", "truffle", "truffle-lsp").unwrap();
+        let path = dbg!(dirs.cache_dir());
+        std::fs::create_dir_all(path).unwrap();
+        let app_name = &self.app_name;
+        let path = path.join(format!("{app_name}-truffle.lspdata"));
         let file = std::fs::File::create(path).unwrap();
         std::io::BufWriter::new(file)
     }
@@ -862,58 +784,9 @@ macro_rules! register_fn {
         $engine.register_fn($name, $fun);
         #[cfg(feature = "lsp")]
         {
-            let writer = $engine.lsp_cache_writer();
-            let data = postcard::to_io(&$engine, writer).unwrap();
+            let mut writer = $engine.lsp_cache_writer();
+            let data = postcard::to_io(&$engine, &mut writer).unwrap();
+            let _ = std::io::Write::flush(&mut writer);
         }
     }};
-}
-
-#[derive(Debug)]
-#[cfg(feature = "lsp")]
-pub(crate) struct LineLookupTable {
-    /// array of character indexes for each consecutive newline in the input file
-    line_starts: Vec<usize>,
-}
-
-#[cfg(feature = "lsp")]
-impl LineLookupTable {
-    pub(crate) fn new(contents: &str) -> Self {
-        let mut line_starts: Vec<_> = contents
-            .encode_utf16()
-            .enumerate()
-            .filter(|&(_, c)| c == '\n' as u16)
-            .map(|(i, _)| i + 1)
-            .collect();
-        line_starts.insert(0, 0);
-        Self { line_starts }
-    }
-
-    pub(crate) fn from_bytes(contents: &[u8]) -> Self {
-        let contents = std::str::from_utf8(contents).unwrap();
-        Self::new(contents)
-    }
-
-    pub(crate) fn from_position(&self, Position { line, character }: Position) -> usize {
-        self.line_starts[line as usize] + character as usize
-    }
-
-    pub(crate) fn to_position(&self, position: usize) -> Position {
-        let line = self.line_starts.partition_point(|&ind| ind < position) - 1;
-        let character = position - self.line_starts[line];
-        Position {
-            line: line as u32,
-            character: character as u32,
-        }
-    }
-
-    pub(crate) fn to_range(&self, span: Span) -> Range {
-        let start = self.to_position(span.start);
-        let end = self.to_position(span.end);
-        Range { start, end }
-    }
-
-    pub(crate) fn to_location(&self, uri: Url, span: Span) -> Location {
-        let range = self.to_range(span);
-        Location { uri, range }
-    }
 }
