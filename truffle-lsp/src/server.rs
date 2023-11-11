@@ -5,11 +5,11 @@ use std::{
 };
 
 use color_eyre::eyre;
-use lsp_server::{Connection, ExtractError, IoThreads, Message, Request, RequestId, Response};
+use lsp_server::{Connection, IoThreads, Message};
 use lsp_types::{
-    request::{DocumentDiagnosticRequest, GotoDefinition, HoverRequest, References},
+    request::{DocumentDiagnosticRequest, GotoDefinition, HoverRequest, References, Completion},
     DiagnosticOptions, GotoDefinitionParams, GotoDefinitionResponse, InitializeParams, OneOf,
-    ServerCapabilities, WorkDoneProgressOptions,
+    ServerCapabilities, WorkDoneProgressOptions, CompletionOptions, CompletionParams, CompletionResponse, CompletionItem, TextDocumentSyncKind, DocumentDiagnosticReportResult,
 };
 use lsp_types::{
     DocumentDiagnosticParams, DocumentDiagnosticReport, FullDocumentDiagnosticReport, Hover,
@@ -21,6 +21,8 @@ use notify::{
 };
 use tracing::info;
 use truffle::{Engine, LineLookupTable};
+
+mod dispatch;
 
 pub struct Server {
     watcher: INotifyWatcher,
@@ -43,7 +45,7 @@ impl Server {
             connection,
             io_threads,
             engines: Default::default(),
-            default_engine: Engine::new("default_engine"),
+            default_engine: Engine::new(),
         })
     }
 
@@ -82,8 +84,9 @@ impl Server {
         }
     }
 
-    fn main_loop(&self, _params: InitializeParams) -> eyre::Result<()> {
+    fn main_loop(&self, params: InitializeParams) -> eyre::Result<()> {
         info!("starting example main loop");
+        dbg!(params);
 
         if !self.events.is_empty() {
             for res in &self.events {
@@ -101,78 +104,17 @@ impl Server {
                         return Ok(());
                     }
                     info!("got request: {req:?}");
-                    match req.method.as_str() {
-                        "textDocument/definition" => {
-                            match cast::<GotoDefinition>(req) {
-                                Ok((id, params)) => {
-                                    info!("got gotoDefinition request #{id}: {params:?}");
-                                    let definition = self.lsp_goto_definition(params).unwrap();
-                                    let result = serde_json::to_value(&definition).unwrap();
-                                    let resp = Response {
-                                        id,
-                                        result: Some(result),
-                                        error: None,
-                                    };
-                                    self.connection.sender.send(Message::Response(resp))?;
-                                    continue;
-                                }
-                                Err(err @ ExtractError::JsonError { .. }) => panic!("{err:?}"),
-                                Err(ExtractError::MethodMismatch(req)) => req,
-                            };
-                        }
-                        "textDocument/hover" => {
-                            match cast::<HoverRequest>(req) {
-                                Ok((id, params)) => {
-                                    let hover = self.lsp_hover(params);
-                                    let result = serde_json::to_value(&hover).unwrap();
-                                    let resp = Response {
-                                        id,
-                                        result: Some(result),
-                                        error: None,
-                                    };
-                                    self.connection.sender.send(Message::Response(resp))?;
-                                    continue;
-                                }
-                                Err(err @ ExtractError::JsonError { .. }) => panic!("{err:?}"),
-                                Err(ExtractError::MethodMismatch(req)) => req,
-                            };
-                        }
-                        "textDocument/references" => {
-                            match cast::<References>(req) {
-                                Ok((id, params)) => {
-                                    let result = self.lsp_find_all_references(params);
-                                    let result = serde_json::to_value(&result).unwrap();
-                                    let resp = Response {
-                                        id,
-                                        result: Some(result),
-                                        error: None,
-                                    };
-                                    self.connection.sender.send(Message::Response(resp))?;
-                                    continue;
-                                }
-                                Err(err @ ExtractError::JsonError { .. }) => panic!("{err:?}"),
-                                Err(ExtractError::MethodMismatch(req)) => req,
-                            };
-                        }
-                        "textDocument/diagnostic" => {
-                            match cast::<DocumentDiagnosticRequest>(req) {
-                                Ok((id, params)) => {
-                                    let report = self.lsp_check_script(params);
-                                    let result = serde_json::to_value(&report).unwrap();
-                                    let resp = Response {
-                                        id,
-                                        result: Some(result),
-                                        error: None,
-                                    };
-                                    self.connection.sender.send(Message::Response(resp))?;
-                                    continue;
-                                }
-                                Err(err @ ExtractError::JsonError { .. }) => panic!("{err:?}"),
-                                Err(ExtractError::MethodMismatch(req)) => req,
-                            };
-                        }
-                        method => panic!("unsupported request method: {method}"),
-                    }
+                    let mut dispatcher = dispatch::Dispatcher {
+                        request: Some(req),
+                        server: self,
+                    };
+
+                    dispatcher
+                        .dispatch::<GotoDefinition, _>(|param| self.lsp_goto_definition(param))
+                        .dispatch::<HoverRequest, _>(|param| self.lsp_hover(param))
+                        .dispatch::<References, _>(|param| self.lsp_find_all_references(param))
+                        .dispatch::<DocumentDiagnosticRequest, _>(|param| self.lsp_check_script(param))
+                        .dispatch::<Completion, _>(|param| self.lsp_completion(param)) ;
                 }
                 Message::Response(resp) => {
                     info!("got response: {resp:?}");
@@ -197,12 +139,20 @@ impl Server {
         };
 
         ServerCapabilities {
+            text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
             definition_provider: Some(OneOf::Left(true)),
             hover_provider: Some(lsp_types::HoverProviderCapability::Simple(true)),
             references_provider: Some(OneOf::Left(true)),
             diagnostic_provider: Some(lsp_types::DiagnosticServerCapabilities::Options(
                 diagnostic_options,
             )),
+            completion_provider: Some(CompletionOptions {
+                resolve_provider: Some(true),
+                trigger_characters: None,
+                all_commit_characters: None,
+                work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
+                completion_item: None,
+            }),
             ..Default::default()
         }
     }
@@ -219,7 +169,7 @@ impl Server {
             .ancestors()
             .find_map(|path| lock.get(path))
             .unwrap_or(&self.default_engine);
-        let contents = std::fs::read_to_string(path).unwrap();
+        let contents = std::fs::read_to_string(path).ok()?;
         let lookup = LineLookupTable::new(&contents);
         let location = lookup.from_position(params.text_document_position_params.position);
         let location = engine
@@ -234,7 +184,7 @@ impl Server {
     pub fn lsp_check_script(
         &self,
         params: DocumentDiagnosticParams,
-    ) -> Option<DocumentDiagnosticReport> {
+    ) -> DocumentDiagnosticReportResult {
         let path = params.text_document.uri.to_file_path().unwrap();
         let lock = self.engines.lock().unwrap();
         let engine = path
@@ -252,18 +202,19 @@ impl Server {
             related_documents: None,
             full_document_diagnostic_report,
         };
-        Some(DocumentDiagnosticReport::Full(result))
+        let report = DocumentDiagnosticReport::Full(result);
+        DocumentDiagnosticReportResult::Report(report)
     }
 
     pub fn lsp_hover(&self, params: HoverParams) -> Option<Hover> {
         let uri = params.text_document_position_params.text_document.uri;
-        let path = uri.to_file_path().unwrap();
+        let path = uri.to_file_path().ok()?;
         let lock = self.engines.lock().unwrap();
         let engine = path
             .ancestors()
             .find_map(|path| lock.get(path))
             .unwrap_or(&self.default_engine);
-        let contents = std::fs::read_to_string(path).unwrap();
+        let contents = std::fs::read_to_string(path).ok()?;
         let lookup = LineLookupTable::new(&contents);
         let contents = contents.as_bytes();
         let location = lookup.from_position(params.text_document_position_params.position);
@@ -280,13 +231,13 @@ impl Server {
             .text_document
             .uri
             .to_file_path()
-            .unwrap();
+            .ok()?;
         let lock = self.engines.lock().unwrap();
         let engine = path
             .ancestors()
             .find_map(|path| lock.get(path))
             .unwrap_or(&self.default_engine);
-        let contents = std::fs::read_to_string(path).unwrap();
+        let contents = std::fs::read_to_string(path).ok()?;
         let lookup = LineLookupTable::new(&contents);
         let location = lookup.from_position(params.text_document_position.position);
         let references = engine.find_all_references(location, contents.as_bytes());
@@ -302,12 +253,27 @@ impl Server {
                 .collect::<Vec<_>>()
         })
     }
-}
 
-fn cast<R>(req: Request) -> Result<(RequestId, R::Params), ExtractError<Request>>
-where
-    R: lsp_types::request::Request,
-    R::Params: serde::de::DeserializeOwned,
-{
-    req.extract(R::METHOD)
+    pub fn lsp_completion(&self, params: CompletionParams) -> Option<CompletionResponse> {
+        let path = dbg!(&params)
+            .text_document_position
+            .text_document
+            .uri
+            .to_file_path()
+            .ok()?;
+        let lock = self.engines.lock().unwrap();
+        let engine = path
+            .ancestors()
+            .find_map(|path| lock.get(path))
+            .unwrap_or(&self.default_engine);
+        let contents = std::fs::read_to_string(path).ok()?;
+        let lookup = LineLookupTable::new(&contents);
+        let location = lookup.from_position(params.text_document_position.position);
+        let completions = dbg!(engine.completion(location - 1, contents.as_bytes()));
+        let completions = completions.into_iter().map(|completion_text| CompletionItem {
+            label: completion_text,
+            ..Default::default()
+        }).collect();
+        Some(CompletionResponse::Array(completions))
+    }
 }

@@ -34,7 +34,7 @@ pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
 
 #[cfg(not(feature = "async"))]
 pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
-    let mut engine = Engine::new("test_eval");
+    let mut engine = Engine::new();
     register_fn!(engine, "print", print::<i64>);
     register_fn!(engine, "print", print::<f64>);
     register_fn!(engine, "print", print::<bool>);

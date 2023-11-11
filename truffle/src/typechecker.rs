@@ -26,15 +26,19 @@ impl fmt::Debug for TypeId {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+pub struct ScopeId(pub usize);
+
 pub struct Scope {
     pub variables: HashMap<Vec<u8>, NodeId>,
+    pub node_id: NodeId,
 }
 
 impl Scope {
-    pub fn new() -> Self {
+    pub fn new(node_id: NodeId) -> Self {
         Self {
             variables: HashMap::new(),
+            node_id,
         }
     }
 }
@@ -121,6 +125,7 @@ pub struct TypeChecker<'permanent> {
     pub call_resolution: HashMap<NodeId, ExternalFunctionId>,
 
     pub errors: ErrorBatch,
+    pub scope_stack: Vec<ScopeId>,
     pub scope: Vec<Scope>,
 }
 
@@ -154,7 +159,9 @@ impl<'permanent> TypeChecker<'permanent> {
 
             call_resolution: HashMap::new(),
 
-            scope: vec![Scope::new()],
+            scope: vec![],
+            scope_stack: vec![],
+
             permanent_definitions,
         }
     }
@@ -205,7 +212,7 @@ impl<'permanent> TypeChecker<'permanent> {
                     // FIXME: clone to get around ownership issue
                     let nodes = nodes.clone();
 
-                    self.enter_scope();
+                    self.enter_scope(node_id);
                     // FIXME: grab the last one if it's an expression
                     let mut type_id = UNIT_TYPE;
                     for node_id in nodes {
@@ -292,6 +299,12 @@ impl<'permanent> TypeChecker<'permanent> {
             self.node_types = vec![UNKNOWN_TYPE; self.parse_results.ast_nodes.len()];
 
             let last = self.parse_results.ast_nodes.len() - 1;
+
+            let last_node_id = NodeId(last);
+
+            self.scope.push(Scope::new(last_node_id));
+            self.scope_stack.push(ScopeId(0));
+
             self.typecheck_node(NodeId(last));
         }
 
@@ -595,9 +608,13 @@ impl<'permanent> TypeChecker<'permanent> {
     ) {
         let span = self.parse_results.spans[variable_name_node_id.0];
         let variable_name = &self.parse_results.contents[span.start..span.end];
-        self.scope
-            .last_mut()
-            .expect("internal error: missing expected scope frame")
+
+        let current_scope_id = self
+            .scope_stack
+            .last()
+            .expect("internal error: missing scope frame")
+            .clone();
+        self.scope[current_scope_id.0]
             .variables
             .insert(variable_name.to_vec(), variable_name_node_id);
 
@@ -630,8 +647,8 @@ impl<'permanent> TypeChecker<'permanent> {
     }
 
     pub fn find_variable(&self, variable_name: &[u8]) -> Option<NodeId> {
-        for scope in self.scope.iter().rev() {
-            if let Some(result) = scope.variables.get(variable_name) {
+        for scope in self.scope_stack.iter().rev() {
+            if let Some(result) = self.scope[scope.0].variables.get(variable_name) {
                 return Some(*result);
             }
         }
@@ -639,12 +656,13 @@ impl<'permanent> TypeChecker<'permanent> {
         None
     }
 
-    pub fn enter_scope(&mut self) {
-        self.scope.push(Scope::new());
+    pub fn enter_scope(&mut self, node_id: NodeId) {
+        self.scope.push(Scope::new(node_id));
+        self.scope_stack.push(ScopeId(self.scope.len() - 1));
     }
 
     pub fn exit_scope(&mut self) {
-        self.scope.pop();
+        self.scope_stack.pop();
     }
 
     // Debug functionality

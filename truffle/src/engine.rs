@@ -11,7 +11,7 @@ use crate::{
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
 pub struct Engine {
     permanent_definitions: PermanentDefinitions,
-    app_name: String,
+    app_name: Option<String>,
 }
 
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
@@ -52,7 +52,7 @@ impl PermanentDefinitions {
 }
 
 impl Engine {
-    pub fn new(app_name: &str) -> Self {
+    pub fn new() -> Self {
         let permanent_definitions = PermanentDefinitions {
             types: vec![
                 std::any::TypeId::of::<()>(),
@@ -76,8 +76,12 @@ impl Engine {
 
         Self {
             permanent_definitions,
-            app_name: app_name.to_string(),
+            app_name: None,
         }
+    }
+
+    pub fn app_name(&self) -> Option<&str> {
+        self.app_name.as_deref()
     }
 
     pub fn eval_source(
@@ -381,12 +385,76 @@ impl Engine {
         }
     }
 
+    pub fn completion(&self, location: usize, contents: &[u8]) -> Vec<String> {
+        let mut output = vec![];
+
+        let mut lexer = Lexer::new(contents.to_vec(), 0);
+        let tokens = match lexer.lex() {
+            Ok(tokens) => tokens,
+            Err(_) => return output,
+        };
+
+        let mut prefix_start = location;
+
+        loop {
+            eprintln!("prefix build: {:?}", contents[prefix_start] as char);
+            if prefix_start == 0
+                || (!contents[prefix_start].is_ascii_digit()
+                    && !contents[prefix_start].is_ascii_alphabetic()
+                    && contents[prefix_start] != b'_')
+            {
+                prefix_start += 1;
+                break;
+            }
+
+            prefix_start -= 1;
+        }
+
+        let prefix = &contents[prefix_start..=location];
+
+        eprintln!("prefix: {:?}", prefix);
+
+        eprintln!("tokens: {:?}", tokens);
+
+        let mut parser = Parser::new(tokens, contents.to_vec(), 0);
+        let _ = parser.parse();
+
+        eprintln!("parse results: {:?}", parser.results);
+
+        let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+        let _ = typechecker.typecheck();
+
+        let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
+
+        if let Some(node_id) = node_id {
+            let node_span = typechecker.parse_results.spans[node_id.0];
+
+            for scope in typechecker.scope.iter() {
+                let scope_span = typechecker.parse_results.spans[scope.node_id.0];
+
+                if node_span.start >= scope_span.start && node_span.end < scope_span.end {
+                    for (var_name, var_node_id) in scope.variables.iter() {
+                        let var_end = typechecker.parse_results.spans[var_node_id.0].end;
+
+                        if var_end <= location && var_name.starts_with(prefix) {
+                            // Variable is in scope and defined ahead of the completion location
+                            output.push(String::from_utf8_lossy(var_name).to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        output.sort();
+        output
+    }
+
     #[cfg(feature = "lsp")]
     pub fn lsp_cache_writer(&self) -> std::io::BufWriter<std::fs::File> {
         let dirs = directories::ProjectDirs::from("", "truffle", "truffle-lsp").unwrap();
         let path = dbg!(dirs.cache_dir());
         std::fs::create_dir_all(path).unwrap();
-        let app_name = &self.app_name;
+        let app_name = self.app_name.as_ref().expect("this function should only be called if app_name is Some");
         let path = path.join(format!("{app_name}-truffle.lspdata"));
         let file = std::fs::File::create(path).unwrap();
         std::io::BufWriter::new(file)
@@ -783,7 +851,7 @@ macro_rules! register_fn {
     ( $engine:expr, $name: expr, $fun:expr ) => {{
         $engine.register_fn($name, $fun);
         #[cfg(feature = "lsp")]
-        {
+        if $engine.app_name().is_some() {
             let mut writer = $engine.lsp_cache_writer();
             let data = postcard::to_io(&$engine, &mut writer).unwrap();
             let _ = std::io::Write::flush(&mut writer);

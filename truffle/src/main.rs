@@ -112,7 +112,7 @@ where
     let fname = fname.as_ref();
     let contents = source.as_bytes();
 
-    let mut engine = Engine::new("repl");
+    let mut engine = Engine::new();
 
     register_fn!(engine, "print", print::<i64>);
     register_fn!(engine, "print", print::<f64>);
