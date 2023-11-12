@@ -445,6 +445,13 @@ impl Engine {
             }
         }
 
+        // Also look at external functions
+        for external_fn in self.permanent_definitions.external_functions.keys() {
+            if external_fn.starts_with(prefix) {
+                output.push(String::from_utf8_lossy(external_fn).to_string());
+            }
+        }
+
         output.sort();
         output
     }

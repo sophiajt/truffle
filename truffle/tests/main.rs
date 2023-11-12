@@ -3,7 +3,7 @@ mod test_eval;
 
 use assert_matches::assert_matches;
 use test_eval::*;
-use truffle::{Engine, ErrorBatch, ReturnValue, ScriptError};
+use truffle::{register_fn, Engine, ErrorBatch, FnRegister, ReturnValue, ScriptError};
 
 #[test]
 fn math() {
@@ -173,4 +173,17 @@ fn lsp_completion2() {
     eprintln!("result: {:?}", result);
 
     assert_eq!(result, vec!["abc", "abd"])
+}
+
+#[test]
+fn lsp_completion_external() {
+    let mut engine = Engine::new();
+    register_fn!(engine, "add", add::<i64>);
+
+    let result =
+        engine.lsp_completion(41, b"let abc = 123\nlet abd = 456\nlet total = a(abc, abd)");
+
+    eprintln!("result: {:?}", result);
+
+    assert_eq!(result, vec!["add"])
 }
