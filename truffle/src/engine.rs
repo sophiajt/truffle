@@ -47,6 +47,12 @@ impl PermanentDefinitions {
     }
 }
 
+impl Default for Engine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Engine {
     pub fn new() -> Self {
         let permanent_definitions = PermanentDefinitions {
@@ -125,7 +131,7 @@ impl Engine {
 
         evaluator
             .eval(FunctionId(0), &self.permanent_definitions.functions)
-            .map_err(|err| ErrorBatch::one(err))
+            .map_err(ErrorBatch::one)
     }
 
     #[cfg(feature = "async")]
@@ -423,7 +429,7 @@ where
             .permanent_definitions
             .external_functions
             .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
+            .or_default();
         (*ent).push(ExternalFunctionId(id));
     }
 }
@@ -471,7 +477,7 @@ where
             .permanent_definitions
             .external_functions
             .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
+            .or_default();
         (*ent).push(ExternalFunctionId(id));
     }
 }
@@ -534,7 +540,7 @@ where
             .permanent_definitions
             .external_functions
             .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
+            .or_default();
         (*ent).push(ExternalFunctionId(id));
     }
 }
@@ -597,7 +603,7 @@ where
             .permanent_definitions
             .external_functions
             .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
+            .or_default();
         (*ent).push(ExternalFunctionId(id));
     }
 }
@@ -680,7 +686,7 @@ where
             .permanent_definitions
             .external_functions
             .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
+            .or_default();
         (*ent).push(ExternalFunctionId(id));
     }
 }
@@ -763,7 +769,7 @@ where
             .permanent_definitions
             .external_functions
             .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
+            .or_default();
         (*ent).push(ExternalFunctionId(id));
     }
 }

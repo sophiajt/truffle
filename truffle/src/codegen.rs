@@ -14,6 +14,7 @@ pub struct InstructionId(pub usize);
 #[derive(Clone, Copy, Debug)]
 pub struct RegisterId(pub usize);
 
+#[allow(clippy::box_collection)]
 #[derive(Clone, Copy)]
 pub union RegisterValue {
     pub f64: f64,

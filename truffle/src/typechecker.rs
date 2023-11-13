@@ -78,12 +78,6 @@ pub enum Function {
     RemoteFn,
 }
 
-impl Default for Function {
-    fn default() -> Self {
-        Function::RemoteFn
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
 pub struct ExternalFunctionId(pub usize);
