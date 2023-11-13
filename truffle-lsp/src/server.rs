@@ -7,25 +7,43 @@ use std::{
 use color_eyre::eyre;
 use lsp_server::{Connection, IoThreads, Message};
 use lsp_types::{
-    request::{DocumentDiagnosticRequest, GotoDefinition, HoverRequest, References, Completion},
-    DiagnosticOptions, GotoDefinitionParams, GotoDefinitionResponse, InitializeParams, OneOf,
-    ServerCapabilities, WorkDoneProgressOptions, CompletionOptions, CompletionParams, CompletionResponse, CompletionItem, TextDocumentSyncKind, DocumentDiagnosticReportResult,
+    request::{Completion, DocumentDiagnosticRequest, GotoDefinition, HoverRequest, References},
+    CompletionItem, CompletionOptions, CompletionParams, CompletionResponse, DiagnosticOptions,
+    DocumentDiagnosticReportResult, GotoDefinitionParams, GotoDefinitionResponse, InitializeParams,
+    OneOf, ServerCapabilities, TextDocumentSyncKind, WorkDoneProgressOptions,
 };
 use lsp_types::{
     DocumentDiagnosticParams, DocumentDiagnosticReport, FullDocumentDiagnosticReport, Hover,
     HoverParams, Location, ReferenceParams, RelatedFullDocumentDiagnosticReport,
 };
+#[cfg(target_os = "linux")]
+use notify::INotifyWatcher;
 use notify::{
     event::{AccessKind, AccessMode},
-    Event, EventKind, INotifyWatcher, Watcher,
+    Event, EventKind, Watcher,
 };
+
+#[cfg(target_os = "macos")]
+use notify::KqueueWatcher;
+
 use tracing::info;
 use truffle::{Engine, LineLookupTable};
 
 mod dispatch;
 
+#[cfg(target_os = "linux")]
 pub struct Server {
     watcher: INotifyWatcher,
+    events: crossbeam_channel::Receiver<notify::Result<Event>>,
+    connection: Connection,
+    io_threads: IoThreads,
+    engines: Arc<Mutex<HashMap<PathBuf, Engine>>>,
+    default_engine: Engine,
+}
+
+#[cfg(target_os = "macos")]
+pub struct Server {
+    watcher: KqueueWatcher,
     events: crossbeam_channel::Receiver<notify::Result<Event>>,
     connection: Connection,
     io_threads: IoThreads,
@@ -113,8 +131,10 @@ impl Server {
                         .dispatch::<GotoDefinition, _>(|param| self.lsp_goto_definition(param))
                         .dispatch::<HoverRequest, _>(|param| self.lsp_hover(param))
                         .dispatch::<References, _>(|param| self.lsp_find_all_references(param))
-                        .dispatch::<DocumentDiagnosticRequest, _>(|param| self.lsp_check_script(param))
-                        .dispatch::<Completion, _>(|param| self.lsp_completion(param)) ;
+                        .dispatch::<DocumentDiagnosticRequest, _>(|param| {
+                            self.lsp_check_script(param)
+                        })
+                        .dispatch::<Completion, _>(|param| self.lsp_completion(param));
                 }
                 Message::Response(resp) => {
                     info!("got response: {resp:?}");
@@ -139,7 +159,9 @@ impl Server {
         };
 
         ServerCapabilities {
-            text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+            text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Kind(
+                TextDocumentSyncKind::FULL,
+            )),
             definition_provider: Some(OneOf::Left(true)),
             hover_provider: Some(lsp_types::HoverProviderCapability::Simple(true)),
             references_provider: Some(OneOf::Left(true)),
@@ -150,7 +172,9 @@ impl Server {
                 resolve_provider: Some(true),
                 trigger_characters: None,
                 all_commit_characters: None,
-                work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
+                work_done_progress_options: WorkDoneProgressOptions {
+                    work_done_progress: None,
+                },
                 completion_item: None,
             }),
             ..Default::default()
@@ -270,10 +294,13 @@ impl Server {
         let lookup = LineLookupTable::new(&contents);
         let location = lookup.from_position(params.text_document_position.position);
         let completions = dbg!(engine.completion(location - 1, contents.as_bytes()));
-        let completions = completions.into_iter().map(|completion_text| CompletionItem {
-            label: completion_text,
-            ..Default::default()
-        }).collect();
+        let completions = completions
+            .into_iter()
+            .map(|completion_text| CompletionItem {
+                label: completion_text,
+                ..Default::default()
+            })
+            .collect();
         Some(CompletionResponse::Array(completions))
     }
 }
