@@ -4,7 +4,6 @@ Truffle is an experimental embeddable scripting language that offers high perfor
 
 Truffle offers the following compile-time features:
 
-- **reedline** - a readline-like interactive line editor
 - **async** - async version of Truffle
 - **lsp** - LSP-powered IDE support
 
@@ -28,6 +27,12 @@ Some possible future featuers:
 Truffle's current hot loop performance is close to Lua's performance (180ms vs 130ms for a hot loop of 10mil iterations, on a 8 × Intel® Core™ i7-8809G CPU @ 3.10GHz machine with 16 gigs of RAM).
 
 We're hoping to continue improving Truffle's performance to make it flexible to be used in more scripting scenarios.
+
+## REPL
+
+Truffle also comes with a rudimentary REPL you can use to interact with a system. You can enhance this REPL by enabling the 'reedline' feature flag.
+
+Note: each REPL line is independent of the other REPL lines. Variables defined in previous REPL lines are not visible in the following lines. You can think of each line as a distinct script being run.
 
 ## Before going public
 
