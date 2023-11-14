@@ -33,10 +33,8 @@ fn collect_tests() -> anyhow::Result<Vec<Trial>> {
                         .display()
                         .to_string();
 
-                    if !cfg!(feature = "async") {
-                        if name.contains("async") {
-                            continue;
-                        }
+                    if !cfg!(feature = "async") && name.contains("async") {
+                        continue;
                     }
 
                     let test = Trial::test(name, move || eval_source_runner(&path));
