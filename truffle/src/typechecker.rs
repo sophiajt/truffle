@@ -44,6 +44,7 @@ impl Scope {
 }
 
 #[cfg(feature = "async")]
+#[derive(Default)]
 pub enum Function {
     ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
     ExternalFn1(Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
@@ -62,10 +63,12 @@ pub enum Function {
             Box<dyn Any + Send>,
         ) -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>>,
     ),
+    #[default]
     RemoteFn,
 }
 
 #[cfg(not(feature = "async"))]
+#[derive(Default)]
 pub enum Function {
     ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
     ExternalFn1(Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
@@ -79,6 +82,7 @@ pub enum Function {
             ) -> Result<Box<dyn Any>, String>,
         >,
     ),
+    #[default]
     RemoteFn,
 }
 
@@ -606,8 +610,7 @@ impl<'permanent> TypeChecker<'permanent> {
         let current_scope_id = self
             .scope_stack
             .last()
-            .expect("internal error: missing scope frame")
-            .clone();
+            .expect("internal error: missing scope frame");
         self.scope[current_scope_id.0]
             .variables
             .insert(variable_name.to_vec(), variable_name_node_id);
