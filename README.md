@@ -18,7 +18,7 @@ Additionally, you can learn more about the Truffle language in [truffle/docs/lan
 
 Truffle is still in its early stages of development. We're looking for folks who will use it to give us feedback on what they need in practice.
 
-Some possible future featuers:
+Some possible future features:
 
 - support for arrays (and likely also iteration)
 - support for user-defined functions in Truffle scripts
