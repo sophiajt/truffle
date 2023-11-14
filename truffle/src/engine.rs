@@ -1,5 +1,8 @@
 use std::{any::Any, collections::HashMap, path::PathBuf};
 
+#[cfg(feature = "lsp")]
+use crate::parser::Span;
+
 use crate::{
     parser::NodeId, typechecker::ExternalFunctionId, ErrorBatch, Evaluator, Function, FunctionId,
     Lexer, ParseResults, Parser, ReturnValue, Translater, TypeChecker, TypeId,
@@ -8,6 +11,7 @@ use crate::{
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
 pub struct Engine {
     permanent_definitions: PermanentDefinitions,
+    app_name: Option<String>,
 }
 
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
@@ -72,7 +76,12 @@ impl Engine {
 
         Self {
             permanent_definitions,
+            app_name: None,
         }
+    }
+
+    pub fn app_name(&self) -> Option<&str> {
+        self.app_name.as_deref()
     }
 
     pub fn eval_source(
@@ -241,15 +250,15 @@ impl Engine {
         f(self)
     }
 
+    // TODO: replace location here with span
     pub fn get_node_id_at_location(
         &self,
         location: usize,
         parse_results: &ParseResults,
     ) -> Option<NodeId> {
-        for node_id in 0..parse_results.span_start.len() {
-            if location >= parse_results.span_start[node_id]
-                && location < parse_results.span_end[node_id]
-            {
+        for node_id in 0..parse_results.spans.len() {
+            let span = parse_results.spans[node_id];
+            if location >= span.start && location < span.end {
                 return Some(NodeId(node_id));
             }
         }
@@ -257,7 +266,8 @@ impl Engine {
         None
     }
 
-    pub fn lsp_hover(&self, location: usize, contents: &[u8]) -> String {
+    #[cfg(feature = "lsp")]
+    pub fn hover(&self, location: usize, contents: &[u8]) -> String {
         let mut lexer = Lexer::new(contents.to_vec(), 0);
         let tokens = match lexer.lex() {
             Ok(tokens) => tokens,
@@ -280,7 +290,8 @@ impl Engine {
         }
     }
 
-    pub fn lsp_goto_definition(&self, location: usize, contents: &[u8]) -> Option<(usize, usize)> {
+    #[cfg(feature = "lsp")]
+    pub fn goto_definition(&self, location: usize, contents: &[u8]) -> Option<Span> {
         let mut lexer = Lexer::new(contents.to_vec(), 0);
         let tokens = match lexer.lex() {
             Ok(tokens) => tokens,
@@ -296,10 +307,7 @@ impl Engine {
 
         if let Some(node_id) = node_id {
             if let Some(def_site_node_id) = typechecker.variable_def_site.get(&node_id) {
-                Some((
-                    typechecker.parse_results.span_start[def_site_node_id.0],
-                    typechecker.parse_results.span_end[def_site_node_id.0],
-                ))
+                Some(typechecker.parse_results.spans[def_site_node_id.0])
             } else {
                 None
             }
@@ -308,7 +316,8 @@ impl Engine {
         }
     }
 
-    pub fn lsp_check_script(&self, contents: &[u8]) -> Option<ErrorBatch> {
+    #[cfg(feature = "lsp")]
+    pub fn check_script(&self, contents: &[u8]) -> Option<ErrorBatch> {
         let mut lexer = Lexer::new(contents.to_vec(), 0);
 
         let tokens = match lexer.lex() {
@@ -335,11 +344,8 @@ impl Engine {
         }
     }
 
-    pub fn lsp_find_all_references(
-        &self,
-        location: usize,
-        contents: &[u8],
-    ) -> Option<Vec<(usize, usize)>> {
+    #[cfg(feature = "lsp")]
+    pub fn find_all_references(&self, location: usize, contents: &[u8]) -> Option<Vec<Span>> {
         let mut lexer = Lexer::new(contents.to_vec(), 0);
         let tokens = match lexer.lex() {
             Ok(tokens) => tokens,
@@ -360,27 +366,101 @@ impl Engine {
 
         if let Some(node_id) = node_id {
             if let Some(def_site_node_id) = typechecker.variable_def_site.get(&node_id) {
-                let mut output = vec![(
-                    typechecker.parse_results.span_start[def_site_node_id.0],
-                    typechecker.parse_results.span_end[def_site_node_id.0],
-                )];
+                let mut output = vec![typechecker.parse_results.spans[def_site_node_id.0]];
 
                 for (key, value) in typechecker.variable_def_site.iter() {
                     if value == def_site_node_id {
-                        output.push((
-                            typechecker.parse_results.span_start[key.0],
-                            typechecker.parse_results.span_end[key.0],
-                        ))
+                        output.push(typechecker.parse_results.spans[key.0])
                     }
                 }
 
                 Some(output)
             } else {
+                dbg!(());
                 None
             }
         } else {
+            dbg!(());
             None
         }
+    }
+
+    pub fn completion(&self, location: usize, contents: &[u8]) -> Vec<String> {
+        let mut output = vec![];
+
+        let mut lexer = Lexer::new(contents.to_vec(), 0);
+        let tokens = match lexer.lex() {
+            Ok(tokens) => tokens,
+            Err(_) => return output,
+        };
+
+        let mut prefix_start = location;
+
+        loop {
+            eprintln!("prefix build: {:?}", contents[prefix_start] as char);
+            if prefix_start == 0
+                || (!contents[prefix_start].is_ascii_digit()
+                    && !contents[prefix_start].is_ascii_alphabetic()
+                    && contents[prefix_start] != b'_')
+            {
+                prefix_start += 1;
+                break;
+            }
+
+            prefix_start -= 1;
+        }
+
+        let prefix = &contents[prefix_start..=location];
+
+        eprintln!("prefix: {:?}", prefix);
+
+        eprintln!("tokens: {:?}", tokens);
+
+        let mut parser = Parser::new(tokens, contents.to_vec(), 0);
+        let _ = parser.parse();
+
+        eprintln!("parse results: {:?}", parser.results);
+
+        let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
+        let _ = typechecker.typecheck();
+
+        let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
+
+        if let Some(node_id) = node_id {
+            let node_span = typechecker.parse_results.spans[node_id.0];
+
+            for scope in typechecker.scope.iter() {
+                let scope_span = typechecker.parse_results.spans[scope.node_id.0];
+
+                if node_span.start >= scope_span.start && node_span.end < scope_span.end {
+                    for (var_name, var_node_id) in scope.variables.iter() {
+                        let var_end = typechecker.parse_results.spans[var_node_id.0].end;
+
+                        if var_end <= location && var_name.starts_with(prefix) {
+                            // Variable is in scope and defined ahead of the completion location
+                            output.push(String::from_utf8_lossy(var_name).to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        output.sort();
+        output
+    }
+
+    #[cfg(feature = "lsp")]
+    pub fn lsp_cache_writer(&self) -> std::io::BufWriter<std::fs::File> {
+        let dirs = directories::ProjectDirs::from("", "truffle", "truffle-lsp").unwrap();
+        let path = dbg!(dirs.cache_dir());
+        std::fs::create_dir_all(path).unwrap();
+        let app_name = self
+            .app_name
+            .as_ref()
+            .expect("this function should only be called if app_name is Some");
+        let path = path.join(format!("{app_name}-truffle.lspdata"));
+        let file = std::fs::File::create(path).unwrap();
+        std::io::BufWriter::new(file)
     }
 }
 
@@ -771,7 +851,13 @@ where
 #[cfg(not(feature = "async"))]
 #[macro_export]
 macro_rules! register_fn {
-    ( $typechecker:expr, $name: expr, $fun:expr ) => {{
-        $typechecker.register_fn($name, $fun)
+    ( $engine:expr, $name: expr, $fun:expr ) => {{
+        $engine.register_fn($name, $fun);
+        #[cfg(feature = "lsp")]
+        if $engine.app_name().is_some() {
+            let mut writer = $engine.lsp_cache_writer();
+            let data = postcard::to_io(&$engine, &mut writer).unwrap();
+            let _ = std::io::Write::flush(&mut writer);
+        }
     }};
 }

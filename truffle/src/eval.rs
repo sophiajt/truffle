@@ -3,7 +3,7 @@ use std::any::Any;
 use crate::{
     codegen::{FunctionCodegen, Instruction, InstructionId, RegisterId, RegisterValue},
     engine::ExternalFnRecord,
-    parser::NodeId,
+    parser::{NodeId, Span},
     typechecker::{ExternalFunctionId, Function, FunctionId, STRING_TYPE},
     ScriptError, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, UNIT_TYPE,
 };
@@ -21,8 +21,7 @@ pub struct Evaluator {
     pub source_map: Vec<NodeId>,
     pub current_frame: usize,
 
-    pub span_start: Vec<usize>,
-    pub span_end: Vec<usize>,
+    pub spans: Vec<Span>,
 
     // Indexed by FunctionId
     pub functions: Vec<StackFrame>,
@@ -67,8 +66,7 @@ impl Evaluator {
         self.instructions.append(&mut function_codegen.instructions);
         self.source_map.append(&mut function_codegen.source_map);
 
-        self.span_start = function_codegen.span_start;
-        self.span_end = function_codegen.span_end;
+        self.spans = function_codegen.spans;
 
         self.functions.push(stack_frame);
     }
@@ -614,13 +612,11 @@ impl Evaluator {
     }
 
     pub fn error(&self, msg: impl Into<String>, node_id: NodeId) -> ScriptError {
-        let span_start = self.span_start[node_id.0];
-        let span_end = self.span_end[node_id.0];
+        let span = self.spans[node_id.0];
 
         ScriptError {
             message: msg.into(),
-            span_start,
-            span_end,
+            span,
         }
     }
 }

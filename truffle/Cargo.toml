@@ -6,14 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+directories = { version = "5.0.1", optional = true }
 futures = { version = "0.3", optional = true }
-postcard = { version = "1.0.8", features = ["alloc"], optional = true }
+lsp-types = { version = "0.94.1", optional = true }
+postcard = { version = "1.0.8", features = ["alloc", "use-std"], optional = true }
 reedline = { version = "0.21.0", features = ["bashisms"], optional = true}
 serde = { version = "1.0", features = ["derive"], optional = true }
 truffle-attributes = { path = "../truffle-attributes", version = "0.1.0", optional = true }
 
 [features]
-lsp = ["serde", "postcard"]
+lsp = ["serde", "postcard", "lsp-types", "directories"]
 async = ["dep:futures", "truffle-attributes"]
 
 [dev-dependencies]
