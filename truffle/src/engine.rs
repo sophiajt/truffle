@@ -454,7 +454,10 @@ impl Engine {
         let dirs = directories::ProjectDirs::from("", "truffle", "truffle-lsp").unwrap();
         let path = dbg!(dirs.cache_dir());
         std::fs::create_dir_all(path).unwrap();
-        let app_name = self.app_name.as_ref().expect("this function should only be called if app_name is Some");
+        let app_name = self
+            .app_name
+            .as_ref()
+            .expect("this function should only be called if app_name is Some");
         let path = path.join(format!("{app_name}-truffle.lspdata"));
         let file = std::fs::File::create(path).unwrap();
         std::io::BufWriter::new(file)

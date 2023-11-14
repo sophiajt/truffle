@@ -1,10 +1,11 @@
-use std::{
+        use std::{
     collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
 
 use color_eyre::eyre;
+use eyre::eyre;
 use lsp_server::{Connection, IoThreads, Message};
 use lsp_types::{
     request::{Completion, DocumentDiagnosticRequest, GotoDefinition, HoverRequest, References},
@@ -75,9 +76,9 @@ impl Server {
         self.watcher.watch(path, recursive_mode)?;
 
         let capabilities = Self::capabilities();
-        let capabilities = serde_json::to_value(capabilities).unwrap();
+        let capabilities = serde_json::to_value(capabilities)?;
         let params = self.connection.initialize(capabilities)?;
-        let params = serde_json::from_value(params).unwrap();
+        let params = serde_json::from_value(params)?;
 
         self.main_loop(params)?;
         self.io_threads.join()?;
@@ -86,7 +87,6 @@ impl Server {
     }
 
     fn handle_event(&self, event: Event) {
-        dbg!(&event);
         for path in event.paths {
             match event.kind {
                 EventKind::Access(AccessKind::Close(AccessMode::Write)) => {
@@ -95,7 +95,6 @@ impl Server {
                     let engine = postcard::from_bytes(&bytes)
                         .expect("cache dir should only contain valid serialized engines");
                     self.engines.lock().unwrap().insert(path, engine);
-                    dbg!(());
                 }
                 _ => {}
             }
@@ -104,7 +103,6 @@ impl Server {
 
     fn main_loop(&self, params: InitializeParams) -> eyre::Result<()> {
         info!("starting example main loop");
-        dbg!(params);
 
         if !self.events.is_empty() {
             for res in &self.events {
@@ -128,13 +126,13 @@ impl Server {
                     };
 
                     dispatcher
-                        .dispatch::<GotoDefinition, _>(|param| self.lsp_goto_definition(param))
-                        .dispatch::<HoverRequest, _>(|param| self.lsp_hover(param))
-                        .dispatch::<References, _>(|param| self.lsp_find_all_references(param))
+                        .dispatch::<GotoDefinition, _>(|param| self.lsp_goto_definition(param))?
+                        .dispatch::<HoverRequest, _>(|param| self.lsp_hover(param))?
+                        .dispatch::<References, _>(|param| self.lsp_find_all_references(param))?
                         .dispatch::<DocumentDiagnosticRequest, _>(|param| {
                             self.lsp_check_script(param)
-                        })
-                        .dispatch::<Completion, _>(|param| self.lsp_completion(param));
+                        })?
+                        .dispatch::<Completion, _>(|param| self.lsp_completion(param))?;
                 }
                 Message::Response(resp) => {
                     info!("got response: {resp:?}");
@@ -181,41 +179,48 @@ impl Server {
         }
     }
 
-    fn lsp_goto_definition(&self, params: GotoDefinitionParams) -> Option<GotoDefinitionResponse> {
+    fn lsp_goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> eyre::Result<Option<GotoDefinitionResponse>> {
         let path = params
             .text_document_position_params
             .text_document
             .uri
             .to_file_path()
-            .unwrap();
+            .map_err(|()| eyre!("unsupported uri format"))?;
         let lock = self.engines.lock().unwrap();
         let engine = path
             .ancestors()
             .find_map(|path| lock.get(path))
             .unwrap_or(&self.default_engine);
-        let contents = std::fs::read_to_string(path).ok()?;
+        let contents = std::fs::read_to_string(path)?;
         let lookup = LineLookupTable::new(&contents);
         let location = lookup.from_position(params.text_document_position_params.position);
-        let location = engine
-            .goto_definition(location, contents.as_bytes())
-            .unwrap();
+        let Some(location) = engine.goto_definition(location, contents.as_bytes()) else {
+            return Ok(None);
+        };
         let uri = params.text_document_position_params.text_document.uri;
-        Some(GotoDefinitionResponse::Scalar(
+        Ok(Some(GotoDefinitionResponse::Scalar(
             lookup.to_location(uri, location),
-        ))
+        )))
     }
 
     pub fn lsp_check_script(
         &self,
         params: DocumentDiagnosticParams,
-    ) -> DocumentDiagnosticReportResult {
-        let path = params.text_document.uri.to_file_path().unwrap();
+    ) -> eyre::Result<DocumentDiagnosticReportResult> {
+        let path = params
+            .text_document
+            .uri
+            .to_file_path()
+            .map_err(|()| eyre!("unsupported uri format"))?;
         let lock = self.engines.lock().unwrap();
         let engine = path
             .ancestors()
             .find_map(|path| lock.get(path))
             .unwrap_or(&self.default_engine);
-        let contents = std::fs::read_to_string(&path).unwrap();
+        let contents = std::fs::read_to_string(&path)?;
         let items = match engine.check_script(contents.as_bytes()) {
             Some(items) => items.as_diagnostics_with(contents.as_bytes()),
             None => vec![],
@@ -227,18 +232,20 @@ impl Server {
             full_document_diagnostic_report,
         };
         let report = DocumentDiagnosticReport::Full(result);
-        DocumentDiagnosticReportResult::Report(report)
+        Ok(DocumentDiagnosticReportResult::Report(report))
     }
 
-    pub fn lsp_hover(&self, params: HoverParams) -> Option<Hover> {
+    pub fn lsp_hover(&self, params: HoverParams) -> eyre::Result<Option<Hover>> {
         let uri = params.text_document_position_params.text_document.uri;
-        let path = uri.to_file_path().ok()?;
+        let path = uri
+            .to_file_path()
+            .map_err(|()| eyre!("unsupported uri format"))?;
         let lock = self.engines.lock().unwrap();
         let engine = path
             .ancestors()
             .find_map(|path| lock.get(path))
             .unwrap_or(&self.default_engine);
-        let contents = std::fs::read_to_string(path).ok()?;
+        let contents = std::fs::read_to_string(path)?;
         let lookup = LineLookupTable::new(&contents);
         let contents = contents.as_bytes();
         let location = lookup.from_position(params.text_document_position_params.position);
@@ -246,26 +253,29 @@ impl Server {
         let contents = lsp_types::MarkedString::from_markdown(markdown);
         let contents = lsp_types::HoverContents::Scalar(contents);
         let range = None;
-        Some(Hover { contents, range })
+        Ok(Some(Hover { contents, range }))
     }
 
-    pub fn lsp_find_all_references(&self, params: ReferenceParams) -> Option<Vec<Location>> {
+    pub fn lsp_find_all_references(
+        &self,
+        params: ReferenceParams,
+    ) -> eyre::Result<Option<Vec<Location>>> {
         let path = params
             .text_document_position
             .text_document
             .uri
             .to_file_path()
-            .ok()?;
+            .map_err(|()| eyre!("unsupported uri format"))?;
         let lock = self.engines.lock().unwrap();
         let engine = path
             .ancestors()
             .find_map(|path| lock.get(path))
             .unwrap_or(&self.default_engine);
-        let contents = std::fs::read_to_string(path).ok()?;
+        let contents = std::fs::read_to_string(path)?;
         let lookup = LineLookupTable::new(&contents);
         let location = lookup.from_position(params.text_document_position.position);
         let references = engine.find_all_references(location, contents.as_bytes());
-        references.map(|references| {
+        Ok(references.map(|references| {
             references
                 .into_iter()
                 .map(|location| {
@@ -275,25 +285,28 @@ impl Server {
                     )
                 })
                 .collect::<Vec<_>>()
-        })
+        }))
     }
 
-    pub fn lsp_completion(&self, params: CompletionParams) -> Option<CompletionResponse> {
-        let path = dbg!(&params)
+    pub fn lsp_completion(
+        &self,
+        params: CompletionParams,
+    ) -> eyre::Result<Option<CompletionResponse>> {
+        let path = &params
             .text_document_position
             .text_document
             .uri
             .to_file_path()
-            .ok()?;
+            .map_err(|()| eyre!("unsupported uri format"))?;
         let lock = self.engines.lock().unwrap();
         let engine = path
             .ancestors()
             .find_map(|path| lock.get(path))
             .unwrap_or(&self.default_engine);
-        let contents = std::fs::read_to_string(path).ok()?;
+        let contents = std::fs::read_to_string(path)?;
         let lookup = LineLookupTable::new(&contents);
         let location = lookup.from_position(params.text_document_position.position);
-        let completions = dbg!(engine.completion(location - 1, contents.as_bytes()));
+        let completions = engine.completion(location - 1, contents.as_bytes());
         let completions = completions
             .into_iter()
             .map(|completion_text| CompletionItem {
@@ -301,6 +314,6 @@ impl Server {
                 ..Default::default()
             })
             .collect();
-        Some(CompletionResponse::Array(completions))
+        Ok(Some(CompletionResponse::Array(completions)))
     }
 }
