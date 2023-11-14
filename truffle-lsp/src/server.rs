@@ -88,20 +88,17 @@ impl Server {
 
     fn handle_event(&self, event: Event) {
         for path in event.paths {
-            match event.kind {
-                EventKind::Access(AccessKind::Close(AccessMode::Write)) => {
-                    let bytes = std::fs::read(&path)
-                        .expect("only interpretters should write files to cache dir and all their files should be valid");
-                    let engine = postcard::from_bytes(&bytes)
-                        .expect("cache dir should only contain valid serialized engines");
-                    self.engines.lock().unwrap().insert(path, engine);
-                }
-                _ => {}
+            if let EventKind::Access(AccessKind::Close(AccessMode::Write)) = event.kind {
+                let bytes = std::fs::read(&path)
+                    .expect("only interpretters should write files to cache dir and all their files should be valid");
+                let engine = postcard::from_bytes(&bytes)
+                    .expect("cache dir should only contain valid serialized engines");
+                self.engines.lock().unwrap().insert(path, engine);
             }
         }
     }
 
-    fn main_loop(&self, params: InitializeParams) -> eyre::Result<()> {
+    fn main_loop(&self, _params: InitializeParams) -> eyre::Result<()> {
         info!("starting example main loop");
 
         if !self.events.is_empty() {

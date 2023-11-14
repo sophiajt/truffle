@@ -9,7 +9,7 @@ name: continuous-integration
 env:
   NUSHELL_CARGO_PROFILE: ci
   NU_LOG_LEVEL: DEBUG
-  CLIPPY_OPTIONS: "-D warnings -D clippy::unwrap_used"
+  CLIPPY_OPTIONS: "-D warnings"
 
 jobs:
   fmt-clippy:
@@ -39,11 +39,11 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --workspace ${{ matrix.flags }} --exclude nu_plugin_* -- $CLIPPY_OPTIONS
+        run: cargo clippy --workspace ${{ matrix.flags }} -- $CLIPPY_OPTIONS
 
         # In tests we don't have to deny unwrap
       - name: Clippy of tests
-        run: cargo clippy --tests --workspace ${{ matrix.flags }} --exclude nu_plugin_* -- -D warnings
+        run: cargo clippy --tests --workspace ${{ matrix.flags }} -- -D warnings
 
   tests:
     strategy:
