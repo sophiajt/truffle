@@ -544,7 +544,7 @@ impl Lexer {
                         x as char
                     ),
                     Span {
-                        start: start,
+                        start,
                         end: start + 1,
                     },
                 );
