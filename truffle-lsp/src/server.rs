@@ -1,6 +1,7 @@
-use std::{collections::HashMap, ffi::OsString};
+use std::{collections::HashMap, ffi::OsString, path::Path};
 
 use color_eyre::eyre;
+use eyre::eyre;
 use lsp_server::{Connection, IoThreads, Message};
 use lsp_types::{
     notification::{DidChangeConfiguration, DidChangeTextDocument, DidOpenTextDocument},
@@ -111,6 +112,19 @@ impl Server {
         let dirs = directories::ProjectDirs::from("", "truffle", "truffle-lsp").unwrap();
         let path = dirs.cache_dir();
         std::fs::create_dir_all(path)?;
+        for entry in std::fs::read_dir(path)? {
+            let entry = entry?;
+            match entry.file_type() {
+                Ok(file_type) if file_type.is_file() => {}
+                _ => continue,
+            }
+            let Ok((flavor, engine)) = Self::load_engine(&entry.path()) else {
+                continue;
+            };
+            dbg!(&flavor);
+            self.engines.insert(flavor, engine);
+        }
+
         let recursive_mode = notify::RecursiveMode::NonRecursive;
         self.watcher.watch(path, recursive_mode)?;
 
@@ -128,21 +142,37 @@ impl Server {
     fn handle_event(&mut self, event: Event) {
         for path in event.paths {
             if let EventKind::Access(AccessKind::Close(AccessMode::Write)) = event.kind {
-                let Some(extension) = path.extension() else {
+                let Ok((flavor, engine)) = Self::load_engine(&path) else {
                     return;
                 };
-                if extension != "lspdata" {
-                    return;
-                };
-                let Some(name) = path.file_stem() else { return };
-
-                let bytes = std::fs::read(&path)
-                    .expect("only interpretters should write files to cache dir and all their files should be valid");
-                let engine = postcard::from_bytes(&bytes)
-                    .expect("cache dir should only contain valid serialized engines");
-                self.engines.insert(name.to_os_string(), engine);
+                self.engines.insert(flavor, engine);
             }
         }
+    }
+
+    fn flavor_from_path(path: &Path) -> eyre::Result<OsString> {
+        let extension = path
+            .extension()
+            .ok_or_else(|| eyre!("path does not have an extension"))?;
+        if extension != "lspdata" && extension != "truffle" {
+            return Err(eyre!("path ends in invalid extension"));
+        };
+        let name: &Path = path
+            .file_stem()
+            .ok_or_else(|| eyre!("path doesn't have a non extension portion"))?
+            .as_ref();
+        let flavor = name
+            .extension()
+            .ok_or_else(|| eyre!("path does not have a truffle variant extension"))?
+            .to_os_string();
+        Ok(flavor)
+    }
+
+    fn load_engine(path: &Path) -> eyre::Result<(OsString, Engine)> {
+        let flavor = Self::flavor_from_path(path)?;
+        let bytes = std::fs::read(path)?;
+        let engine = postcard::from_bytes(&bytes)?;
+        Ok((flavor, engine))
     }
 
     fn main_loop(&mut self, params: InitializeParams) -> eyre::Result<()> {
@@ -315,9 +345,15 @@ impl Server {
         Ok(Some(CompletionResponse::Array(completions)))
     }
 
-    fn engine_for(&self, _uri: &Url) -> &Engine {
+    fn engine_for(&self, uri: &Url) -> &Engine {
         // TODO: lookup proper engine
-        &self.default_engine
+        let path = uri.to_file_path().unwrap();
+        let Ok(flavor) = dbg!(Self::flavor_from_path(dbg!(&path))) else {
+            return &self.default_engine;
+        };
+        self.engines
+            .get(dbg!(&flavor))
+            .unwrap_or(&self.default_engine)
     }
 }
 

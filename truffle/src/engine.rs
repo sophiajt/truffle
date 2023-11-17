@@ -464,9 +464,16 @@ impl Engine {
             .app_name
             .as_ref()
             .expect("this function should only be called if app_name is Some");
-        let path = path.join(format!("{app_name}-truffle.lspdata"));
+        let path = path.join(format!("truffle.{app_name}.lspdata"));
         let file = std::fs::File::create(path).unwrap();
         std::io::BufWriter::new(file)
+    }
+
+    pub fn set_app_name<'a, T>(&mut self, app_name: T)
+    where
+        T: Into<Option<&'a str>>,
+    {
+        self.app_name = app_name.into().map(String::from);
     }
 }
 
