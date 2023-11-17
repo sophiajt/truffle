@@ -46,7 +46,7 @@ pub struct Server {
     events: crossbeam_channel::Receiver<notify::Result<Event>>,
     connection: Connection,
     io_threads: IoThreads,
-    engines: HashMap<String, Engine>,
+    engines: HashMap<OsString, Engine>,
     default_engine: Engine,
 }
 
