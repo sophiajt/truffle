@@ -4,6 +4,7 @@ members = [
     "truffle",
     "truffle-attributes",
     "truffle-lsp",
+    "sample_projects/cli"
 ]
 
 resolver = "2"
