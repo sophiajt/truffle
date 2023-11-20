@@ -303,7 +303,7 @@ impl Server {
         let contents = std::fs::read_to_string(path)?;
         let lookup = LineLookupTable::new(&contents);
         let location = lookup.from_position(params.text_document_position.position);
-        let completions = engine.completion(location - 1, contents.as_bytes());
+        let completions = engine.completion(location, contents.as_bytes());
         let completions = completions
             .into_iter()
             .map(|completion_text| CompletionItem {
