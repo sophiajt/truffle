@@ -32,6 +32,9 @@ pub struct PermanentDefinitions {
     // List of all registered functions
     pub functions: Vec<ExternalFnRecord>,
 
+    // Info about all registered functions
+    pub function_infos: Vec<ExternalFnRecordInfo>,
+
     // Externally-registered functions
     pub external_functions: HashMap<Vec<u8>, Vec<ExternalFunctionId>>,
 }
@@ -78,6 +81,7 @@ impl Engine {
             future_of_map: HashMap::new(),
             external_functions: HashMap::new(),
             functions: vec![],
+            function_infos: vec![],
         };
 
         Self {
@@ -299,27 +303,25 @@ impl Engine {
     #[cfg(feature = "lsp")]
     pub fn goto_definition(&self, location: usize, contents: &[u8]) -> Option<Span> {
         let mut lexer = Lexer::new(contents.to_vec(), 0);
-        let tokens = match lexer.lex() {
-            Ok(tokens) => tokens,
-            Err(_) => return None,
-        };
+        let tokens = lexer.lex().ok()?;
         let mut parser = Parser::new(tokens, contents.to_vec(), 0);
         let _ = parser.parse();
 
         let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
         let _ = typechecker.typecheck();
 
-        let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
-
-        if let Some(node_id) = node_id {
-            if let Some(def_site_node_id) = typechecker.variable_def_site.get(&node_id) {
-                Some(typechecker.parse_results.spans[def_site_node_id.0])
-            } else {
-                None
+        let node_id = self.get_node_id_at_location(location, &typechecker.parse_results)?;
+        let def_site_node_id = match dbg!(&typechecker.parse_results.ast_nodes[node_id.0]) {
+            crate::parser::AstNode::Variable => typechecker.variable_def_site.get(&node_id)?,
+            crate::parser::AstNode::Name => {
+                let record = typechecker.parse_results.contents_for(node_id);
+                dbg!(record);
+                return None;
             }
-        } else {
-            None
-        }
+            _ => return None,
+        };
+
+        Some(typechecker.parse_results.spans[def_site_node_id.0])
     }
 
     #[cfg(feature = "lsp")]
@@ -497,6 +499,12 @@ pub struct ExternalFnRecord {
     pub fun: Function,
 }
 
+#[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug)]
+pub struct ExternalFnRecordInfo {
+    name: String,
+}
+
 pub trait FnRegister<A, RetVal, Args> {
     fn register_fn(&mut self, name: &str, fun: A);
 }
@@ -521,6 +529,12 @@ where
             ret,
             fun: Function::ExternalFn0(wrapped),
         });
+
+        self.permanent_definitions
+            .function_infos
+            .push(ExternalFnRecordInfo {
+                name: name.to_string(),
+            });
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -569,6 +583,11 @@ where
             ret,
             fun: Function::ExternalFn1(wrapped),
         });
+        self.permanent_definitions
+            .function_infos
+            .push(ExternalFnRecordInfo {
+                name: name.to_string(),
+            });
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -632,6 +651,11 @@ where
             fun: Function::ExternalFn2(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
+        self.permanent_definitions
+            .function_infos
+            .push(ExternalFnRecordInfo {
+                name: name.to_string(),
+            });
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -695,6 +719,11 @@ where
             fun: Function::ExternalFn2(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
+        self.permanent_definitions
+            .function_infos
+            .push(ExternalFnRecordInfo {
+                name: name.to_string(),
+            });
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -778,6 +807,11 @@ where
             fun: Function::ExternalFn3(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
+        self.permanent_definitions
+            .function_infos
+            .push(ExternalFnRecordInfo {
+                name: name.to_string(),
+            });
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -861,6 +895,11 @@ where
             fun: Function::ExternalFn3(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
+        self.permanent_definitions
+            .function_infos
+            .push(ExternalFnRecordInfo {
+                name: name.to_string(),
+            });
 
         let id = self.permanent_definitions.functions.len() - 1;
 

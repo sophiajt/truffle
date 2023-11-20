@@ -1363,4 +1363,9 @@ impl ParseResults {
             }
         }
     }
+
+    pub(crate) fn contents_for(&self, node_id: NodeId) -> &[u8] {
+        let span = self.spans[node_id.0];
+        &self.contents[span.start..span.end]
+    }
 }

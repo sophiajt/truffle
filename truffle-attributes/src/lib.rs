@@ -40,7 +40,18 @@ pub fn register_fn(input: TokenStream) -> TokenStream {
         ident_segment.ident = format_ident!("register_{}", ident_segment.ident);
         path
     };
+    let register_lsp_info = {
+        let mut path = fun.path.clone();
+        let ident_segment = path
+            .segments
+            .last_mut()
+            .expect("path should always have at least one segment");
+        ident_segment.ident = format_ident!("register_lsp_info_{}", ident_segment.ident);
+        path
+    };
+
     quote! {
+        engine.with(#register_lsp_info());
         if #fun_is_async() {
             #engine.with(#register_fun())
         } else {
