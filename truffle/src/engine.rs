@@ -260,6 +260,11 @@ impl Engine {
         f(self)
     }
 
+    #[cfg(feature = "lsp")]
+    pub fn add_lsp_info(&mut self, name: &str, location: &'static std::panic::Location<'static>) {
+        dbg!(name, location);
+    }
+
     // TODO: replace location here with span
     pub fn get_node_id_at_location(
         &self,

@@ -71,21 +71,25 @@ fn foo(item: TokenStream) -> Result<proc_macro2::TokenStream, syn::Error> {
     let output = if input.sig.asyncness.is_some() {
         let register_fn = generate::register_fn(input.clone())?;
         let fn_is_async = generate::fn_is_async(input.clone())?;
+        let register_lsp_info = generate::register_lsp_info(input.clone())?;
 
         quote! {
             #input
 
             #register_fn
             #fn_is_async
+            #register_lsp_info
         }
     } else {
         let register_fn = generate::register_fn_stub(input.clone()).expect("stub should generate");
         let fn_is_async = generate::fn_is_async(input.clone())?;
+        let register_lsp_info = generate::register_lsp_info(input.clone())?;
         quote! {
             #input
 
             #register_fn
             #fn_is_async
+            #register_lsp_info
         }
     };
     Ok(output)
@@ -111,6 +115,27 @@ mod generate {
                 #registration_closure
             }
         })
+    }
+
+    pub(crate) fn register_lsp_info(input: ItemFn) -> Result<TokenStream, syn::Error> {
+        let wrapped_fn_name = input.sig.ident.to_string();
+        let mut fn_register_lsp_info = input;
+        fn_register_lsp_info.sig.asyncness = None;
+        fn_register_lsp_info.sig.ident = format_ident!("register_lsp_info_{wrapped_fn_name}");
+        fn_register_lsp_info.sig.output = syn::parse_str("-> impl Fn(&mut truffle::Engine)")
+            .expect("this should parse as a return type");
+        fn_register_lsp_info.sig.inputs = Default::default();
+        fn_register_lsp_info.block = parse_quote! {
+            {
+                |engine: &mut truffle::Engine| {
+                    engine.add_lsp_info(#wrapped_fn_name, std::panic::Location::caller());
+                }
+            }
+        };
+        let tokens = quote! {
+            #fn_register_lsp_info
+        };
+        Ok(tokens)
     }
 
     pub fn register_fn_stub(input: ItemFn) -> Result<TokenStream, syn::Error> {
