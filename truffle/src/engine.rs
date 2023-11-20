@@ -1,5 +1,7 @@
 use std::{any::Any, collections::HashMap, path::PathBuf};
 
+use lsp_types::Url;
+
 #[cfg(feature = "lsp")]
 use crate::parser::Span;
 
@@ -37,6 +39,12 @@ pub struct PermanentDefinitions {
 
     // Externally-registered functions
     pub external_functions: HashMap<Vec<u8>, Vec<ExternalFunctionId>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SpanOrLocation {
+    Span(Span),
+    ExternalLocation(Url, usize), // filename and position
 }
 
 impl PermanentDefinitions {
@@ -262,6 +270,12 @@ impl Engine {
 
     #[cfg(feature = "lsp")]
     pub fn add_lsp_info(&mut self, name: &str, location: &'static std::panic::Location<'static>) {
+        // name -> function name
+        // uri -> location.file()
+        // position -> location.line(), location.column()
+
+        // self.register_fn(name, fun)
+
         dbg!(name, location);
     }
 
@@ -306,7 +320,7 @@ impl Engine {
     }
 
     #[cfg(feature = "lsp")]
-    pub fn goto_definition(&self, location: usize, contents: &[u8]) -> Option<Span> {
+    pub fn goto_definition(&self, location: usize, contents: &[u8]) -> Option<SpanOrLocation> {
         let mut lexer = Lexer::new(contents.to_vec(), 0);
         let tokens = lexer.lex().ok()?;
         let mut parser = Parser::new(tokens, contents.to_vec(), 0);
@@ -316,17 +330,20 @@ impl Engine {
         let _ = typechecker.typecheck();
 
         let node_id = self.get_node_id_at_location(location, &typechecker.parse_results)?;
-        let def_site_node_id = match dbg!(&typechecker.parse_results.ast_nodes[node_id.0]) {
-            crate::parser::AstNode::Variable => typechecker.variable_def_site.get(&node_id)?,
+        match dbg!(&typechecker.parse_results.ast_nodes[node_id.0]) {
+            crate::parser::AstNode::Variable => Some(
+                typechecker
+                    .variable_def_site
+                    .get(&node_id)
+                    .map(|x| SpanOrLocation::Span(typechecker.parse_results.spans[x.0])),
+            )?,
             crate::parser::AstNode::Name => {
                 let record = typechecker.parse_results.contents_for(node_id);
                 dbg!(record);
-                return None;
+                None
             }
-            _ => return None,
-        };
-
-        Some(typechecker.parse_results.spans[def_site_node_id.0])
+            _ => None,
+        }
     }
 
     #[cfg(feature = "lsp")]

@@ -47,7 +47,10 @@ pub fn serialize_and_test_lsp() -> Result<(), ErrorBatch> {
 
     let result = engine_clone.goto_definition(16, b"let abc = 123\nabc");
 
-    assert_eq!(result, Some(Span { start: 4, end: 7 }));
+    assert_eq!(
+        result,
+        Some(truffle::SpanOrLocation::Span(Span { start: 4, end: 7 }))
+    );
 
     let result = engine_clone.find_all_references(16, b"let abc = 123\nabc");
 

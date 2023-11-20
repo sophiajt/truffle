@@ -27,7 +27,7 @@ use notify::{
 use notify::KqueueWatcher;
 
 use tracing::{debug, info};
-use truffle::{Engine, LineLookupTable};
+use truffle::{Engine, LineLookupTable, Span, SpanOrLocation};
 
 mod dispatch;
 
@@ -255,9 +255,17 @@ impl Server {
         let Some(location) = engine.goto_definition(location, contents.as_bytes()) else {
             return Ok(None);
         };
-        Ok(Some(GotoDefinitionResponse::Scalar(
-            lookup.to_location(uri, location),
-        )))
+
+        let x = match location {
+            SpanOrLocation::Span(span) => lookup.to_location(uri, span),
+            SpanOrLocation::ExternalLocation(url, position) => {
+                let contents = std::fs::read_to_string(url.to_file_path().unwrap())?;
+                let lookup = LineLookupTable::new(&contents);
+                lookup.to_location(url, Span::new(position, position))
+            }
+        };
+
+        Ok(Some(GotoDefinitionResponse::Scalar(x)))
     }
 
     pub fn lsp_check_script(

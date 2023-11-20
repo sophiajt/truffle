@@ -12,7 +12,7 @@ pub use crate::codegen::Translater;
 
 pub use crate::{
     codegen::FunctionCodegen,
-    engine::{Engine, FnRegister},
+    engine::{Engine, FnRegister, SpanOrLocation},
     errors::{ErrorBatch, ScriptError},
     eval::{Evaluator, ReturnValue},
     lexer::Lexer,
