@@ -400,10 +400,22 @@ impl Engine {
             Err(_) => return output,
         };
 
+        // Logic to move into the token immediately left of us if necessary:
+        // If we're on a space or eof, try moving left. Otherwise stay put.
+        // Only try to move left if we have space to do so, If we try to move left
+        let location = if location < contents.len()
+            && contents[location].is_ascii_whitespace()
+            && location > 0
+        {
+            location - 1
+        } else {
+            location
+        };
+
         let mut prefix_start = location;
 
         loop {
-            eprintln!("prefix build: {:?}", contents[prefix_start] as char);
+            // eprintln!("prefix build: {:?}", contents[prefix_start] as char);
             if prefix_start == 0
                 || (!contents[prefix_start].is_ascii_digit()
                     && !contents[prefix_start].is_ascii_alphabetic()
@@ -418,14 +430,14 @@ impl Engine {
 
         let prefix = &contents[prefix_start..=location];
 
-        eprintln!("prefix: {:?}", prefix);
+        // eprintln!("prefix: {:?}", prefix);
 
-        eprintln!("tokens: {:?}", tokens);
+        // eprintln!("tokens: {:?}", tokens);
 
         let mut parser = Parser::new(tokens, contents.to_vec(), 0);
         let _ = parser.parse();
 
-        eprintln!("parse results: {:?}", parser.results);
+        // eprintln!("parse results: {:?}", parser.results);
 
         let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
         let _ = typechecker.typecheck();
@@ -438,7 +450,7 @@ impl Engine {
             for scope in typechecker.scope.iter() {
                 let scope_span = typechecker.parse_results.spans[scope.node_id.0];
 
-                if node_span.start >= scope_span.start && node_span.end < scope_span.end {
+                if node_span.start >= scope_span.start && node_span.end <= scope_span.end {
                     for (var_name, var_node_id) in scope.variables.iter() {
                         let var_end = typechecker.parse_results.spans[var_node_id.0].end;
 
