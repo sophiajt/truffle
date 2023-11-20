@@ -174,7 +174,29 @@ fn lsp_completion() {
 }
 
 #[test]
-fn lsp_completion2() {
+fn lsp_completion_proper_prefix() {
+    let engine = Engine::new();
+    let result = engine.completion(45, b"let abc = 123\nlet abd = 456\nlet acd = 789; ab + 10");
+
+    eprintln!("result: {:?}", result);
+
+    assert_eq!(result, vec!["abc", "abd"])
+}
+
+#[test]
+fn lsp_completion_of_empty() {
+    let engine = Engine::new();
+
+    // Let's see what symbols it sees when it starts with nothing
+    let result = engine.completion(43, b"let abc = 123\nlet bcd = 456\nlet cde = 789;  + 10");
+
+    eprintln!("result: {:?}", result);
+
+    assert_eq!(result, vec!["abc", "bcd", "cde"])
+}
+
+#[test]
+fn lsp_completion_inside_token() {
     let engine = Engine::new();
     let result = engine.completion(44, b"let abc = 123\nlet abd = 456\nlet acd = 789; ab + 10");
 
