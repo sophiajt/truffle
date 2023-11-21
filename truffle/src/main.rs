@@ -121,6 +121,7 @@ where
     register_fn!(engine, "print", print::<bool>);
     register_fn!(engine, "add", add::<i64>);
     register_fn!(engine, "add", add::<f64>);
+    engine.print_fn_infos();
 
     let result = engine.eval_source(fname, contents, debug_output);
     match result {
@@ -136,12 +137,12 @@ where
     Some(())
 }
 
-#[cfg_attr(feature = "async", truffle::export)]
+#[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
 pub fn print<T: std::fmt::Display>(value: T) {
     println!("value: {value}")
 }
 
-#[cfg_attr(feature = "async", truffle::export)]
+#[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
 pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
     lhs + rhs
 }

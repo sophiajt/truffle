@@ -40,22 +40,27 @@ pub fn register_fn(input: TokenStream) -> TokenStream {
         ident_segment.ident = format_ident!("register_{}", ident_segment.ident);
         path
     };
-    let register_lsp_info = {
+    let fn_location = {
         let mut path = fun.path.clone();
         let ident_segment = path
             .segments
             .last_mut()
             .expect("path should always have at least one segment");
-        ident_segment.ident = format_ident!("register_lsp_info_{}", ident_segment.ident);
+        ident_segment.ident = format_ident!("{}_location", ident_segment.ident);
         path
     };
 
     quote! {
-        engine.with(#register_lsp_info());
         if #fun_is_async() {
             #engine.with(#register_fun())
         } else {
-            #engine.register_fn(#name, #fun)
+            #engine.register_fn(#name, #fun, Some(#fn_location()))
+        }
+        #[cfg(feature = "lsp")]
+        if #engine.app_name().is_some() {
+            let mut writer = #engine.lsp_cache_writer();
+            let data = postcard::to_io(&#engine, &mut writer).unwrap();
+            let _ = std::io::Write::flush(&mut writer);
         }
     }
     .into()
@@ -71,25 +76,25 @@ fn foo(item: TokenStream) -> Result<proc_macro2::TokenStream, syn::Error> {
     let output = if input.sig.asyncness.is_some() {
         let register_fn = generate::register_fn(input.clone())?;
         let fn_is_async = generate::fn_is_async(input.clone())?;
-        let register_lsp_info = generate::register_lsp_info(input.clone())?;
+        let fn_location = generate::fn_location(input.clone())?;
 
         quote! {
             #input
 
             #register_fn
             #fn_is_async
-            #register_lsp_info
+            #fn_location
         }
     } else {
         let register_fn = generate::register_fn_stub(input.clone()).expect("stub should generate");
         let fn_is_async = generate::fn_is_async(input.clone())?;
-        let register_lsp_info = generate::register_lsp_info(input.clone())?;
+        let fn_location = generate::fn_location(input.clone())?;
         quote! {
             #input
 
             #register_fn
             #fn_is_async
-            #register_lsp_info
+            #fn_location
         }
     };
     Ok(output)
@@ -117,23 +122,21 @@ mod generate {
         })
     }
 
-    pub(crate) fn register_lsp_info(input: ItemFn) -> Result<TokenStream, syn::Error> {
+    pub(crate) fn fn_location(input: ItemFn) -> Result<TokenStream, syn::Error> {
         let wrapped_fn_name = input.sig.ident.to_string();
-        let mut fn_register_lsp_info = input;
-        fn_register_lsp_info.sig.asyncness = None;
-        fn_register_lsp_info.sig.ident = format_ident!("register_lsp_info_{wrapped_fn_name}");
-        fn_register_lsp_info.sig.output = syn::parse_str("-> impl Fn(&mut truffle::Engine)")
+        let mut fn_location = input;
+        fn_location.sig.asyncness = None;
+        fn_location.sig.ident = format_ident!("{wrapped_fn_name}_location");
+        fn_location.sig.output = syn::parse_str("-> &'static std::panic::Location<'static>")
             .expect("this should parse as a return type");
-        fn_register_lsp_info.sig.inputs = Default::default();
-        fn_register_lsp_info.block = parse_quote! {
+        fn_location.sig.inputs = Default::default();
+        fn_location.block = parse_quote! {
             {
-                |engine: &mut truffle::Engine| {
-                    engine.add_lsp_info(#wrapped_fn_name, std::panic::Location::caller());
-                }
+                std::panic::Location::caller()
             }
         };
         let tokens = quote! {
-            #fn_register_lsp_info
+            #fn_location
         };
         Ok(tokens)
     }
@@ -257,6 +260,7 @@ mod generate {
 
     fn registration_closure(input: ItemFn) -> Result<TokenStream, syn::Error> {
         let wrapped_fn_name = input.sig.ident.to_string();
+        let fn_location = format_ident!("{wrapped_fn_name}_location");
 
         let param_types = input.sig.inputs.iter().map(|arg| {
             match arg {
@@ -283,6 +287,7 @@ mod generate {
                     engine.get_type::<#ret_type>().expect("engine should already know about this type"),
                     Function::ExternalAsyncFn1(wrapped_fn),
                     #wrapped_fn_name,
+                    #fn_location()
                 );
             }
         })

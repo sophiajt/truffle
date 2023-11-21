@@ -26,7 +26,7 @@ pub use errors::LineLookupTable;
 // TODO: remove this, it's just a temporary hack while massaging APIs
 pub use crate::typechecker::Function;
 
-#[cfg(feature = "async")]
-#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+#[cfg(any(feature = "async", feature = "lsp"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "async", feature = "lsp"))))]
 #[doc(inline)]
 pub use truffle_attributes::{export, register_fn};

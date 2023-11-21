@@ -35,7 +35,7 @@ pub struct PermanentDefinitions {
     pub functions: Vec<ExternalFnRecord>,
 
     // Info about all registered functions
-    pub function_infos: Vec<ExternalFnRecordInfo>,
+    pub function_infos: HashMap<Vec<u8>, ExternalFunctionLocation>,
 
     // Externally-registered functions
     pub external_functions: HashMap<Vec<u8>, Vec<ExternalFunctionId>>,
@@ -44,7 +44,7 @@ pub struct PermanentDefinitions {
 #[derive(Debug, PartialEq)]
 pub enum SpanOrLocation {
     Span(Span),
-    ExternalLocation(Url, usize), // filename and position
+    ExternalLocation(Url, u32), // filename and line number
 }
 
 impl PermanentDefinitions {
@@ -89,7 +89,7 @@ impl Engine {
             future_of_map: HashMap::new(),
             external_functions: HashMap::new(),
             functions: vec![],
-            function_infos: vec![],
+            function_infos: HashMap::new(),
         };
 
         Self {
@@ -246,12 +246,28 @@ impl Engine {
     }
 
     #[cfg(feature = "async")]
-    pub fn add_async_call(&mut self, params: Vec<TypeId>, ret: TypeId, fun: Function, name: &str) {
+    pub fn add_async_call(
+        &mut self,
+        params: Vec<TypeId>,
+        ret: TypeId,
+        fun: Function,
+        name: &str,
+        location: &'static std::panic::Location<'static>,
+    ) {
         self.permanent_definitions
             .functions
             .push(ExternalFnRecord { params, ret, fun });
 
         let id = self.permanent_definitions.functions.len() - 1;
+
+        self.permanent_definitions.function_infos.insert(
+            name.as_bytes().to_vec(),
+            ExternalFunctionLocation {
+                path: location.file().into(),
+                line: location.line(),
+                column: location.column(),
+            },
+        );
 
         let ent = self
             .permanent_definitions
@@ -339,8 +355,16 @@ impl Engine {
             )?,
             crate::parser::AstNode::Name => {
                 let record = typechecker.parse_results.contents_for(node_id);
-                dbg!(record);
-                None
+                dbg!(&record);
+                dbg!(&self.permanent_definitions.function_infos);
+                let location = dbg!(self.permanent_definitions.function_infos.get(record)).unwrap();
+                let line = location.line;
+                let path = dbg!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
+                    .parent()
+                    .unwrap()
+                    .join(&location.path);
+                let uri = Url::from_file_path(dbg!(path)).unwrap();
+                Some(SpanOrLocation::ExternalLocation(uri, line))
             }
             _ => None,
         }
@@ -511,6 +535,10 @@ impl Engine {
     {
         self.app_name = app_name.into().map(String::from);
     }
+
+    pub fn print_fn_infos(&self) {
+        dbg!(&self.permanent_definitions.function_infos);
+    }
 }
 
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
@@ -523,12 +551,19 @@ pub struct ExternalFnRecord {
 
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
-pub struct ExternalFnRecordInfo {
-    name: String,
+pub struct ExternalFunctionLocation {
+    path: PathBuf,
+    line: u32,
+    column: u32,
 }
 
 pub trait FnRegister<A, RetVal, Args> {
-    fn register_fn(&mut self, name: &str, fun: A);
+    fn register_fn(
+        &mut self,
+        name: &str,
+        fun: A,
+        location: Option<&'static std::panic::Location<'static>>,
+    );
 }
 
 impl<A, U> FnRegister<A, U, ()> for Engine
@@ -536,7 +571,12 @@ where
     A: 'static + Fn() -> U,
     U: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A) {
+    fn register_fn(
+        &mut self,
+        name: &str,
+        fun: A,
+        location: Option<&'static std::panic::Location<'static>>,
+    ) {
         let wrapped: Box<dyn Fn() -> Result<Box<dyn Any>, String>> =
             Box::new(move || Ok(Box::new(fun()) as Box<dyn Any>));
 
@@ -552,11 +592,16 @@ where
             fun: Function::ExternalFn0(wrapped),
         });
 
-        self.permanent_definitions
-            .function_infos
-            .push(ExternalFnRecordInfo {
-                name: name.to_string(),
-            });
+        if let Some(location) = dbg!(location) {
+            self.permanent_definitions.function_infos.insert(
+                name.as_bytes().to_vec(),
+                ExternalFunctionLocation {
+                    path: location.file().into(),
+                    line: location.line(),
+                    column: location.column(),
+                },
+            );
+        }
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -575,7 +620,12 @@ where
     T: Clone + Any,
     U: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A) {
+    fn register_fn(
+        &mut self,
+        name: &str,
+        fun: A,
+        location: Option<&'static std::panic::Location<'static>>,
+    ) {
         let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
             Box::new(move |arg: &mut Box<dyn Any>| {
                 let inside = (*arg).downcast_mut() as Option<&mut T>;
@@ -605,11 +655,17 @@ where
             ret,
             fun: Function::ExternalFn1(wrapped),
         });
-        self.permanent_definitions
-            .function_infos
-            .push(ExternalFnRecordInfo {
-                name: name.to_string(),
-            });
+
+        if let Some(location) = dbg!(location) {
+            self.permanent_definitions.function_infos.insert(
+                name.as_bytes().to_vec(),
+                ExternalFunctionLocation {
+                    path: location.file().into(),
+                    line: location.line(),
+                    column: location.column(),
+                },
+            );
+        }
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -629,7 +685,12 @@ where
     U: Clone + Any,
     V: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A) {
+    fn register_fn(
+        &mut self,
+        name: &str,
+        fun: A,
+        location: Option<&'static std::panic::Location<'static>>,
+    ) {
         let wrapped: Box<
             dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
         > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>| {
@@ -673,11 +734,16 @@ where
             fun: Function::ExternalFn2(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
-        self.permanent_definitions
-            .function_infos
-            .push(ExternalFnRecordInfo {
-                name: name.to_string(),
-            });
+        if let Some(location) = dbg!(location) {
+            self.permanent_definitions.function_infos.insert(
+                name.as_bytes().to_vec(),
+                ExternalFunctionLocation {
+                    path: location.file().into(),
+                    line: location.line(),
+                    column: location.column(),
+                },
+            );
+        }
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -697,7 +763,12 @@ where
     U: Clone + Any,
     V: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A) {
+    fn register_fn(
+        &mut self,
+        name: &str,
+        fun: A,
+        location: Option<&'static std::panic::Location<'static>>,
+    ) {
         let wrapped: Box<
             dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
         > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>| {
@@ -741,11 +812,16 @@ where
             fun: Function::ExternalFn2(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
-        self.permanent_definitions
-            .function_infos
-            .push(ExternalFnRecordInfo {
-                name: name.to_string(),
-            });
+        if let Some(location) = dbg!(location) {
+            self.permanent_definitions.function_infos.insert(
+                name.as_bytes().to_vec(),
+                ExternalFunctionLocation {
+                    path: location.file().into(),
+                    line: location.line(),
+                    column: location.column(),
+                },
+            );
+        }
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -766,7 +842,12 @@ where
     W: Clone + Any,
     V: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A) {
+    fn register_fn(
+        &mut self,
+        name: &str,
+        fun: A,
+        location: Option<&'static std::panic::Location<'static>>,
+    ) {
         let wrapped: Box<
             dyn Fn(
                 &mut Box<dyn Any>,
@@ -829,11 +910,16 @@ where
             fun: Function::ExternalFn3(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
-        self.permanent_definitions
-            .function_infos
-            .push(ExternalFnRecordInfo {
-                name: name.to_string(),
-            });
+        if let Some(location) = dbg!(location) {
+            self.permanent_definitions.function_infos.insert(
+                name.as_bytes().to_vec(),
+                ExternalFunctionLocation {
+                    path: location.file().into(),
+                    line: location.line(),
+                    column: location.column(),
+                },
+            );
+        }
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -854,7 +940,12 @@ where
     W: Clone + Any,
     V: Any,
 {
-    fn register_fn(&mut self, name: &str, fun: A) {
+    fn register_fn(
+        &mut self,
+        name: &str,
+        fun: A,
+        location: Option<&'static std::panic::Location<'static>>,
+    ) {
         let wrapped: Box<
             dyn Fn(
                 &mut Box<dyn Any>,
@@ -917,11 +1008,16 @@ where
             fun: Function::ExternalFn3(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
-        self.permanent_definitions
-            .function_infos
-            .push(ExternalFnRecordInfo {
-                name: name.to_string(),
-            });
+        if let Some(location) = dbg!(location) {
+            self.permanent_definitions.function_infos.insert(
+                name.as_bytes().to_vec(),
+                ExternalFunctionLocation {
+                    path: location.file().into(),
+                    line: location.line(),
+                    column: location.column(),
+                },
+            );
+        }
 
         let id = self.permanent_definitions.functions.len() - 1;
 
@@ -934,11 +1030,11 @@ where
     }
 }
 
-#[cfg(not(feature = "async"))]
+#[cfg(not(any(feature = "async", feature = "lsp")))]
 #[macro_export]
 macro_rules! register_fn {
     ( $engine:expr, $name: expr, $fun:expr ) => {{
-        $engine.register_fn($name, $fun);
+        $engine.register_fn($name, $fun, None);
         #[cfg(feature = "lsp")]
         if $engine.app_name().is_some() {
             let mut writer = $engine.lsp_cache_writer();

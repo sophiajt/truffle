@@ -8,7 +8,7 @@ use lsp_types::{
     request::{Completion, DocumentDiagnosticRequest, GotoDefinition, HoverRequest, References},
     CompletionItem, CompletionOptions, CompletionParams, CompletionResponse, DiagnosticOptions,
     DidChangeTextDocumentParams, DocumentDiagnosticReportResult, GotoDefinitionParams,
-    GotoDefinitionResponse, InitializeParams, OneOf, ServerCapabilities,
+    GotoDefinitionResponse, InitializeParams, OneOf, Range, ServerCapabilities,
     TextDocumentContentChangeEvent, TextDocumentSyncKind, Url, VersionedTextDocumentIdentifier,
     WorkDoneProgressOptions,
 };
@@ -27,7 +27,7 @@ use notify::{
 use notify::KqueueWatcher;
 
 use tracing::{debug, info};
-use truffle::{Engine, LineLookupTable, Span, SpanOrLocation};
+use truffle::{Engine, LineLookupTable, SpanOrLocation};
 
 mod dispatch;
 
@@ -122,6 +122,7 @@ impl Server {
                 continue;
             };
             dbg!(&flavor);
+            engine.print_fn_infos();
             self.engines.insert(flavor, engine);
         }
 
@@ -258,10 +259,11 @@ impl Server {
 
         let x = match location {
             SpanOrLocation::Span(span) => lookup.to_location(uri, span),
-            SpanOrLocation::ExternalLocation(url, position) => {
-                let contents = std::fs::read_to_string(url.to_file_path().unwrap())?;
-                let lookup = LineLookupTable::new(&contents);
-                lookup.to_location(url, Span::new(position, position))
+            SpanOrLocation::ExternalLocation(uri, line) => {
+                let start = lsp_types::Position { line, character: 0 };
+                let end = start;
+                let range = Range { start, end };
+                Location { uri, range }
             }
         };
 
