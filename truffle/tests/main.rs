@@ -4,6 +4,8 @@ mod test_eval;
 use assert_matches::assert_matches;
 use test_eval::*;
 use truffle::ReturnValue;
+#[cfg(feature = "lsp")]
+use truffle::{Engine, ErrorBatch, ScriptError, Span};
 
 #[test]
 fn math() {
@@ -93,6 +95,14 @@ fn external_call() {
 }
 
 #[test]
+fn method_and_mutation() {
+    assert_matches!(
+        eval_source(r#"let env = new_env(); env.set_var("kris", 3); env.read_var("kris")"#),
+        Ok(ReturnValue::I64(3))
+    );
+}
+
+#[test]
 fn typecheck_errors() {
     eval_source("let x = 123; x = 4566")
         .expect_err("test should fail due to missing mut")
@@ -104,4 +114,93 @@ fn runtime_errors() {
     eval_source("3 / 0")
         .expect_err("it should not be possible to divide by zero")
         .assert_contains("division by zero");
+}
+
+#[test]
+#[cfg(feature = "lsp")]
+fn lsp_hover() {
+    let engine = Engine::new();
+    let hover = engine.hover(2, b"1234567");
+
+    assert_eq!(hover, "i64")
+}
+
+#[test]
+#[cfg(feature = "lsp")]
+fn lsp_goto_definition() {
+    let engine = Engine::new();
+    let result = engine.goto_definition(16, b"let abc = 123\nabc");
+
+    assert_eq!(result, Some(Span { start: 4, end: 7 }))
+}
+
+#[test]
+#[cfg(feature = "lsp")]
+fn lsp_find_all_references() {
+    let engine = Engine::new();
+    let result = engine.find_all_references(16, b"let abc = 123\nabc");
+
+    assert_eq!(
+        result,
+        Some(vec![Span { start: 4, end: 7 }, Span { start: 14, end: 17 }])
+    )
+}
+
+#[test]
+#[cfg(feature = "lsp")]
+fn lsp_check_script() {
+    let engine = Engine::new();
+    let result = engine.check_script(b"let abc = \n");
+
+    eprintln!("result: {:?}", result);
+
+    assert_eq!(
+        result,
+        Some(ErrorBatch::one(ScriptError {
+            message: "incomplete math expression".into(),
+            span: Span { start: 11, end: 11 }
+        }))
+    )
+}
+
+#[test]
+fn lsp_completion() {
+    let engine = Engine::new();
+    let result = engine.completion(43, b"let abc = 123\nlet abd = 456\nlet acd = 789; a + 10");
+
+    eprintln!("result: {:?}", result);
+
+    assert_eq!(result, vec!["abc", "abd", "acd"])
+}
+
+#[test]
+fn lsp_completion_proper_prefix() {
+    let engine = Engine::new();
+    let result = engine.completion(45, b"let abc = 123\nlet abd = 456\nlet acd = 789; ab + 10");
+
+    eprintln!("result: {:?}", result);
+
+    assert_eq!(result, vec!["abc", "abd"])
+}
+
+#[test]
+fn lsp_completion_of_empty() {
+    let engine = Engine::new();
+
+    // Let's see what symbols it sees when it starts with nothing
+    let result = engine.completion(43, b"let abc = 123\nlet bcd = 456\nlet cde = 789;  + 10");
+
+    eprintln!("result: {:?}", result);
+
+    assert_eq!(result, vec!["abc", "bcd", "cde"])
+}
+
+#[test]
+fn lsp_completion_inside_token() {
+    let engine = Engine::new();
+    let result = engine.completion(44, b"let abc = 123\nlet abd = 456\nlet acd = 789; ab + 10");
+
+    eprintln!("result: {:?}", result);
+
+    assert_eq!(result, vec!["abc", "abd"])
 }

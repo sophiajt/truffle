@@ -1,4 +1,7 @@
-use crate::errors::{ErrorBatch, ScriptError};
+use crate::{
+    errors::{ErrorBatch, ScriptError},
+    parser::Span,
+};
 
 pub struct Lexer {
     source: Vec<u8>,
@@ -51,8 +54,7 @@ pub enum TokenType {
 #[derive(Debug, Clone, Copy)]
 pub struct Token {
     pub token_type: TokenType,
-    pub span_start: usize,
-    pub span_end: usize,
+    pub span: Span,
 }
 
 fn is_symbol(b: u8) -> bool {
@@ -72,16 +74,15 @@ impl Lexer {
         }
     }
 
-    pub fn error(&mut self, message: impl Into<String>, span_start: usize, span_end: usize) {
+    pub fn error(&mut self, message: impl Into<String>, span: Span) {
         self.errors.push(ScriptError {
             message: message.into(),
-            span_start,
-            span_end,
+            span,
         })
     }
 
     pub fn lex_quoted_string(&mut self) -> Option<Token> {
-        let span_start = self.span_offset;
+        let start = self.span_offset;
         let mut current_position = self.span_offset + 1;
         let mut is_escaped = false;
         while current_position < self.source.len() {
@@ -100,13 +101,15 @@ impl Lexer {
 
         Some(Token {
             token_type: TokenType::String,
-            span_start,
-            span_end: self.span_offset,
+            span: Span {
+                start,
+                end: self.span_offset,
+            },
         })
     }
 
     pub fn lex_number(&mut self) -> Option<Token> {
-        let span_start = self.span_offset;
+        let start = self.span_offset;
         let mut current_position = self.span_offset;
         while current_position < self.source.len() {
             if !self.source[current_position].is_ascii_digit() {
@@ -178,8 +181,10 @@ impl Lexer {
 
         Some(Token {
             token_type: TokenType::Number,
-            span_start,
-            span_end: self.span_offset,
+            span: Span {
+                start,
+                end: self.span_offset,
+            },
         })
     }
 
@@ -197,14 +202,19 @@ impl Lexer {
 
     pub fn skip_comment(&mut self) {
         let mut current_position = self.span_offset;
-        while current_position < self.source.len() && self.source[current_position] != b'\n' {
-            current_position += 1;
+        while current_position < self.source.len() {
+            if self.source[current_position] == b'\n' {
+                current_position += 1;
+                break;
+            } else {
+                current_position += 1;
+            }
         }
         self.span_offset = current_position;
     }
 
     pub fn lex_name(&mut self) -> Option<Token> {
-        let span_start = self.span_offset;
+        let start = self.span_offset;
         let mut current_position = self.span_offset;
         while current_position < self.source.len()
             && (self.source[current_position].is_ascii_alphanumeric()
@@ -216,29 +226,37 @@ impl Lexer {
 
         Some(Token {
             token_type: TokenType::Name,
-            span_start,
-            span_end: self.span_offset,
+            span: Span {
+                start,
+                end: self.span_offset,
+            },
         })
     }
 
     pub fn lex_symbol(&mut self) -> Option<Token> {
-        let span_start = self.span_offset;
+        let start = self.span_offset;
 
         let result = match self.source[self.span_offset] {
             b'(' => Token {
                 token_type: TokenType::LParen,
-                span_start,
-                span_end: span_start + 1,
+                span: Span {
+                    start,
+                    end: start + 1,
+                },
             },
             b'[' => Token {
                 token_type: TokenType::LSquare,
-                span_start,
-                span_end: span_start + 1,
+                span: Span {
+                    start,
+                    end: start + 1,
+                },
             },
             b'{' => Token {
                 token_type: TokenType::LCurly,
-                span_start,
-                span_end: span_start + 1,
+                span: Span {
+                    start,
+                    end: start + 1,
+                },
             },
             b'<' => {
                 if self.source.len() > self.span_offset + 1
@@ -246,31 +264,41 @@ impl Lexer {
                 {
                     Token {
                         token_type: TokenType::LessThanEqual,
-                        span_start,
-                        span_end: span_start + 2,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
                     }
                 } else {
                     Token {
                         token_type: TokenType::LessThan,
-                        span_start,
-                        span_end: span_start + 1,
+                        span: Span {
+                            start,
+                            end: start + 1,
+                        },
                     }
                 }
             }
             b')' => Token {
                 token_type: TokenType::RParen,
-                span_start,
-                span_end: span_start + 1,
+                span: Span {
+                    start,
+                    end: start + 1,
+                },
             },
             b']' => Token {
                 token_type: TokenType::RSquare,
-                span_start,
-                span_end: span_start + 1,
+                span: Span {
+                    start,
+                    end: start + 1,
+                },
             },
             b'}' => Token {
                 token_type: TokenType::RCurly,
-                span_start,
-                span_end: span_start + 1,
+                span: Span {
+                    start,
+                    end: start + 1,
+                },
             },
             b'>' => {
                 if self.source.len() > self.span_offset + 1
@@ -278,14 +306,18 @@ impl Lexer {
                 {
                     Token {
                         token_type: TokenType::GreaterThanEqual,
-                        span_start,
-                        span_end: span_start + 2,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
                     }
                 } else {
                     Token {
                         token_type: TokenType::GreaterThan,
-                        span_start,
-                        span_end: span_start + 1,
+                        span: Span {
+                            start,
+                            end: start + 1,
+                        },
                     }
                 }
             }
@@ -295,21 +327,27 @@ impl Lexer {
                 {
                     Token {
                         token_type: TokenType::PlusPlus,
-                        span_start,
-                        span_end: span_start + 2,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
                     }
                 } else {
                     Token {
                         token_type: TokenType::Plus,
-                        span_start,
-                        span_end: span_start + 1,
+                        span: Span {
+                            start,
+                            end: start + 1,
+                        },
                     }
                 }
             }
             b'-' => Token {
                 token_type: TokenType::Dash,
-                span_start,
-                span_end: span_start + 1,
+                span: Span {
+                    start,
+                    end: start + 1,
+                },
             },
             b'*' => {
                 if self.source.len() > self.span_offset + 1
@@ -317,14 +355,18 @@ impl Lexer {
                 {
                     Token {
                         token_type: TokenType::AsteriskAsterisk,
-                        span_start,
-                        span_end: span_start + 2,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
                     }
                 } else {
                     Token {
                         token_type: TokenType::Asterisk,
-                        span_start,
-                        span_end: span_start + 1,
+                        span: Span {
+                            start,
+                            end: start + 1,
+                        },
                     }
                 }
             }
@@ -334,14 +376,18 @@ impl Lexer {
                 {
                     Token {
                         token_type: TokenType::ForwardSlashForwardSlash,
-                        span_start,
-                        span_end: span_start + 2,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
                     }
                 } else {
                     Token {
                         token_type: TokenType::ForwardSlash,
-                        span_start,
-                        span_end: span_start + 1,
+                        span: Span {
+                            start,
+                            end: start + 1,
+                        },
                     }
                 }
             }
@@ -351,34 +397,44 @@ impl Lexer {
                 {
                     Token {
                         token_type: TokenType::EqualsEquals,
-                        span_start,
-                        span_end: span_start + 2,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
                     }
                 } else if self.source.len() > self.span_offset + 1
                     && self.source[self.span_offset + 1] == b'~'
                 {
                     Token {
                         token_type: TokenType::EqualsTilde,
-                        span_start,
-                        span_end: span_start + 2,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
                     }
                 } else {
                     Token {
                         token_type: TokenType::Equals,
-                        span_start,
-                        span_end: span_start + 1,
+                        span: Span {
+                            start,
+                            end: start + 1,
+                        },
                     }
                 }
             }
             b':' => Token {
                 token_type: TokenType::Colon,
-                span_start,
-                span_end: span_start + 1,
+                span: Span {
+                    start,
+                    end: start + 1,
+                },
             },
             b';' => Token {
                 token_type: TokenType::Semicolon,
-                span_start,
-                span_end: span_start + 1,
+                span: Span {
+                    start,
+                    end: start + 1,
+                },
             },
             b'.' => {
                 if self.source.len() > self.span_offset + 1
@@ -386,14 +442,18 @@ impl Lexer {
                 {
                     Token {
                         token_type: TokenType::DotDot,
-                        span_start,
-                        span_end: span_start + 2,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
                     }
                 } else {
                     Token {
                         token_type: TokenType::Dot,
-                        span_start,
-                        span_end: span_start + 1,
+                        span: Span {
+                            start,
+                            end: start + 1,
+                        },
                     }
                 }
             }
@@ -403,22 +463,28 @@ impl Lexer {
                 {
                     Token {
                         token_type: TokenType::ExclamationEquals,
-                        span_start,
-                        span_end: span_start + 2,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
                     }
                 } else if self.source.len() > self.span_offset + 1
                     && self.source[self.span_offset + 1] == b'~'
                 {
                     Token {
                         token_type: TokenType::ExclamationTilde,
-                        span_start,
-                        span_end: span_start + 2,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
                     }
                 } else {
                     Token {
                         token_type: TokenType::Exclamation,
-                        span_start,
-                        span_end: span_start + 1,
+                        span: Span {
+                            start,
+                            end: start + 1,
+                        },
                     }
                 }
             }
@@ -428,14 +494,18 @@ impl Lexer {
                 {
                     Token {
                         token_type: TokenType::PipePipe,
-                        span_start,
-                        span_end: span_start + 2,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
                     }
                 } else {
                     Token {
                         token_type: TokenType::Pipe,
-                        span_start,
-                        span_end: span_start + 1,
+                        span: Span {
+                            start,
+                            end: start + 1,
+                        },
                     }
                 }
             }
@@ -445,21 +515,27 @@ impl Lexer {
                 {
                     Token {
                         token_type: TokenType::AmpersandAmpersand,
-                        span_start,
-                        span_end: span_start + 2,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
                     }
                 } else {
                     Token {
                         token_type: TokenType::Ampersand,
-                        span_start,
-                        span_end: span_start + 1,
+                        span: Span {
+                            start,
+                            end: start + 1,
+                        },
                     }
                 }
             }
             b',' => Token {
                 token_type: TokenType::Comma,
-                span_start,
-                span_end: span_start + 1,
+                span: Span {
+                    start,
+                    end: start + 1,
+                },
             },
             x => {
                 self.error(
@@ -467,18 +543,22 @@ impl Lexer {
                         "Internal compiler error: symbol character mismatched in lexer: {}",
                         x as char
                     ),
-                    span_start,
-                    span_start + 1,
+                    Span {
+                        start,
+                        end: start + 1,
+                    },
                 );
                 Token {
                     token_type: TokenType::Garbage,
-                    span_start,
-                    span_end: span_start + 1,
+                    span: Span {
+                        start,
+                        end: start + 1,
+                    },
                 }
             }
         };
 
-        self.span_offset = result.span_end;
+        self.span_offset = result.span.end;
         Some(result)
     }
 }
@@ -520,21 +600,19 @@ impl Lexer {
             {
                 return self.lex_name();
             } else {
-                let span_start = self.span_offset;
-                let span_end = self.span_offset + 1;
+                let start = self.span_offset;
+                let end = self.span_offset + 1;
                 self.error(
                     format!(
                         "unsupported character: {}",
                         self.source[self.span_offset] as char
                     ),
-                    span_start,
-                    span_end,
+                    Span { start, end },
                 );
                 self.span_offset += 1;
                 return Some(Token {
                     token_type: TokenType::Garbage,
-                    span_start,
-                    span_end,
+                    span: Span { start, end },
                 });
             }
         }

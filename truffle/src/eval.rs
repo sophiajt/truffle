@@ -2,8 +2,9 @@ use std::any::Any;
 
 use crate::{
     codegen::{FunctionCodegen, Instruction, InstructionId, RegisterId, RegisterValue},
-    parser::NodeId,
-    typechecker::{ExternalFnRecord, ExternalFunctionId, Function, FunctionId, STRING_TYPE},
+    engine::ExternalFnRecord,
+    parser::{NodeId, Span},
+    typechecker::{ExternalFunctionId, Function, FunctionId, STRING_TYPE},
     ScriptError, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, UNIT_TYPE,
 };
 
@@ -20,8 +21,7 @@ pub struct Evaluator {
     pub source_map: Vec<NodeId>,
     pub current_frame: usize,
 
-    pub span_start: Vec<usize>,
-    pub span_end: Vec<usize>,
+    pub spans: Vec<Span>,
 
     // Indexed by FunctionId
     pub functions: Vec<StackFrame>,
@@ -52,7 +52,6 @@ pub enum ReturnValue {
     Bool(bool),
     String(String),
     Custom(Box<dyn Any>),
-    Error(ScriptError),
 }
 
 impl Evaluator {
@@ -67,8 +66,7 @@ impl Evaluator {
         self.instructions.append(&mut function_codegen.instructions);
         self.source_map.append(&mut function_codegen.source_map);
 
-        self.span_start = function_codegen.span_start;
-        self.span_end = function_codegen.span_end;
+        self.spans = function_codegen.spans;
 
         self.functions.push(stack_frame);
     }
@@ -104,11 +102,6 @@ impl Evaluator {
     ///
     /// TODO: we need to either mark this function unsafe or change how we do this in the future
     pub fn get_user_type(&self, register_id: RegisterId) -> Box<dyn Any> {
-        println!(
-            "transmuting: {} with {}",
-            register_id.0,
-            self.get_reg_i64(register_id)
-        );
         let boxed = unsafe {
             std::mem::transmute::<i64, Box<Box<dyn Any>>>(
                 self.stack_frames[self.current_frame].register_values[register_id.0].i64,
@@ -123,7 +116,10 @@ impl Evaluator {
     }
 
     #[inline]
-    pub fn eval_common_opcode(&mut self, instruction_pointer: &mut usize) -> Option<ReturnValue> {
+    pub fn eval_common_opcode(
+        &mut self,
+        instruction_pointer: &mut usize,
+    ) -> Option<Result<ReturnValue, ScriptError>> {
         match self.instructions[*instruction_pointer] {
             Instruction::IADD { lhs, rhs, target } => {
                 self.stack_frames[self.current_frame].register_values[target.0].i64 =
@@ -144,8 +140,8 @@ impl Evaluator {
             }
             Instruction::IDIV { lhs, rhs, target } => {
                 if self.get_reg_i64(rhs) == 0 {
-                    return Some(ReturnValue::Error(
-                        self.error("division by zero", self.source_map[*instruction_pointer]),
+                    return Some(Err(
+                        self.error("division by zero", self.source_map[*instruction_pointer])
                     ));
                 }
                 self.stack_frames[self.current_frame].register_values[target.0].i64 =
@@ -197,8 +193,8 @@ impl Evaluator {
             }
             Instruction::FDIV { lhs, rhs, target } => {
                 if self.get_reg_f64(rhs) == 0.0 {
-                    return Some(ReturnValue::Error(
-                        self.error("division by zero", self.source_map[*instruction_pointer]),
+                    return Some(Err(
+                        self.error("division by zero", self.source_map[*instruction_pointer])
                     ));
                 }
 
@@ -261,19 +257,23 @@ impl Evaluator {
                         self.stack_frames[self.current_frame].instruction_pointer.0;
                 } else {
                     match self.stack_frames[self.current_frame].register_types[0] {
-                        UNIT_TYPE => return Some(ReturnValue::Unit),
+                        UNIT_TYPE => return Some(Ok(ReturnValue::Unit)),
                         BOOL_TYPE => {
-                            return Some(ReturnValue::Bool(self.get_reg_bool(RegisterId(0))))
+                            return Some(Ok(ReturnValue::Bool(self.get_reg_bool(RegisterId(0)))))
                         }
-                        I64_TYPE => return Some(ReturnValue::I64(self.get_reg_i64(RegisterId(0)))),
-                        F64_TYPE => return Some(ReturnValue::F64(self.get_reg_f64(RegisterId(0)))),
+                        I64_TYPE => {
+                            return Some(Ok(ReturnValue::I64(self.get_reg_i64(RegisterId(0)))))
+                        }
+                        F64_TYPE => {
+                            return Some(Ok(ReturnValue::F64(self.get_reg_f64(RegisterId(0)))))
+                        }
                         STRING_TYPE => {
                             let string = self.get_reg_string(RegisterId(0));
-                            return Some(ReturnValue::String(*string));
+                            return Some(Ok(ReturnValue::String(*string)));
                         }
                         _ => {
                             let value = self.get_user_type(RegisterId(0));
-                            return Some(ReturnValue::Custom(value));
+                            return Some(Ok(ReturnValue::Custom(value)));
                         }
                     }
                 }
@@ -290,7 +290,7 @@ impl Evaluator {
         &mut self,
         starting_function: FunctionId,
         external_functions: &[ExternalFnRecord],
-    ) -> ReturnValue {
+    ) -> Result<ReturnValue, ScriptError> {
         self.current_frame = self.stack_frames.len();
         self.stack_frames
             .push(self.functions[starting_function.0].clone());
@@ -321,7 +321,7 @@ impl Evaluator {
         &mut self,
         starting_function: FunctionId,
         external_functions: &[ExternalFnRecord],
-    ) -> ReturnValue {
+    ) -> Result<ReturnValue, ScriptError> {
         self.current_frame = self.stack_frames.len();
         self.stack_frames
             .push(self.functions[starting_function.0].clone());
@@ -332,7 +332,12 @@ impl Evaluator {
                 Instruction::EXTERNALCALL { head, args, target } => {
                     let target = *target;
 
-                    let output = self.eval_external_call(*head, args, external_functions);
+                    let output = self.eval_external_call(
+                        instruction_pointer,
+                        *head,
+                        args,
+                        external_functions,
+                    )?;
 
                     self.unbox_to_register(output, target);
                     instruction_pointer += 1;
@@ -348,17 +353,24 @@ impl Evaluator {
 
     fn eval_external_call(
         &self,
+        instruction_pointer: usize,
         head: ExternalFunctionId,
         args: &[RegisterId],
         functions: &[ExternalFnRecord],
-    ) -> Box<dyn Any> {
+    ) -> Result<Box<dyn Any>, ScriptError> {
         #[allow(unreachable_patterns)]
         match &functions[head.0].fun {
-            Function::ExternalFn0(fun) => fun().unwrap(),
+            Function::ExternalFn0(fun) => match fun() {
+                Ok(val) => Ok(val),
+                Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+            },
             Function::ExternalFn1(fun) => {
                 let mut arg0 = self.box_register(args[0]);
 
-                let result = fun(&mut arg0).unwrap();
+                let result = match fun(&mut arg0) {
+                    Ok(val) => Ok(val),
+                    Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+                };
 
                 if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
@@ -371,7 +383,10 @@ impl Evaluator {
                 let mut arg0 = self.box_register(args[0]);
                 let mut arg1 = self.box_register(args[1]);
 
-                let result = fun(&mut arg0, &mut arg1).unwrap();
+                let result = match fun(&mut arg0, &mut arg1) {
+                    Ok(val) => Ok(val),
+                    Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+                };
 
                 if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
@@ -389,7 +404,10 @@ impl Evaluator {
                 let mut arg1 = self.box_register(args[1]);
                 let mut arg2 = self.box_register(args[2]);
 
-                let result = fun(&mut arg0, &mut arg1, &mut arg2).unwrap();
+                let result = match fun(&mut arg0, &mut arg1, &mut arg2) {
+                    Ok(val) => Ok(val),
+                    Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+                };
 
                 if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
@@ -486,6 +504,7 @@ impl Evaluator {
                 //     Box::leak(arg0);
                 // }
             }
+            Function::RemoteFn => unreachable!("lsp instances of engines cannot evaluate scripts or remotely invoke registered functions"),
         }
     }
 
@@ -531,15 +550,19 @@ impl Evaluator {
             self.maybe_free_register(target);
             self.stack_frames[self.current_frame].register_values[target.0].i64 =
                 unsafe { std::mem::transmute::<Box<Box<dyn Any>>, i64>(Box::new(value)) };
-
-            println!("setting {} into {}", target.0, self.get_reg_i64(target))
         }
     }
 
     fn maybe_free_register(&mut self, target: RegisterId) {
         if self.is_string_type(target) {
             let _ = self.get_reg_string(target);
-        } else if self.is_user_type(target) {
+        } else if self.is_user_type(target)
+            && unsafe { self.stack_frames[self.current_frame].register_values[target.0].i64 != 0 }
+            && unsafe {
+                self.stack_frames[self.current_frame].register_values[target.0].i64
+                    != self.stack_frames[self.current_frame].register_values[0].i64
+            }
+        {
             let _ = self.get_user_type(target);
         }
     }
@@ -589,13 +612,11 @@ impl Evaluator {
     }
 
     pub fn error(&self, msg: impl Into<String>, node_id: NodeId) -> ScriptError {
-        let span_start = self.span_start[node_id.0];
-        let span_end = self.span_end[node_id.0];
+        let span = self.spans[node_id.0];
 
         ScriptError {
             message: msg.into(),
-            span_start,
-            span_end,
+            span,
         }
     }
 }

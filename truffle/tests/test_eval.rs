@@ -1,9 +1,6 @@
-use std::any::Any;
-use truffle::Function;
-use truffle::{
-    register_fn, ErrorBatch, Evaluator, FnRegister, FunctionId, Lexer, Parser, ReturnValue,
-    Translater, TypeChecker,
-};
+use std::collections::HashMap;
+
+use truffle::{register_fn, Engine, ErrorBatch, FnRegister, ReturnValue};
 
 #[cfg(feature = "async")]
 pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
@@ -19,68 +16,36 @@ pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
         that - 50
     }
 
-    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
+    let mut engine = Engine::new();
+    register_fn!(engine, "print", print::<i64>);
+    register_fn!(engine, "print", print::<f64>);
+    register_fn!(engine, "print", print::<bool>);
+    register_fn!(engine, "print", print::<String>);
+    register_fn!(engine, "add", add::<i64>);
+    register_fn!(engine, "add", add::<f64>);
+    register_fn!(engine, "modify_this", modify_this);
+    register_fn!(engine, "modify_that", modify_that);
+    register_fn!(engine, "new_env", Env::new_env);
+    register_fn!(engine, "set_var", Env::set_var);
+    register_fn!(engine, "read_var", Env::read_var);
 
-    let tokens = lexer.lex()?;
-    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
-    parser.parse()?;
-
-    let mut typechecker = TypeChecker::new(parser.results);
-    register_fn!(typechecker, "print", print::<i64>);
-    register_fn!(typechecker, "print", print::<f64>);
-    register_fn!(typechecker, "print", print::<bool>);
-    register_fn!(typechecker, "print", print::<String>);
-    register_fn!(typechecker, "add", add::<i64>);
-    register_fn!(typechecker, "add", add::<f64>);
-    register_fn!(typechecker, "modify_this", modify_this);
-    register_fn!(typechecker, "modify_that", modify_that);
-
-    typechecker.typecheck()?;
-
-    let mut translater = Translater::new(typechecker);
-
-    #[allow(unused_mut)]
-    let mut output = translater.translate();
-
-    let mut evaluator = Evaluator::default();
-    evaluator.add_function(output);
-
-    match block_on(evaluator.eval_async(FunctionId(0), &translater.typechecker.functions)) {
-        ReturnValue::Error(error) => Err(error.into()),
-        return_value => Ok(return_value),
-    }
+    block_on(engine.eval_source_async("test", source.as_bytes(), false))
 }
 
 #[cfg(not(feature = "async"))]
 pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
-    let mut lexer = Lexer::new(source.as_bytes().to_vec(), 0);
+    let mut engine = Engine::new();
+    register_fn!(engine, "print", print::<i64>);
+    register_fn!(engine, "print", print::<f64>);
+    register_fn!(engine, "print", print::<bool>);
+    register_fn!(engine, "print", print::<String>);
+    register_fn!(engine, "add", add::<i64>);
+    register_fn!(engine, "add", add::<f64>);
+    register_fn!(engine, "new_env", Env::new_env);
+    register_fn!(engine, "set_var", Env::set_var);
+    register_fn!(engine, "read_var", Env::read_var);
 
-    let tokens = lexer.lex()?;
-    let mut parser = Parser::new(tokens, source.as_bytes().to_vec(), 0);
-    parser.parse()?;
-
-    let mut typechecker = TypeChecker::new(parser.results);
-    register_fn!(typechecker, "print", print::<i64>);
-    register_fn!(typechecker, "print", print::<f64>);
-    register_fn!(typechecker, "print", print::<bool>);
-    register_fn!(typechecker, "print", print::<String>);
-    register_fn!(typechecker, "add", add::<i64>);
-    register_fn!(typechecker, "add", add::<f64>);
-
-    typechecker.typecheck()?;
-
-    let mut translater = Translater::new(typechecker);
-
-    #[allow(unused_mut)]
-    let mut output = translater.translate();
-
-    let mut evaluator = Evaluator::default();
-    evaluator.add_function(output);
-
-    match evaluator.eval(FunctionId(0), &translater.typechecker.functions) {
-        ReturnValue::Error(error) => Err(error.into()),
-        return_value => Ok(return_value),
-    }
+    engine.eval_source("test", source.as_bytes(), false)
 }
 
 // Script Builtins
@@ -93,4 +58,27 @@ pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
 #[cfg_attr(feature = "async", truffle::export)]
 pub fn print<T: std::fmt::Display>(value: T) {
     println!("value: {value}")
+}
+
+pub struct Env {
+    vars: HashMap<String, i64>,
+}
+
+impl Env {
+    #[cfg_attr(feature = "async", truffle::export)]
+    pub fn new_env() -> Env {
+        Env {
+            vars: HashMap::new(),
+        }
+    }
+
+    #[cfg_attr(feature = "async", truffle::export)]
+    pub fn set_var(&mut self, var: String, value: i64) {
+        self.vars.insert(var, value);
+    }
+
+    #[cfg_attr(feature = "async", truffle::export)]
+    pub fn read_var(&mut self, var: String) -> i64 {
+        *self.vars.get(&var).unwrap()
+    }
 }
