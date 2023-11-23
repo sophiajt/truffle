@@ -1,43 +1,71 @@
-# Rust Syntax
+# truffle README
 
-This extension provides a TextMate grammar for Rust. In most cases, you won't need to install the extension, as this repository is upstreamed by VS Code (issues and PRs should be submitted here).
+This is the README for your extension "truffle". After writing up a brief description, we recommend including the following sections.
 
-If you are doing a significant amount of Rust programming, the semantic highlighting provided by [Rust Analyzer][] will be superior to a textmate grammar. For example, semantic highlighting can easily distinguish enums, structs, and traits.
+## Features
 
-Rust Syntax is compatible with Rust Analyzer, but the scopes provided by this extension will not be visible while semantic highlighting is enabled. If for some reason you would like to disable semantic highlighting, you can do this in your `settings.json`:
+Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
 
-```json
-"[rust]": {
-    "editor.semanticHighlighting.enabled": false
-}
-```
+For example if there is an image subfolder under your extension project workspace:
 
-## Compatibility
+\!\[feature X\]\(images/feature-x.png\)
 
-Not all themes are specifically optimized for Rust.
-We have tried to provide sensible default scopes that will work with most themes.
-If you want to modify the colors in a particular theme, you can do so in your `settings.json`:
+> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
 
-```json
-"editor.tokenColorCustomizations": {
-    "[Theme Name]": {
-        "textMateRules": [
-            {
-                "scope": "variable.other.rust",
-                "settings": {
-                    "foreground": "#ffff00"
-                }
-            }
-        ]
-    }
-}
-```
+## Requirements
 
-The VS Code command `Developer: Inspect Editor Tokens and Scopes` will show you the scope stack at the current cursor position.
+If you have any requirements or dependencies, add a section describing those and how to install and configure them.
 
-## Contributing
+## Extension Settings
 
-The grammar is maintained as YAML, using tasks to generate JSON on save (please don't edit the JSON grammar directly).
-You can regenerate the JSON manually from the command palette using `Tasks: Run Build Task`.
+Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
 
-[Rust Analyzer]: https://marketplace.visualstudio.com/items?itemName=matklad.rust-analyzer
+For example:
+
+This extension contributes the following settings:
+
+* `myExtension.enable`: Enable/disable this extension.
+* `myExtension.thing`: Set to `blah` to do something.
+
+## Known Issues
+
+Calling out known issues can help limit users opening duplicate issues against your extension.
+
+## Release Notes
+
+Users appreciate release notes as you update your extension.
+
+### 1.0.0
+
+Initial release of ...
+
+### 1.0.1
+
+Fixed issue #.
+
+### 1.1.0
+
+Added features X, Y, and Z.
+
+---
+
+## Following extension guidelines
+
+Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+
+* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+
+## Working with Markdown
+
+You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+
+* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
+* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
+* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+
+## For more information
+
+* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
+* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+
+**Enjoy!**

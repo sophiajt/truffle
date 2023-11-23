@@ -1,4 +1,5 @@
-*.afdesign
-*.vsix
-refs/
+out
+dist
 node_modules
+.vscode-test/
+*.vsix
