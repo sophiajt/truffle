@@ -148,6 +148,18 @@ fn lsp_find_all_references() {
 
 #[test]
 #[cfg(feature = "lsp")]
+fn lsp_find_all_references_on_def_site() {
+    let engine = Engine::new();
+    let result = engine.find_all_references(5, b"let abc = 123\nabc");
+
+    assert_eq!(
+        result,
+        Some(vec![Span { start: 4, end: 7 }, Span { start: 14, end: 17 }])
+    )
+}
+
+#[test]
+#[cfg(feature = "lsp")]
 fn lsp_check_script() {
     let engine = Engine::new();
     let result = engine.check_script(b"let abc = \n");

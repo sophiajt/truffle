@@ -615,6 +615,12 @@ impl<'permanent> TypeChecker<'permanent> {
             .variables
             .insert(variable_name.to_vec(), variable_name_node_id);
 
+        // Let the reference of the variable in the declaration also point to this
+        // def site. That will allow things like find-all-refs to work later because
+        // the variable in the declaration also counds as a use.
+        self.variable_def_site
+            .insert(variable_name_node_id, variable_name_node_id);
+
         self.variable_info.insert(
             variable_name_node_id,
             Variable {

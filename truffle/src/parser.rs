@@ -122,7 +122,7 @@ impl AstNode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 /// A region of source code
 pub struct Span {
     pub start: usize,

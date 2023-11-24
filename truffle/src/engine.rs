@@ -372,13 +372,15 @@ impl Engine {
 
         if let Some(node_id) = node_id {
             if let Some(def_site_node_id) = typechecker.variable_def_site.get(&node_id) {
-                let mut output = vec![typechecker.parse_results.spans[def_site_node_id.0]];
+                let mut output = vec![];
 
                 for (key, value) in typechecker.variable_def_site.iter() {
                     if value == def_site_node_id {
                         output.push(typechecker.parse_results.spans[key.0])
                     }
                 }
+
+                output.sort();
 
                 Some(output)
             } else {
