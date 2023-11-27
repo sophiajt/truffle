@@ -80,7 +80,8 @@ where
     let fname = fname.as_ref();
     let contents = source.as_bytes();
 
-    let mut engine = Engine::new("repl");
+    let mut engine = Engine::new();
+    engine.set_app_name("repl");
 
     register_fn!(engine, "print", print::<i64>);
     register_fn!(engine, "print", print::<f64>);
@@ -135,12 +136,12 @@ where
     Some(())
 }
 
-#[cfg_attr(feature = "async", truffle::export)]
+#[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
 pub fn print<T: std::fmt::Display>(value: T) {
     println!("value: {value}")
 }
 
-#[cfg_attr(feature = "async", truffle::export)]
+#[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
 pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
     lhs + rhs
 }

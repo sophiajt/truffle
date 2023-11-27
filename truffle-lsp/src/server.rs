@@ -8,7 +8,7 @@ use lsp_types::{
     request::{Completion, DocumentDiagnosticRequest, GotoDefinition, HoverRequest, References},
     CompletionItem, CompletionOptions, CompletionParams, CompletionResponse, DiagnosticOptions,
     DidChangeTextDocumentParams, DocumentDiagnosticReportResult, GotoDefinitionParams,
-    GotoDefinitionResponse, InitializeParams, OneOf, ServerCapabilities,
+    GotoDefinitionResponse, InitializeParams, OneOf, Range, ServerCapabilities,
     TextDocumentContentChangeEvent, TextDocumentSyncKind, Url, VersionedTextDocumentIdentifier,
     WorkDoneProgressOptions,
 };
@@ -27,7 +27,7 @@ use notify::{
 use notify::KqueueWatcher;
 
 use tracing::{debug, info};
-use truffle::{Engine, LineLookupTable};
+use truffle::{Engine, LineLookupTable, SpanOrLocation};
 
 mod dispatch;
 
@@ -121,7 +121,6 @@ impl Server {
             let Ok((flavor, engine)) = Self::load_engine(&entry.path()) else {
                 continue;
             };
-            dbg!(&flavor);
             self.engines.insert(flavor, engine);
         }
 
@@ -255,9 +254,18 @@ impl Server {
         let Some(location) = engine.goto_definition(location, contents.as_bytes()) else {
             return Ok(None);
         };
-        Ok(Some(GotoDefinitionResponse::Scalar(
-            lookup.to_location(uri, location),
-        )))
+
+        let x = match location {
+            SpanOrLocation::Span(span) => lookup.to_location(uri, span),
+            SpanOrLocation::ExternalLocation(uri, line) => {
+                let start = lsp_types::Position { line, character: 0 };
+                let end = start;
+                let range = Range { start, end };
+                Location { uri, range }
+            }
+        };
+
+        Ok(Some(GotoDefinitionResponse::Scalar(x)))
     }
 
     pub fn lsp_check_script(
@@ -348,12 +356,10 @@ impl Server {
     fn engine_for(&self, uri: &Url) -> &Engine {
         // TODO: lookup proper engine
         let path = uri.to_file_path().unwrap();
-        let Ok(flavor) = dbg!(Self::flavor_from_path(dbg!(&path))) else {
+        let Ok(flavor) = Self::flavor_from_path(&path) else {
             return &self.default_engine;
         };
-        self.engines
-            .get(dbg!(&flavor))
-            .unwrap_or(&self.default_engine)
+        self.engines.get(&flavor).unwrap_or(&self.default_engine)
     }
 }
 
@@ -372,7 +378,6 @@ impl DocumentStore {
         &mut self,
         params: DidChangeTextDocumentParams,
     ) -> Result<(), eyre::Error> {
-        dbg!(&params);
         let DidChangeTextDocumentParams {
             text_document,
             content_changes,
@@ -395,7 +400,6 @@ impl DocumentStore {
         &mut self,
         params: lsp_types::DidOpenTextDocumentParams,
     ) -> Result<(), eyre::Error> {
-        dbg!(&params);
         let uri = params.text_document.uri;
         let text = params.text_document.text;
         self.open_files.insert(uri, text);
@@ -404,9 +408,8 @@ impl DocumentStore {
 
     fn workspace_did_change_configuration(
         &self,
-        params: lsp_types::DidChangeConfigurationParams,
+        _params: lsp_types::DidChangeConfigurationParams,
     ) -> Result<(), eyre::Error> {
-        dbg!(params);
         Ok(())
     }
 

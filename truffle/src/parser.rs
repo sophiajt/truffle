@@ -129,6 +129,12 @@ pub struct Span {
     pub end: usize,
 }
 
+impl Span {
+    pub fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
+}
+
 impl Display for Span {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}, {})", self.start, self.end)
@@ -1362,5 +1368,10 @@ impl ParseResults {
                 println!("{:?} ({})", x, self.spans[node_id.0],)
             }
         }
+    }
+
+    pub(crate) fn contents_for(&self, node_id: NodeId) -> &[u8] {
+        let span = self.spans[node_id.0];
+        &self.contents[span.start..span.end]
     }
 }

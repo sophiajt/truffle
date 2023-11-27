@@ -49,13 +49,13 @@ pub fn eval_source(source: &str) -> Result<ReturnValue, ErrorBatch> {
 }
 
 // Script Builtins
-#[cfg_attr(feature = "async", truffle::export)]
+#[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
 pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
     lhs + rhs
 }
 
 #[allow(unused)]
-#[cfg_attr(feature = "async", truffle::export)]
+#[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
 pub fn print<T: std::fmt::Display>(value: T) {
     println!("value: {value}")
 }
@@ -65,19 +65,19 @@ pub struct Env {
 }
 
 impl Env {
-    #[cfg_attr(feature = "async", truffle::export)]
+    #[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
     pub fn new_env() -> Env {
         Env {
             vars: HashMap::new(),
         }
     }
 
-    #[cfg_attr(feature = "async", truffle::export)]
+    #[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
     pub fn set_var(&mut self, var: String, value: i64) {
         self.vars.insert(var, value);
     }
 
-    #[cfg_attr(feature = "async", truffle::export)]
+    #[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
     pub fn read_var(&mut self, var: String) -> i64 {
         *self.vars.get(&var).unwrap()
     }

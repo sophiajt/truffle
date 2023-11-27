@@ -128,10 +128,15 @@ fn lsp_hover() {
 #[test]
 #[cfg(feature = "lsp")]
 fn lsp_goto_definition() {
+    use truffle::SpanOrLocation;
+
     let engine = Engine::new();
     let result = engine.goto_definition(16, b"let abc = 123\nabc");
 
-    assert_eq!(result, Some(Span { start: 4, end: 7 }))
+    assert_eq!(
+        result,
+        Some(SpanOrLocation::Span(Span { start: 4, end: 7 }))
+    )
 }
 
 #[test]

@@ -40,11 +40,27 @@ pub fn register_fn(input: TokenStream) -> TokenStream {
         ident_segment.ident = format_ident!("register_{}", ident_segment.ident);
         path
     };
+    let fn_location = {
+        let mut path = fun.path.clone();
+        let ident_segment = path
+            .segments
+            .last_mut()
+            .expect("path should always have at least one segment");
+        ident_segment.ident = format_ident!("{}_location", ident_segment.ident);
+        path
+    };
+
     quote! {
         if #fun_is_async() {
             #engine.with(#register_fun())
         } else {
-            #engine.register_fn(#name, #fun)
+            #engine.register_fn(#name, #fun, Some(#fn_location()))
+        }
+        #[cfg(feature = "lsp")]
+        if #engine.app_name().is_some() {
+            let mut writer = #engine.lsp_cache_writer();
+            let data = postcard::to_io(&#engine, &mut writer).unwrap();
+            let _ = std::io::Write::flush(&mut writer);
         }
     }
     .into()
@@ -60,21 +76,25 @@ fn foo(item: TokenStream) -> Result<proc_macro2::TokenStream, syn::Error> {
     let output = if input.sig.asyncness.is_some() {
         let register_fn = generate::register_fn(input.clone())?;
         let fn_is_async = generate::fn_is_async(input.clone())?;
+        let fn_location = generate::fn_location(input.clone())?;
 
         quote! {
             #input
 
             #register_fn
             #fn_is_async
+            #fn_location
         }
     } else {
         let register_fn = generate::register_fn_stub(input.clone()).expect("stub should generate");
         let fn_is_async = generate::fn_is_async(input.clone())?;
+        let fn_location = generate::fn_location(input.clone())?;
         quote! {
             #input
 
             #register_fn
             #fn_is_async
+            #fn_location
         }
     };
     Ok(output)
@@ -100,6 +120,25 @@ mod generate {
                 #registration_closure
             }
         })
+    }
+
+    pub(crate) fn fn_location(input: ItemFn) -> Result<TokenStream, syn::Error> {
+        let wrapped_fn_name = input.sig.ident.to_string();
+        let mut fn_location = input;
+        fn_location.sig.asyncness = None;
+        fn_location.sig.ident = format_ident!("{wrapped_fn_name}_location");
+        fn_location.sig.output = syn::parse_str("-> &'static std::panic::Location<'static>")
+            .expect("this should parse as a return type");
+        fn_location.sig.inputs = Default::default();
+        fn_location.block = parse_quote! {
+            {
+                std::panic::Location::caller()
+            }
+        };
+        let tokens = quote! {
+            #fn_location
+        };
+        Ok(tokens)
     }
 
     pub fn register_fn_stub(input: ItemFn) -> Result<TokenStream, syn::Error> {
@@ -221,6 +260,7 @@ mod generate {
 
     fn registration_closure(input: ItemFn) -> Result<TokenStream, syn::Error> {
         let wrapped_fn_name = input.sig.ident.to_string();
+        let fn_location = format_ident!("{wrapped_fn_name}_location");
 
         let param_types = input.sig.inputs.iter().map(|arg| {
             match arg {
@@ -247,6 +287,7 @@ mod generate {
                     engine.get_type::<#ret_type>().expect("engine should already know about this type"),
                     Function::ExternalAsyncFn1(wrapped_fn),
                     #wrapped_fn_name,
+                    #fn_location()
                 );
             }
         })

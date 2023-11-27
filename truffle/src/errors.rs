@@ -230,6 +230,10 @@ impl LineLookupTable {
     }
 
     pub fn from_position(&self, Position { line, character }: Position) -> usize {
+        self.from_line_char(line, character)
+    }
+
+    pub fn from_line_char(&self, line: u32, character: u32) -> usize {
         self.line_starts[line as usize] + character as usize
     }
 
