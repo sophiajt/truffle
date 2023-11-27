@@ -2,13 +2,13 @@
 use truffle::{register_fn, Engine, ErrorBatch, FnRegister, ScriptError, Span};
 
 // Script Builtins
-#[cfg_attr(feature = "async", truffle::export)]
+#[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
 pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
     lhs + rhs
 }
 
 #[allow(unused)]
-#[cfg_attr(feature = "async", truffle::export)]
+#[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
 pub fn print<T: std::fmt::Display>(value: T) {
     println!("value: {value}")
 }
