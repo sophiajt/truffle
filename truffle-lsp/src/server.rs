@@ -408,7 +408,7 @@ impl DocumentStore {
 
     fn workspace_did_change_configuration(
         &self,
-        params: lsp_types::DidChangeConfigurationParams,
+        _params: lsp_types::DidChangeConfigurationParams,
     ) -> Result<(), eyre::Error> {
         Ok(())
     }
