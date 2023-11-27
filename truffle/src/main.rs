@@ -121,8 +121,6 @@ where
     register_fn!(engine, "print", print::<bool>);
     register_fn!(engine, "add", add::<i64>);
     register_fn!(engine, "add", add::<f64>);
-    // engine.print_fn_infos();
-    // dbg!(file!());
 
     let result = engine.eval_source(fname, contents, debug_output);
     match result {
