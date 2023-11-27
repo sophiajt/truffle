@@ -234,7 +234,7 @@ impl LineLookupTable {
     }
 
     pub fn to_position(&self, position: usize) -> Position {
-        let line = self.line_starts.partition_point(|&ind| ind < position) - 1;
+        let line = self.line_starts.partition_point(|&ind| ind <= position) - 1;
         let character = position - self.line_starts[line];
         Position {
             line: line as u32,

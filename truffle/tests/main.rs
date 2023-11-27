@@ -176,6 +176,23 @@ fn lsp_check_script() {
 }
 
 #[test]
+#[cfg(feature = "lsp")]
+fn lsp_check_script_call() {
+    let engine = Engine::new();
+    let result = engine.check_script(b"hello(\"world\")\n");
+
+    eprintln!("result: {:?}", result);
+
+    assert_eq!(
+        result,
+        Some(ErrorBatch::one(ScriptError {
+            message: "unknown function 'hello'".into(),
+            span: Span { start: 0, end: 14 }
+        }))
+    )
+}
+
+#[test]
 fn lsp_completion() {
     let engine = Engine::new();
     let result = engine.completion(43, b"let abc = 123\nlet abd = 456\nlet acd = 789; a + 10");

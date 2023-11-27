@@ -1120,9 +1120,9 @@ impl Parser {
                 // We're a call
                 self.lparen();
                 let args = self.args_list();
+                let end = self.position() + 1;
                 self.rparen();
 
-                let end = self.position();
                 self.create_node(AstNode::Call { head, args }, Span { start, end })
             } else {
                 // We're a variable
