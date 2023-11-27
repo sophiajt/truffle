@@ -37,6 +37,7 @@ impl Dispatcher<'_, Request> {
                     result,
                     error: None,
                 };
+                info!("sending back response: {resp:?}");
                 self.server
                     .connection
                     .sender

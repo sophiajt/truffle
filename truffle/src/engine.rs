@@ -335,7 +335,7 @@ impl Engine {
         let _ = typechecker.typecheck();
 
         let node_id = self.get_node_id_at_location(location, &typechecker.parse_results)?;
-        match dbg!(&typechecker.parse_results.ast_nodes[node_id.0]) {
+        match &typechecker.parse_results.ast_nodes[node_id.0] {
             crate::parser::AstNode::Variable => Some(
                 typechecker
                     .variable_def_site
@@ -344,15 +344,12 @@ impl Engine {
             )?,
             crate::parser::AstNode::Name => {
                 let record = typechecker.parse_results.contents_for(node_id);
-                dbg!(&record);
-                dbg!(&self.permanent_definitions.function_infos);
-                let location = dbg!(self.permanent_definitions.function_infos.get(record)).unwrap();
+                let location = self.permanent_definitions.function_infos.get(record)?;
                 let line = location.line;
-                let path = dbg!(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
-                    .parent()
-                    .unwrap()
+                let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .parent()?
                     .join(&location.path);
-                let uri = Url::from_file_path(dbg!(path)).unwrap();
+                let uri = Url::from_file_path(path).ok()?;
                 Some(SpanOrLocation::ExternalLocation(uri, line))
             }
             _ => None,
@@ -419,11 +416,9 @@ impl Engine {
 
                 Some(output)
             } else {
-                dbg!(());
                 None
             }
         } else {
-            dbg!(());
             None
         }
     }
@@ -507,7 +502,7 @@ impl Engine {
     #[cfg(feature = "lsp")]
     pub fn lsp_cache_writer(&self) -> std::io::BufWriter<std::fs::File> {
         let dirs = directories::ProjectDirs::from("", "truffle", "truffle-lsp").unwrap();
-        let path = dbg!(dirs.cache_dir());
+        let path = dirs.cache_dir();
         std::fs::create_dir_all(path).unwrap();
         let app_name = self
             .app_name
@@ -577,7 +572,7 @@ where
             fun: Function::ExternalFn0(wrapped),
         });
 
-        if let Some(location) = dbg!(location) {
+        if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
                 ExternalFunctionLocation {
@@ -641,7 +636,7 @@ where
             fun: Function::ExternalFn1(wrapped),
         });
 
-        if let Some(location) = dbg!(location) {
+        if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
                 ExternalFunctionLocation {
@@ -719,7 +714,7 @@ where
             fun: Function::ExternalFn2(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
-        if let Some(location) = dbg!(location) {
+        if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
                 ExternalFunctionLocation {
@@ -797,7 +792,7 @@ where
             fun: Function::ExternalFn2(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
-        if let Some(location) = dbg!(location) {
+        if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
                 ExternalFunctionLocation {
@@ -895,7 +890,7 @@ where
             fun: Function::ExternalFn3(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
-        if let Some(location) = dbg!(location) {
+        if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
                 ExternalFunctionLocation {
@@ -993,7 +988,7 @@ where
             fun: Function::ExternalFn3(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
-        if let Some(location) = dbg!(location) {
+        if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
                 ExternalFunctionLocation {

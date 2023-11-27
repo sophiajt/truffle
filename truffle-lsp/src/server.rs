@@ -121,7 +121,6 @@ impl Server {
             let Ok((flavor, engine)) = Self::load_engine(&entry.path()) else {
                 continue;
             };
-            dbg!(&flavor);
             self.engines.insert(flavor, engine);
         }
 
@@ -357,12 +356,10 @@ impl Server {
     fn engine_for(&self, uri: &Url) -> &Engine {
         // TODO: lookup proper engine
         let path = uri.to_file_path().unwrap();
-        let Ok(flavor) = dbg!(Self::flavor_from_path(dbg!(&path))) else {
+        let Ok(flavor) = Self::flavor_from_path(&path) else {
             return &self.default_engine;
         };
-        self.engines
-            .get(dbg!(&flavor))
-            .unwrap_or(&self.default_engine)
+        self.engines.get(&flavor).unwrap_or(&self.default_engine)
     }
 }
 
@@ -381,7 +378,6 @@ impl DocumentStore {
         &mut self,
         params: DidChangeTextDocumentParams,
     ) -> Result<(), eyre::Error> {
-        dbg!(&params);
         let DidChangeTextDocumentParams {
             text_document,
             content_changes,
@@ -404,7 +400,6 @@ impl DocumentStore {
         &mut self,
         params: lsp_types::DidOpenTextDocumentParams,
     ) -> Result<(), eyre::Error> {
-        dbg!(&params);
         let uri = params.text_document.uri;
         let text = params.text_document.text;
         self.open_files.insert(uri, text);
@@ -415,7 +410,6 @@ impl DocumentStore {
         &self,
         params: lsp_types::DidChangeConfigurationParams,
     ) -> Result<(), eyre::Error> {
-        dbg!(params);
         Ok(())
     }
 
