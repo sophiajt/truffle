@@ -284,17 +284,6 @@ impl Engine {
         f(self)
     }
 
-    #[cfg(feature = "lsp")]
-    pub fn add_lsp_info(&mut self, name: &str, location: &'static std::panic::Location<'static>) {
-        // name -> function name
-        // uri -> location.file()
-        // position -> location.line(), location.column()
-
-        // self.register_fn(name, fun)
-
-        dbg!(name, location);
-    }
-
     // TODO: replace location here with span
     pub fn get_node_id_at_location(
         &self,
@@ -534,10 +523,6 @@ impl Engine {
         T: Into<Option<&'a str>>,
     {
         self.app_name = app_name.into().map(String::from);
-    }
-
-    pub fn print_fn_infos(&self) {
-        dbg!(&self.permanent_definitions.function_infos);
     }
 }
 

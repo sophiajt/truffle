@@ -122,7 +122,6 @@ impl Server {
                 continue;
             };
             dbg!(&flavor);
-            engine.print_fn_infos();
             self.engines.insert(flavor, engine);
         }
 
