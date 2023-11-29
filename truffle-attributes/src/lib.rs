@@ -50,20 +50,34 @@ pub fn register_fn(input: TokenStream) -> TokenStream {
         path
     };
 
-    quote! {
-        if #fun_is_async() {
-            #engine.with(#register_fun())
-        } else {
-            #engine.register_fn(#name, #fun, Some(#fn_location()))
+    #[cfg(feature = "lsp")]
+    {
+        quote! {
+            if #fun_is_async() {
+                #engine.with(#register_fun())
+            } else {
+                #engine.register_fn(#name, #fun, Some(#fn_location()))
+            };
+            if #engine.app_name().is_some() {
+                dbg!(());
+                let mut writer = #engine.lsp_cache_writer();
+                let data = postcard::to_io(&#engine, &mut writer).unwrap();
+                let _ = std::io::Write::flush(&mut writer);
+            }
         }
-        #[cfg(feature = "lsp")]
-        if #engine.app_name().is_some() {
-            let mut writer = #engine.lsp_cache_writer();
-            let data = postcard::to_io(&#engine, &mut writer).unwrap();
-            let _ = std::io::Write::flush(&mut writer);
-        }
+        .into()
     }
-    .into()
+    #[cfg(not(feature = "lsp"))]
+    {
+        quote! {
+            if #fun_is_async() {
+                #engine.with(#register_fun())
+            } else {
+                #engine.register_fn(#name, #fun, Some(#fn_location()))
+            };
+        }
+        .into()
+    }
 }
 
 #[proc_macro_attribute]

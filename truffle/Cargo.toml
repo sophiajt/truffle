@@ -12,10 +12,10 @@ lsp-types = { version = "0.94.1", optional = true }
 postcard = { version = "1.0.8", features = ["alloc", "use-std"], optional = true }
 reedline = { version = "0.21.0", features = ["bashisms"], optional = true}
 serde = { version = "1.0", features = ["derive"], optional = true }
-truffle-attributes = { path = "../truffle-attributes", version = "0.1.0", optional = true }
+truffle-attributes = { path = "../truffle-attributes", version = "0.1.0", optional = true, features = ["lsp"] }
 
 [features]
-lsp = ["serde", "postcard", "lsp-types", "directories", "truffle-attributes"]
+lsp = ["serde", "postcard", "lsp-types", "directories", "truffle-attributes?/lsp", "truffle-attributes"]
 async = ["dep:futures", "truffle-attributes"]
 
 [dev-dependencies]
