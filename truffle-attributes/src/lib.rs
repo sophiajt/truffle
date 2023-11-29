@@ -61,7 +61,7 @@ pub fn register_fn(input: TokenStream) -> TokenStream {
             if #engine.app_name().is_some() {
                 dbg!(());
                 let mut writer = #engine.lsp_cache_writer();
-                let data = postcard::to_io(&#engine, &mut writer).unwrap();
+                let data = ::truffle::postcard::to_io(&#engine, &mut writer).unwrap();
                 let _ = std::io::Write::flush(&mut writer);
             }
         }
