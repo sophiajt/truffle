@@ -30,3 +30,6 @@ pub use crate::typechecker::Function;
 #[cfg_attr(docsrs, doc(cfg(any(feature = "async", feature = "lsp"))))]
 #[doc(inline)]
 pub use truffle_attributes::{export, register_fn};
+
+#[cfg(feature = "lsp")]
+pub use postcard;

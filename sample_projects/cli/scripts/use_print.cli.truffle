@@ -1,0 +1,5 @@
+let xyz = 123
+
+xyz
+
+print(100)
