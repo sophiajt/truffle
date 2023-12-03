@@ -1,0 +1,8 @@
+// We can continue to call sync functions
+let xyz = 123
+print(xyz)
+
+// And we can also call async functions.
+// Note: in truffle we elide the .await as all async functions
+// are currently immediately invoked
+async_print(3)
