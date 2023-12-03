@@ -1,10 +1,10 @@
 use std::fmt::Display;
 use truffle::{export, register_fn, Engine, FnRegister};
 
-const SCRIPT_NAME: &'static str = "scripts/example.overview.truffle";
+const SCRIPT_NAME: &str = "scripts/example.overview.truffle";
 
 struct State {
-    age: i64
+    age: i64,
 }
 
 impl State {
@@ -40,5 +40,8 @@ fn main() {
     register_fn!(engine, "get_age", State::get_age);
 
     let contents = std::fs::read_to_string(SCRIPT_NAME).unwrap();
-    println!("{:?}", engine.eval_source(SCRIPT_NAME, contents.as_bytes(), false))
+    println!(
+        "{:?}",
+        engine.eval_source(SCRIPT_NAME, contents.as_bytes(), false)
+    )
 }

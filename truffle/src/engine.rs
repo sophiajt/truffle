@@ -200,7 +200,7 @@ impl Engine {
         evaluator
             .eval_async(FunctionId(0), &self.permanent_definitions.functions)
             .await
-            .map_err(|e| ErrorBatch::one(e))
+            .map_err(ErrorBatch::one)
     }
 
     pub fn register_type<T>(&mut self) -> TypeId
@@ -273,7 +273,7 @@ impl Engine {
             .permanent_definitions
             .external_functions
             .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
+            .or_default();
         (*ent).push(ExternalFunctionId(id));
     }
 
@@ -879,7 +879,6 @@ where
         (*ent).push(ExternalFunctionId(id));
     }
 }
-
 
 impl<'a, A, T, U, V, W> FnRegister<A, V, (&'a T, U, W)> for Engine
 where
