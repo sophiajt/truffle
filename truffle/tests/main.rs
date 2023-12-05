@@ -65,6 +65,14 @@ fn variables() {
 }
 
 #[test]
+fn assignment_operations() {
+    assert_matches!(
+        eval_source("let mut x = 1; x += 11; x -= 2; x *= 6; x /= 12"),
+        Ok(ReturnValue::I64(5))
+    );
+}
+
+#[test]
 fn if_expression() {
     assert_matches!(
         eval_source("if true { 3 } else { 4 }"),
