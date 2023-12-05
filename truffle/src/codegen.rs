@@ -604,6 +604,34 @@ impl<'permanent> Translater<'permanent> {
                 let rhs = self.translate_node(builder, rhs);
                 builder.mov(op, lhs, rhs)
             }
+            AstNode::AddAssignment => {
+                let lhs = self.translate_node(builder, lhs);
+                let rhs = self.translate_node(builder, rhs);
+
+                let result = builder.add(op, lhs, rhs);
+                builder.mov(op, lhs, result)
+            }
+            AstNode::MinusAssignment => {
+                let lhs = self.translate_node(builder, lhs);
+                let rhs = self.translate_node(builder, rhs);
+
+                let result = builder.sub(op, lhs, rhs);
+                builder.mov(op, lhs, result)
+            }
+            AstNode::MultiplyAssignment => {
+                let lhs = self.translate_node(builder, lhs);
+                let rhs = self.translate_node(builder, rhs);
+
+                let result = builder.mul(op, lhs, rhs);
+                builder.mov(op, lhs, result)
+            }
+            AstNode::DivideAssignment => {
+                let lhs = self.translate_node(builder, lhs);
+                let rhs = self.translate_node(builder, rhs);
+
+                let result = builder.div(op, lhs, rhs);
+                builder.mov(op, lhs, result)
+            }
             AstNode::And => {
                 // Note: we can't pre-translate lhs and rhs because
                 // we need to have boolean shortcircuiting

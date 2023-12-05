@@ -40,7 +40,12 @@ pub enum AstNode {
     And,
     Or,
     Pow,
+
     Assignment,
+    AddAssignment,
+    MinusAssignment,
+    MultiplyAssignment,
+    DivideAssignment,
 
     // Statements
     Let {
@@ -116,7 +121,11 @@ impl AstNode {
             | AstNode::NotEqual => 80,
             AstNode::And => 50,
             AstNode::Or => 40,
-            AstNode::Assignment => 10,
+            AstNode::Assignment
+            | AstNode::AddAssignment
+            | AstNode::MinusAssignment
+            | AstNode::MultiplyAssignment
+            | AstNode::DivideAssignment => 10,
             _ => 0,
         }
     }
@@ -214,6 +223,10 @@ impl Parser {
                     | TokenType::LessThan
                     | TokenType::LessThanEqual
                     | TokenType::Plus
+                    | TokenType::PlusEquals
+                    | TokenType::DashEquals
+                    | TokenType::AsteriskEquals
+                    | TokenType::ForwardSlashEquals
                     | TokenType::GreaterThan
                     | TokenType::GreaterThanEqual
                     | TokenType::AmpersandAmpersand
@@ -841,6 +854,22 @@ impl Parser {
                 TokenType::EqualsEquals => {
                     self.next();
                     self.create_node(AstNode::Equal, span)
+                }
+                TokenType::PlusEquals => {
+                    self.next();
+                    self.create_node(AstNode::AddAssignment, span)
+                }
+                TokenType::DashEquals => {
+                    self.next();
+                    self.create_node(AstNode::MinusAssignment, span)
+                }
+                TokenType::AsteriskEquals => {
+                    self.next();
+                    self.create_node(AstNode::MultiplyAssignment, span)
+                }
+                TokenType::ForwardSlashEquals => {
+                    self.next();
+                    self.create_node(AstNode::DivideAssignment, span)
                 }
                 TokenType::ExclamationEquals => {
                     self.next();

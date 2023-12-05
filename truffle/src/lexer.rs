@@ -23,11 +23,15 @@ pub enum TokenType {
     Semicolon,
     Plus,
     PlusPlus,
+    PlusEquals,
     Dash,
+    DashEquals,
     Exclamation,
     Asterisk,
+    AsteriskEquals,
     AsteriskAsterisk,
     ForwardSlash,
+    ForwardSlashEquals,
     ForwardSlashForwardSlash,
     Equals,
     EqualsEquals,
@@ -332,6 +336,16 @@ impl Lexer {
                             end: start + 2,
                         },
                     }
+                } else if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'='
+                {
+                    Token {
+                        token_type: TokenType::PlusEquals,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
+                    }
                 } else {
                     Token {
                         token_type: TokenType::Plus,
@@ -342,19 +356,43 @@ impl Lexer {
                     }
                 }
             }
-            b'-' => Token {
-                token_type: TokenType::Dash,
-                span: Span {
-                    start,
-                    end: start + 1,
-                },
-            },
+            b'-' => {
+                if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'='
+                {
+                    Token {
+                        token_type: TokenType::DashEquals,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
+                    }
+                } else {
+                    Token {
+                        token_type: TokenType::Dash,
+                        span: Span {
+                            start,
+                            end: start + 1,
+                        },
+                    }
+                }
+            }
             b'*' => {
                 if self.source.len() > self.span_offset + 1
                     && self.source[self.span_offset + 1] == b'*'
                 {
                     Token {
                         token_type: TokenType::AsteriskAsterisk,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
+                    }
+                } else if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'='
+                {
+                    Token {
+                        token_type: TokenType::AsteriskEquals,
                         span: Span {
                             start,
                             end: start + 2,
@@ -376,6 +414,16 @@ impl Lexer {
                 {
                     Token {
                         token_type: TokenType::ForwardSlashForwardSlash,
+                        span: Span {
+                            start,
+                            end: start + 2,
+                        },
+                    }
+                } else if self.source.len() > self.span_offset + 1
+                    && self.source[self.span_offset + 1] == b'='
+                {
+                    Token {
+                        token_type: TokenType::ForwardSlashEquals,
                         span: Span {
                             start,
                             end: start + 2,
