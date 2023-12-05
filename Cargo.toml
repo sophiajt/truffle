@@ -1,7 +1,8 @@
 [workspace]
 
 members = [
-    "sample_projects/cli",
+    "sample_projects/truffle_overview",
+    "sample_projects/async_sample",
     "truffle",
     "truffle-attributes",
     "truffle-lsp",

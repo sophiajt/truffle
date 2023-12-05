@@ -1,0 +1,18 @@
+// Call out to the registered print function
+let xyz = 123
+print(xyz)
+
+// Create and use an object
+let mut state = new_state(33)
+state.set_age(88)
+print(state.get_age())
+
+// Simple strings
+print("Hello, truffle")
+
+// Loops
+let mut x = 0
+while x < 10 {
+    print(x)
+    x = x + 1
+}

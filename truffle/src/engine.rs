@@ -200,7 +200,7 @@ impl Engine {
         evaluator
             .eval_async(FunctionId(0), &self.permanent_definitions.functions)
             .await
-            .map_err(|e| ErrorBatch::one(e))
+            .map_err(ErrorBatch::one)
     }
 
     pub fn register_type<T>(&mut self) -> TypeId
@@ -273,7 +273,7 @@ impl Engine {
             .permanent_definitions
             .external_functions
             .entry(name.as_bytes().to_vec())
-            .or_insert(Vec::new());
+            .or_default();
         (*ent).push(ExternalFunctionId(id));
     }
 
@@ -596,7 +596,7 @@ where
     }
 }
 
-impl<A, T, U> FnRegister<A, U, (T,)> for Engine
+impl<'a, A, T, U> FnRegister<A, U, (&'a T,)> for Engine
 where
     A: 'static + Fn(T) -> U,
     T: Clone + Any,
@@ -613,6 +613,70 @@ where
                 let inside = (*arg).downcast_mut() as Option<&mut T>;
                 match inside {
                     Some(b) => Ok(Box::new(fun(b.clone())) as Box<dyn Any>),
+                    None => Err(format!(
+                        "can't convert first argument to {}",
+                        std::any::type_name::<T>()
+                    )),
+                }
+            });
+
+        let param1 = if let Some(id) = self.permanent_definitions.get_type::<T>() {
+            id
+        } else {
+            self.register_type::<T>()
+        };
+
+        let ret = if let Some(id) = self.permanent_definitions.get_type::<U>() {
+            id
+        } else {
+            self.register_type::<U>()
+        };
+
+        self.permanent_definitions.functions.push(ExternalFnRecord {
+            params: vec![param1],
+            ret,
+            fun: Function::ExternalFn1(wrapped),
+        });
+
+        if let Some(location) = location {
+            self.permanent_definitions.function_infos.insert(
+                name.as_bytes().to_vec(),
+                ExternalFunctionLocation {
+                    path: location.file().into(),
+                    line: location.line(),
+                    column: location.column(),
+                },
+            );
+        }
+
+        let id = self.permanent_definitions.functions.len() - 1;
+
+        let ent = self
+            .permanent_definitions
+            .external_functions
+            .entry(name.as_bytes().to_vec())
+            .or_default();
+        (*ent).push(ExternalFunctionId(id));
+    }
+}
+
+impl<A, T, U> FnRegister<A, U, (&mut T,)> for Engine
+where
+    A: 'static + Fn(&mut T) -> U,
+    T: Any,
+    U: Any,
+{
+    fn register_fn(
+        &mut self,
+        name: &str,
+        fun: A,
+        location: Option<&'static std::panic::Location<'static>>,
+    ) {
+        let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
+            Box::new(move |arg: &mut Box<dyn Any>| {
+                let inside = (*arg).downcast_mut() as Option<&mut T>;
+                match inside {
+                    Some(b) => Ok(Box::new(fun(b)) as Box<dyn Any>),
                     None => Err(format!(
                         "can't convert first argument to {}",
                         std::any::type_name::<T>()
