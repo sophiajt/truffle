@@ -1627,7 +1627,6 @@ dependencies = [
 name = "truffle-attributes"
 version = "0.1.0"
 dependencies = [
- "postcard",
  "proc-macro2",
  "quote",
  "syn 2.0.31",
