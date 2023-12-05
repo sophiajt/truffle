@@ -5,7 +5,7 @@ use assert_matches::assert_matches;
 use test_eval::*;
 use truffle::ReturnValue;
 #[cfg(feature = "lsp")]
-use truffle::{Engine, ErrorBatch, ScriptError, Span};
+use truffle::{export, register_fn, Engine, ErrorBatch, FnRegister, ScriptError, Span};
 
 #[test]
 fn math() {
@@ -180,19 +180,25 @@ fn lsp_check_script() {
     )
 }
 
+#[cfg(feature = "lsp")]
+#[export]
+fn greeter(name: String) {
+    println!("Hello, {}", name)
+}
 #[test]
 #[cfg(feature = "lsp")]
 fn lsp_check_script_call() {
-    let engine = Engine::new();
-    let result = engine.check_script(b"hello(\"world\")\n");
+    let mut engine = Engine::new();
+    register_fn!(engine, "greeter", greeter);
+    let result = engine.check_script(b"greeter(5)\n");
 
     eprintln!("result: {:?}", result);
 
     assert_eq!(
         result,
         Some(ErrorBatch::one(ScriptError {
-            message: "unknown function 'hello'".into(),
-            span: Span { start: 0, end: 14 }
+            message: "could not find compatible function for greeter(i64)".into(),
+            span: Span { start: 0, end: 10 }
         }))
     )
 }
