@@ -216,11 +216,6 @@ fn lsp_check_script() {
     )
 }
 
-#[cfg(feature = "lsp")]
-#[export]
-fn greeter(name: String) {
-    println!("Hello, {}", name)
-}
 #[test]
 #[cfg(feature = "lsp")]
 fn lsp_check_script_call() {
