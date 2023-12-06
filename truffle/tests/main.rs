@@ -143,6 +143,18 @@ fn lsp_hover_fun() {
 
 #[test]
 #[cfg(feature = "lsp")]
+fn lsp_hover_fun_paren() {
+    let mut engine = Engine::new();
+    register_fn!(engine, "greeter", greeter);
+    let hover = engine.hover(7, b"greeter(\"Soph\")");
+
+    eprintln!("hover: {}", hover);
+
+    assert!(hover.ends_with("String) -> void"))
+}
+
+#[test]
+#[cfg(feature = "lsp")]
 fn lsp_goto_definition() {
     use truffle::SpanOrLocation;
 

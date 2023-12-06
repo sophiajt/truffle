@@ -586,6 +586,7 @@ impl<'permanent> TypeChecker<'permanent> {
 
                     self.node_types[node_id.0] = *ret;
                     self.call_resolution.insert(head, def);
+                    self.call_resolution.insert(node_id, def);
                     return;
                 }
             }
