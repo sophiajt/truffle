@@ -5,7 +5,7 @@ use assert_matches::assert_matches;
 use test_eval::*;
 use truffle::ReturnValue;
 #[cfg(feature = "lsp")]
-use truffle::{Engine, ErrorBatch, ScriptError, Span};
+use truffle::{export, register_fn, Engine, ErrorBatch, FnRegister, ScriptError, Span};
 
 #[test]
 fn math() {
@@ -131,6 +131,34 @@ fn lsp_hover() {
     let hover = engine.hover(2, b"1234567");
 
     assert_eq!(hover, "i64")
+}
+
+#[cfg(feature = "lsp")]
+#[export]
+fn greeter(name: String) {
+    println!("Hello, {}", name)
+}
+
+#[test]
+#[cfg(feature = "lsp")]
+fn lsp_hover_fun() {
+    let mut engine = Engine::new();
+    register_fn!(engine, "greeter", greeter);
+    let hover = engine.hover(2, b"greeter(\"Soph\")");
+
+    assert!(hover.ends_with("String) -> void"))
+}
+
+#[test]
+#[cfg(feature = "lsp")]
+fn lsp_hover_fun_paren() {
+    let mut engine = Engine::new();
+    register_fn!(engine, "greeter", greeter);
+    let hover = engine.hover(7, b"greeter(\"Soph\")");
+
+    eprintln!("hover: {}", hover);
+
+    assert!(hover.ends_with("String) -> void"))
 }
 
 #[test]

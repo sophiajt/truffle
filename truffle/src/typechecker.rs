@@ -586,6 +586,7 @@ impl<'permanent> TypeChecker<'permanent> {
 
                     self.node_types[node_id.0] = *ret;
                     self.call_resolution.insert(head, def);
+                    self.call_resolution.insert(node_id, def);
                     return;
                 }
             }
@@ -704,5 +705,30 @@ impl<'permanent> TypeChecker<'permanent> {
             fun_name.push_str(&self.stringify_type(*param));
         }
         fun_name
+    }
+
+    pub fn pretty_function_signature(
+        &self,
+        name: &[u8],
+        function_id: ExternalFunctionId,
+    ) -> String {
+        let external_fun = &self.permanent_definitions.functions[function_id.0];
+
+        let mut fun_signature = format!("{}(", String::from_utf8_lossy(name));
+
+        let mut first = true;
+        for param in &external_fun.params {
+            if !first {
+                fun_signature.push_str(", ");
+            } else {
+                first = false;
+            }
+
+            fun_signature.push_str(&self.stringify_type(*param));
+        }
+
+        fun_signature.push_str(&format!(") -> {}", self.stringify_type(external_fun.ret)));
+
+        fun_signature
     }
 }

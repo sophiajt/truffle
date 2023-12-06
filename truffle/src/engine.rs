@@ -302,6 +302,8 @@ impl Engine {
 
     #[cfg(feature = "lsp")]
     pub fn hover(&self, location: usize, contents: &[u8]) -> String {
+        use crate::parser::AstNode;
+
         let mut lexer = Lexer::new(contents.to_vec(), 0);
         let tokens = match lexer.lex() {
             Ok(tokens) => tokens,
@@ -316,9 +318,35 @@ impl Engine {
         let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
 
         if let Some(node_id) = node_id {
-            let type_id = typechecker.node_types[node_id.0];
+            match typechecker.parse_results.ast_nodes[node_id.0] {
+                AstNode::Name => {
+                    let external_function_id = typechecker.call_resolution.get(&node_id);
 
-            typechecker.stringify_type(type_id)
+                    if let Some(external_function_id) = external_function_id {
+                        let name = typechecker.parse_results.contents_for(node_id);
+                        typechecker.pretty_function_signature(name, *external_function_id)
+                    } else {
+                        let type_id = typechecker.node_types[node_id.0];
+
+                        typechecker.stringify_type(type_id)
+                    }
+                }
+                AstNode::Call { head, .. } => {
+                    let external_function_id = typechecker.call_resolution.get(&node_id);
+
+                    if let Some(external_function_id) = external_function_id {
+                        let name = typechecker.parse_results.contents_for(head);
+                        typechecker.pretty_function_signature(name, *external_function_id)
+                    } else {
+                        "<unknown function>".into()
+                    }
+                }
+                _ => {
+                    let type_id = typechecker.node_types[node_id.0];
+
+                    typechecker.stringify_type(type_id)
+                }
+            }
         } else {
             String::new()
         }
