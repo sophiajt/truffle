@@ -554,9 +554,6 @@ impl<'permanent> TypeChecker<'permanent> {
                     &self.permanent_definitions.functions[def.0];
                 {
                     if args.len() != params.len() {
-                        // self.error(format!("expected {} argument(s)", params.len()), head);
-                        // return;
-                        dbg!();
                         continue;
                     }
 
@@ -567,19 +564,8 @@ impl<'permanent> TypeChecker<'permanent> {
                         if self.node_types[arg.0] != param
                             && !self.reference_of(param, self.node_types[arg.0])
                         {
-                            // self.error(
-                            //     format!(
-                            //         "expect {} found {}",
-                            //         self.stringify_type(param),
-                            //         self.stringify_type(self.node_types[arg.0])
-                            //     ),
-                            //     args[idx],
-                            // );
-                            // return;
-                            dbg!(
-                                self.stringify_type(param),
-                                self.stringify_type(self.node_types[arg.0])
-                            );
+                            // Types don't match here, and we don't have a reference we can work with
+                            // so we need to continue looking
                             continue 'outer;
                         }
                     }
@@ -591,8 +577,23 @@ impl<'permanent> TypeChecker<'permanent> {
                 }
             }
 
-            let name = String::from_utf8_lossy(call_name);
-            self.error(format!("could not resolve call to {}", name), node_id)
+            let mut sig = String::from_utf8_lossy(call_name).to_string();
+            sig.push('(');
+            let mut first = true;
+            for arg in args {
+                if !first {
+                    sig.push_str(", ")
+                } else {
+                    first = false;
+                }
+
+                sig.push_str(&self.stringify_type(self.node_types[arg.0]));
+            }
+            sig.push(')');
+            self.error(
+                format!("could not find compatible function for {}", sig),
+                node_id,
+            )
         } else {
             let name = String::from_utf8_lossy(call_name);
             self.error(format!("unknown function '{}'", name), node_id)
