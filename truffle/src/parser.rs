@@ -1399,7 +1399,7 @@ impl ParseResults {
         }
     }
 
-    #[cfg_attr(not(feature = "lsp"), allow(dead_code))]
+    #[cfg_attr(feature = "lsp")]
     pub(crate) fn contents_for_node(&self, node_id: NodeId) -> &[u8] {
         let span = self.spans[node_id.0];
         self.contents_for_span(span)
