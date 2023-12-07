@@ -67,8 +67,8 @@ pub enum Function {
     ),
     ExternalAsyncFn0(fn() -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>>),
     ExternalAsyncFn1(
-        fn(
-            &mut Box<dyn Any + Send>,
+        for<'a> fn(
+            &mut Box<dyn Any + Send + 'a>,
         ) -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>>,
     ),
     #[default]

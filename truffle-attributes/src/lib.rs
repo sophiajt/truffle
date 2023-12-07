@@ -220,7 +220,7 @@ mod generate {
                     }
 
                     pattype.ty = Box::new(
-                        syn::parse_str("Box<dyn std::any::Any + Send>")
+                        syn::parse_str("&mut Box<dyn std::any::Any + Send>")
                             .expect("input should be a valid rust type"),
                     );
                 }
