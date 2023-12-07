@@ -433,7 +433,7 @@ impl Parser {
             span,
         }) = self.peek()
         {
-            if keyword == &self.results.contents[span.start..span.end] {
+            if keyword == self.results.contents_for_span(span) {
                 return true;
             }
         }
@@ -773,7 +773,7 @@ impl Parser {
                 token_type: TokenType::Number,
                 span,
             }) => {
-                let contents = &self.results.contents[span.start..span.end];
+                let contents = self.results.contents_for_span(span);
                 let is_float = contents.contains(&b'.');
 
                 self.next();
@@ -1174,7 +1174,7 @@ impl Parser {
             span,
         }) = self.peek()
         {
-            let contents = &self.results.contents[span.start..span.end];
+            let contents = self.results.contents_for_span(span);
 
             if contents == keyword {
                 self.next();
@@ -1399,8 +1399,12 @@ impl ParseResults {
         }
     }
 
-    pub(crate) fn contents_for(&self, node_id: NodeId) -> &[u8] {
+    pub(crate) fn contents_for_node(&self, node_id: NodeId) -> &[u8] {
         let span = self.spans[node_id.0];
+        self.contents_for_span(span)
+    }
+
+    pub(crate) fn contents_for_span(&self, span: Span) -> &[u8] {
         &self.contents[span.start..span.end]
     }
 }
