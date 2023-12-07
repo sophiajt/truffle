@@ -649,8 +649,8 @@ where
             &'static std::panic::Location<'static>,
         >,
     ) {
-        let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
-            Box::new(move |arg: &mut Box<dyn Any>| {
+        let wrapped: Box<dyn Fn(&mut Box<dyn Any + Send>) -> Result<Box<dyn Any>, String>> =
+            Box::new(move |arg: &mut Box<dyn Any + Send>| {
                 let inside = (*arg).downcast_mut() as Option<&mut T>;
                 match inside {
                     Some(b) => Ok(Box::new(fun(b.clone())) as Box<dyn Any>),
@@ -716,8 +716,8 @@ where
             &'static std::panic::Location<'static>,
         >,
     ) {
-        let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
-            Box::new(move |arg: &mut Box<dyn Any>| {
+        let wrapped: Box<dyn Fn(&mut Box<dyn Any + Send>) -> Result<Box<dyn Any>, String>> =
+            Box::new(move |arg: &mut Box<dyn Any + Send>| {
                 let inside = (*arg).downcast_mut() as Option<&mut T>;
                 match inside {
                     Some(b) => Ok(Box::new(fun(b)) as Box<dyn Any>),
@@ -785,23 +785,28 @@ where
         >,
     ) {
         let wrapped: Box<
-            dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
-        > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>| {
-            let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
-            let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
+            dyn Fn(
+                &mut Box<dyn Any + Send>,
+                &mut Box<dyn Any + Send>,
+            ) -> Result<Box<dyn Any>, String>,
+        > = Box::new(
+            move |arg1: &mut Box<dyn Any + Send>, arg2: &mut Box<dyn Any + Send>| {
+                let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
+                let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
 
-            match (inside1, inside2) {
-                (Some(b), Some(c)) => Ok(Box::new(fun(b, c.clone())) as Box<dyn Any>),
-                (Some(_), None) => Err(format!(
-                    "can't convert second argument to {}",
-                    std::any::type_name::<U>()
-                )),
-                (None, _) => Err(format!(
-                    "can't convert first argument to {}",
-                    std::any::type_name::<T>()
-                )),
-            }
-        });
+                match (inside1, inside2) {
+                    (Some(b), Some(c)) => Ok(Box::new(fun(b, c.clone())) as Box<dyn Any>),
+                    (Some(_), None) => Err(format!(
+                        "can't convert second argument to {}",
+                        std::any::type_name::<U>()
+                    )),
+                    (None, _) => Err(format!(
+                        "can't convert first argument to {}",
+                        std::any::type_name::<T>()
+                    )),
+                }
+            },
+        );
 
         let param1 = if let Some(id) = self.permanent_definitions.get_type::<T>() {
             id
@@ -866,23 +871,28 @@ where
         >,
     ) {
         let wrapped: Box<
-            dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
-        > = Box::new(move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>| {
-            let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
-            let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
+            dyn Fn(
+                &mut Box<dyn Any + Send>,
+                &mut Box<dyn Any + Send>,
+            ) -> Result<Box<dyn Any>, String>,
+        > = Box::new(
+            move |arg1: &mut Box<dyn Any + Send>, arg2: &mut Box<dyn Any + Send>| {
+                let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
+                let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
 
-            match (inside1, inside2) {
-                (Some(b), Some(c)) => Ok(Box::new(fun(b.clone(), c.clone())) as Box<dyn Any>),
-                (Some(_), None) => Err(format!(
-                    "can't convert second argument to {}",
-                    std::any::type_name::<U>()
-                )),
-                (None, _) => Err(format!(
-                    "can't convert first argument to {}",
-                    std::any::type_name::<T>()
-                )),
-            }
-        });
+                match (inside1, inside2) {
+                    (Some(b), Some(c)) => Ok(Box::new(fun(b.clone(), c.clone())) as Box<dyn Any>),
+                    (Some(_), None) => Err(format!(
+                        "can't convert second argument to {}",
+                        std::any::type_name::<U>()
+                    )),
+                    (None, _) => Err(format!(
+                        "can't convert first argument to {}",
+                        std::any::type_name::<T>()
+                    )),
+                }
+            },
+        );
 
         let param1 = if let Some(id) = self.permanent_definitions.get_type::<T>() {
             id
@@ -949,12 +959,14 @@ where
     ) {
         let wrapped: Box<
             dyn Fn(
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
+                &mut Box<dyn Any + Send>,
+                &mut Box<dyn Any + Send>,
+                &mut Box<dyn Any + Send>,
             ) -> Result<Box<dyn Any>, String>,
         > = Box::new(
-            move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>, arg3: &mut Box<dyn Any>| {
+            move |arg1: &mut Box<dyn Any + Send>,
+                  arg2: &mut Box<dyn Any + Send>,
+                  arg3: &mut Box<dyn Any + Send>| {
                 let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
                 let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
                 let inside3 = (*arg3).downcast_mut() as Option<&mut W>;
@@ -1050,12 +1062,14 @@ where
     ) {
         let wrapped: Box<
             dyn Fn(
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
+                &mut Box<dyn Any + Send>,
+                &mut Box<dyn Any + Send>,
+                &mut Box<dyn Any + Send>,
             ) -> Result<Box<dyn Any>, String>,
         > = Box::new(
-            move |arg1: &mut Box<dyn Any>, arg2: &mut Box<dyn Any>, arg3: &mut Box<dyn Any>| {
+            move |arg1: &mut Box<dyn Any + Send>,
+                  arg2: &mut Box<dyn Any + Send>,
+                  arg3: &mut Box<dyn Any + Send>| {
                 let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
                 let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
                 let inside3 = (*arg3).downcast_mut() as Option<&mut W>;

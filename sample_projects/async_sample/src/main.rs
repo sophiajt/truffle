@@ -9,8 +9,8 @@ fn print<T: Display>(x: T) {
 }
 
 #[export]
-async fn async_print(x: i64) {
-    println!("hello from async: {}", x)
+async fn async_print() {
+    println!("hello from async")
 }
 
 fn main() {

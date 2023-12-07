@@ -47,20 +47,28 @@ impl Scope {
 #[derive(Default)]
 pub enum Function {
     ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
-    ExternalFn1(Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
-    ExternalFn2(Box<dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
-    ExternalFn3(
+    ExternalFn1(Box<dyn Fn(&mut Box<dyn Any + Send>) -> Result<Box<dyn Any>, String>>),
+    ExternalFn2(
         Box<
             dyn Fn(
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
+                &mut Box<dyn Any + Send>,
+                &mut Box<dyn Any + Send>,
             ) -> Result<Box<dyn Any>, String>,
         >,
     ),
+    ExternalFn3(
+        Box<
+            dyn Fn(
+                &mut Box<dyn Any + Send>,
+                &mut Box<dyn Any + Send>,
+                &mut Box<dyn Any + Send>,
+            ) -> Result<Box<dyn Any>, String>,
+        >,
+    ),
+    ExternalAsyncFn0(fn() -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>>),
     ExternalAsyncFn1(
         fn(
-            Box<dyn Any + Send>,
+            &mut Box<dyn Any + Send>,
         ) -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>>,
     ),
     #[default]

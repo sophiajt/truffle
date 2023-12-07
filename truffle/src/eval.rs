@@ -101,16 +101,16 @@ impl Evaluator {
     /// by a previous access
     ///
     /// TODO: we need to either mark this function unsafe or change how we do this in the future
-    pub fn get_user_type(&self, register_id: RegisterId) -> Box<dyn Any> {
+    pub fn get_user_type(&self, register_id: RegisterId) -> Box<dyn Any + Send> {
         let boxed = unsafe {
-            std::mem::transmute::<i64, Box<Box<dyn Any>>>(
+            std::mem::transmute::<i64, Box<Box<dyn Any + Send>>>(
                 self.stack_frames[self.current_frame].register_values[register_id.0].i64,
             )
         };
 
         let boxed = Box::leak(boxed);
 
-        let leaked = &mut **boxed as *mut dyn Any;
+        let leaked = &mut **boxed as *mut (dyn Any + Send);
 
         unsafe { Box::from_raw(leaked) }
     }
@@ -489,26 +489,30 @@ impl Evaluator {
                 result
             }
             Function::ExternalAsyncFn1(fun) => {
-                let arg0 = if self.stack_frames[self.current_frame].register_types[args[0].0]
-                    == I64_TYPE
-                {
-                    Box::new(self.get_reg_i64(args[0]))
-                } else {
-                    panic!("internal error: not an i64");
-                };
+                // let arg0 = if self.stack_frames[self.current_frame].register_types[args[0].0]
+                //     == I64_TYPE
+                // {
+                //     Box::new(self.get_reg_i64(args[0]))
+                // } else {
+                //     panic!("internal error: not an i64");
+                // };
+                let mut arg0 = self.box_register(args[0]);
                 // let mut arg0 = self.box_register();
-                fun(arg0).await.unwrap()
+                let result = fun(&mut arg0).await.unwrap();
 
-                // if self.is_user_type(args[0]) {
-                //     // We leak the box here because we manually clean it up later
-                //     Box::leak(arg0);
-                // }
+                if self.is_user_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+
+                result
             }
+            Function::ExternalAsyncFn0(fun) => fun().await.unwrap(),
             Function::RemoteFn => unreachable!("lsp instances of engines cannot evaluate scripts or remotely invoke registered functions"),
         }
     }
 
-    pub fn box_register(&self, register_id: RegisterId) -> Box<dyn Any> {
+    pub fn box_register(&self, register_id: RegisterId) -> Box<dyn Any + Send> {
         if self.stack_frames[self.current_frame].register_types[register_id.0] == F64_TYPE {
             let val = self.get_reg_f64(register_id);
             Box::new(val)

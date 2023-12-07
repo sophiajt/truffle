@@ -291,6 +291,13 @@ mod generate {
             syn::ReturnType::Type(_, ty) => ty,
         };
 
+        let wrapper = match input.sig.inputs.len() {
+            0 => quote! { Function::ExternalAsyncFn0(wrapped_fn) },
+            1 => quote! { Function::ExternalAsyncFn1(wrapped_fn) },
+            2 => quote! { Function::ExternalAsyncFn2(wrapped_fn) },
+            _ => todo!(),
+        };
+
         Ok(quote! {
             |engine: &mut Engine| {
                 use truffle::Function;
@@ -298,7 +305,7 @@ mod generate {
                 engine.add_async_call(
                     vec![#(#param_types)*],
                     engine.get_type::<#ret_type>().expect("engine should already know about this type"),
-                    Function::ExternalAsyncFn1(wrapped_fn),
+                    #wrapper,
                     #wrapped_fn_name,
                     #fn_location()
                 );
