@@ -1,8 +1,7 @@
 use std::{fmt, path::Path, slice::Iter};
 
 #[cfg(feature = "lsp")]
-use lsp_types::Diagnostic;
-use lsp_types::{Location, Position, Range, Url};
+use lsp_types::{Diagnostic, Location, Position, Range, Url};
 
 use crate::parser::Span;
 

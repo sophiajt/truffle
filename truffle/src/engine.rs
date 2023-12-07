@@ -1,8 +1,8 @@
 use std::{any::Any, collections::HashMap, path::PathBuf};
 
+#[cfg(feature = "lsp")]
 use lsp_types::Url;
 
-#[cfg(feature = "lsp")]
 use crate::parser::Span;
 
 use crate::{
@@ -35,6 +35,7 @@ pub struct PermanentDefinitions {
     pub functions: Vec<ExternalFnRecord>,
 
     // Info about all registered functions
+    #[cfg(feature = "lsp")]
     pub function_infos: HashMap<Vec<u8>, ExternalFunctionLocation>,
 
     // Externally-registered functions
@@ -44,6 +45,7 @@ pub struct PermanentDefinitions {
 #[derive(Debug, PartialEq)]
 pub enum SpanOrLocation {
     Span(Span),
+    #[cfg(feature = "lsp")]
     ExternalLocation(Url, u32), // filename and line number
 }
 
@@ -89,6 +91,7 @@ impl Engine {
             future_of_map: HashMap::new(),
             external_functions: HashMap::new(),
             functions: vec![],
+            #[cfg(feature = "lsp")]
             function_infos: HashMap::new(),
         };
 
@@ -260,6 +263,7 @@ impl Engine {
 
         let id = self.permanent_definitions.functions.len() - 1;
 
+        #[cfg(feature = "lsp")]
         self.permanent_definitions.function_infos.insert(
             name.as_bytes().to_vec(),
             ExternalFunctionLocation {
@@ -559,8 +563,8 @@ pub struct ExternalFnRecord {
     pub fun: Function,
 }
 
-#[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug)]
+#[cfg(feature = "lsp")]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct ExternalFunctionLocation {
     path: PathBuf,
     line: u32,
@@ -602,6 +606,7 @@ where
             fun: Function::ExternalFn0(wrapped),
         });
 
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
@@ -666,6 +671,7 @@ where
             fun: Function::ExternalFn1(wrapped),
         });
 
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
@@ -730,6 +736,7 @@ where
             fun: Function::ExternalFn1(wrapped),
         });
 
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
@@ -808,6 +815,7 @@ where
             fun: Function::ExternalFn2(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
@@ -886,6 +894,7 @@ where
             fun: Function::ExternalFn2(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
@@ -984,6 +993,7 @@ where
             fun: Function::ExternalFn3(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
@@ -1082,6 +1092,7 @@ where
             fun: Function::ExternalFn3(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
