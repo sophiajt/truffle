@@ -43,6 +43,7 @@ pub struct PermanentDefinitions {
 }
 
 #[derive(Debug, PartialEq)]
+#[non_exhaustive]
 pub enum SpanOrLocation {
     Span(Span),
     #[cfg(feature = "lsp")]

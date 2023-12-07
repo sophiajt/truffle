@@ -263,6 +263,7 @@ impl Server {
                 let range = Range { start, end };
                 Location { uri, range }
             }
+            _ => unreachable!(),
         };
 
         Ok(Some(GotoDefinitionResponse::Scalar(x)))
