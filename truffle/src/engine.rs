@@ -323,7 +323,7 @@ impl Engine {
                     let external_function_id = typechecker.call_resolution.get(&node_id);
 
                     if let Some(external_function_id) = external_function_id {
-                        let name = typechecker.parse_results.contents_for(node_id);
+                        let name = typechecker.parse_results.contents_for_node(node_id);
                         typechecker.pretty_function_signature(name, *external_function_id)
                     } else {
                         let type_id = typechecker.node_types[node_id.0];
@@ -335,7 +335,7 @@ impl Engine {
                     let external_function_id = typechecker.call_resolution.get(&node_id);
 
                     if let Some(external_function_id) = external_function_id {
-                        let name = typechecker.parse_results.contents_for(head);
+                        let name = typechecker.parse_results.contents_for_node(head);
                         typechecker.pretty_function_signature(name, *external_function_id)
                     } else {
                         "<unknown function>".into()
@@ -371,7 +371,7 @@ impl Engine {
                     .map(|x| SpanOrLocation::Span(typechecker.parse_results.spans[x.0])),
             )?,
             crate::parser::AstNode::Name => {
-                let record = typechecker.parse_results.contents_for(node_id);
+                let record = typechecker.parse_results.contents_for_node(node_id);
                 let location = self.permanent_definitions.function_infos.get(record)?;
                 let line = location.line;
                 let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
