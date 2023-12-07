@@ -255,6 +255,7 @@ impl Engine {
         ret: TypeId,
         fun: Function,
         name: &str,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))]
         location: &'static std::panic::Location<'static>,
     ) {
         self.permanent_definitions
@@ -576,7 +577,9 @@ pub trait FnRegister<A, RetVal, Args> {
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     );
 }
 
@@ -589,7 +592,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<dyn Fn() -> Result<Box<dyn Any>, String>> =
             Box::new(move || Ok(Box::new(fun()) as Box<dyn Any>));
@@ -639,7 +644,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
             Box::new(move |arg: &mut Box<dyn Any>| {
@@ -704,7 +711,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
             Box::new(move |arg: &mut Box<dyn Any>| {
@@ -770,7 +779,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<
             dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
@@ -849,7 +860,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<
             dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
@@ -929,7 +942,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<
             dyn Fn(
@@ -1028,7 +1043,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<
             dyn Fn(
