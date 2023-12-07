@@ -54,6 +54,9 @@ jobs:
         include:
           - feature: default
             flags: ""
+        flags:
+          - # default
+          - --all-features
 
     runs-on: ${{ matrix.platform }}
 
@@ -67,3 +70,6 @@ jobs:
 
       - name: Tests
         run: cargo test ${{ matrix.flags }}
+      - name: Ensure
+        working-directory: ./truffle
+        run: cargo build ${{ matrix.flags }}

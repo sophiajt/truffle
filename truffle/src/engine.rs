@@ -1,8 +1,8 @@
 use std::{any::Any, collections::HashMap, path::PathBuf};
 
+#[cfg(feature = "lsp")]
 use lsp_types::Url;
 
-#[cfg(feature = "lsp")]
 use crate::parser::Span;
 
 use crate::{
@@ -35,6 +35,7 @@ pub struct PermanentDefinitions {
     pub functions: Vec<ExternalFnRecord>,
 
     // Info about all registered functions
+    #[cfg(feature = "lsp")]
     pub function_infos: HashMap<Vec<u8>, ExternalFunctionLocation>,
 
     // Externally-registered functions
@@ -42,8 +43,10 @@ pub struct PermanentDefinitions {
 }
 
 #[derive(Debug, PartialEq)]
+#[non_exhaustive]
 pub enum SpanOrLocation {
     Span(Span),
+    #[cfg(feature = "lsp")]
     ExternalLocation(Url, u32), // filename and line number
 }
 
@@ -89,6 +92,7 @@ impl Engine {
             future_of_map: HashMap::new(),
             external_functions: HashMap::new(),
             functions: vec![],
+            #[cfg(feature = "lsp")]
             function_infos: HashMap::new(),
         };
 
@@ -252,6 +256,7 @@ impl Engine {
         ret: TypeId,
         fun: Function,
         name: &str,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))]
         location: &'static std::panic::Location<'static>,
     ) {
         self.permanent_definitions
@@ -260,6 +265,7 @@ impl Engine {
 
         let id = self.permanent_definitions.functions.len() - 1;
 
+        #[cfg(feature = "lsp")]
         self.permanent_definitions.function_infos.insert(
             name.as_bytes().to_vec(),
             ExternalFunctionLocation {
@@ -559,8 +565,8 @@ pub struct ExternalFnRecord {
     pub fun: Function,
 }
 
-#[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug)]
+#[cfg(feature = "lsp")]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct ExternalFunctionLocation {
     path: PathBuf,
     line: u32,
@@ -572,7 +578,9 @@ pub trait FnRegister<A, RetVal, Args> {
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     );
 }
 
@@ -585,7 +593,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<dyn Fn() -> Result<Box<dyn Any>, String>> =
             Box::new(move || Ok(Box::new(fun()) as Box<dyn Any>));
@@ -602,6 +612,7 @@ where
             fun: Function::ExternalFn0(wrapped),
         });
 
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
@@ -634,7 +645,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
             Box::new(move |arg: &mut Box<dyn Any>| {
@@ -666,6 +679,7 @@ where
             fun: Function::ExternalFn1(wrapped),
         });
 
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
@@ -698,7 +712,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>> =
             Box::new(move |arg: &mut Box<dyn Any>| {
@@ -730,6 +746,7 @@ where
             fun: Function::ExternalFn1(wrapped),
         });
 
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
@@ -763,7 +780,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<
             dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
@@ -808,6 +827,7 @@ where
             fun: Function::ExternalFn2(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
@@ -841,7 +861,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<
             dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>,
@@ -886,6 +908,7 @@ where
             fun: Function::ExternalFn2(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
@@ -920,7 +943,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<
             dyn Fn(
@@ -984,6 +1009,7 @@ where
             fun: Function::ExternalFn3(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
@@ -1018,7 +1044,9 @@ where
         &mut self,
         name: &str,
         fun: A,
-        location: Option<&'static std::panic::Location<'static>>,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
     ) {
         let wrapped: Box<
             dyn Fn(
@@ -1082,6 +1110,7 @@ where
             fun: Function::ExternalFn3(wrapped),
         };
         self.permanent_definitions.functions.push(fn_record);
+        #[cfg(feature = "lsp")]
         if let Some(location) = location {
             self.permanent_definitions.function_infos.insert(
                 name.as_bytes().to_vec(),
