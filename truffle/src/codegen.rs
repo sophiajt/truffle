@@ -513,7 +513,7 @@ impl<'permanent> Translater<'permanent> {
 
     pub fn translate_int(&mut self, builder: &mut FunctionCodegen, node_id: NodeId) -> RegisterId {
         let span = self.typechecker.parse_results.spans[node_id.0];
-        let contents = &self.typechecker.parse_results.contents[span.start..span.end];
+        let contents = &self.typechecker.parse_results.contents_for_span(span);
 
         let constant = String::from_utf8_lossy(contents)
             .parse::<i64>()
@@ -528,7 +528,7 @@ impl<'permanent> Translater<'permanent> {
         node_id: NodeId,
     ) -> RegisterId {
         let span = self.typechecker.parse_results.spans[node_id.0];
-        let contents = &self.typechecker.parse_results.contents[span.start..span.end];
+        let contents = self.typechecker.parse_results.contents_for_span(span);
 
         let constant = String::from_utf8_lossy(contents)
             .parse::<f64>()
@@ -543,7 +543,7 @@ impl<'permanent> Translater<'permanent> {
         node_id: NodeId,
     ) -> RegisterId {
         let span = self.typechecker.parse_results.spans[node_id.0];
-        let contents = &self.typechecker.parse_results.contents[span.start..span.end];
+        let contents = self.typechecker.parse_results.contents_for_span(span);
 
         let s = String::from_utf8(contents.to_owned())
             .expect("internal error: string literal could not be parsed");

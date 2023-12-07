@@ -225,7 +225,7 @@ impl<'permanent> TypeChecker<'permanent> {
             AstNode::Type => {
                 let span = self.parse_results.spans[node_id.0];
 
-                let contents = &self.parse_results.contents[span.start..span.end];
+                let contents = self.parse_results.contents_for_span(span);
 
                 match contents {
                     b"i64" => self.node_types[node_id.0] = I64_TYPE,
@@ -545,8 +545,9 @@ impl<'permanent> TypeChecker<'permanent> {
             self.typecheck_node(*node_id)
         }
 
-        let call_name = &self.parse_results.contents
-            [self.parse_results.spans[head.0].start..self.parse_results.spans[head.0].end];
+        let call_name = self
+            .parse_results
+            .contents_for_span(self.parse_results.spans[head.0]);
 
         if let Some(defs) = self.permanent_definitions.external_functions.get(call_name) {
             'outer: for &def in defs {
@@ -634,7 +635,7 @@ impl<'permanent> TypeChecker<'permanent> {
 
     pub fn resolve_variable(&mut self, unbound_node_id: NodeId) {
         let span = self.parse_results.spans[unbound_node_id.0];
-        let variable_name = &self.parse_results.contents[span.start..span.end];
+        let variable_name = self.parse_results.contents_for_span(span);
 
         if let Some(node_id) = self.find_variable(variable_name) {
             self.variable_def_site.insert(unbound_node_id, node_id);
