@@ -26,6 +26,9 @@ use notify::{
 #[cfg(target_os = "macos")]
 use notify::KqueueWatcher;
 
+#[cfg(target_os = "windows")]
+use notify::ReadDirectoryChangesWatcher;
+
 use tracing::{debug, info};
 use truffle::{Engine, LineLookupTable, SpanOrLocation};
 
@@ -44,6 +47,16 @@ pub struct Server {
 #[cfg(target_os = "macos")]
 pub struct Server {
     watcher: KqueueWatcher,
+    events: crossbeam_channel::Receiver<notify::Result<Event>>,
+    connection: Connection,
+    io_threads: IoThreads,
+    engines: HashMap<OsString, Engine>,
+    default_engine: Engine,
+}
+
+#[cfg(target_os = "windows")]
+pub struct Server {
+    watcher: ReadDirectoryChangesWatcher,
     events: crossbeam_channel::Receiver<notify::Result<Event>>,
     connection: Connection,
     io_threads: IoThreads,
