@@ -9,8 +9,13 @@ fn print<T: Display>(x: T) {
 }
 
 #[export]
-async fn async_print(x: i64) {
-    println!("hello from async: {}", x)
+async fn async_print() {
+    println!("hello from async")
+}
+
+#[export]
+async fn async_print_int(i: i64) {
+    println!("hello from async {i}")
 }
 
 fn main() {
@@ -20,6 +25,7 @@ fn main() {
     register_fn!(engine, "print", print::<i64>);
     register_fn!(engine, "print", print::<String>);
     register_fn!(engine, "async_print", async_print);
+    register_fn!(engine, "async_print_int", async_print_int);
 
     let contents = std::fs::read_to_string(SCRIPT_NAME).unwrap();
     let results = futures::executor::block_on(engine.eval_source_async(

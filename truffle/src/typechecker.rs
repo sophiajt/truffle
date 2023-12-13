@@ -1,9 +1,10 @@
-use std::{any::Any, collections::HashMap, fmt};
+use std::{collections::HashMap, fmt};
 
 use crate::{
     engine::{ExternalFnRecord, PermanentDefinitions},
     errors::{ErrorBatch, ScriptError},
     parser::{AstNode, NodeId, ParseResults},
+    Type, Value,
 };
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
@@ -46,22 +47,13 @@ impl Scope {
 #[cfg(feature = "async")]
 #[derive(Default)]
 pub enum Function {
-    ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
-    ExternalFn1(Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
-    ExternalFn2(Box<dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
-    ExternalFn3(
-        Box<
-            dyn Fn(
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
-            ) -> Result<Box<dyn Any>, String>,
-        >,
-    ),
+    ExternalFn0(Box<dyn Fn() -> Result<Value, String>>),
+    ExternalFn1(Box<dyn Fn(&mut Value) -> Result<Value, String>>),
+    ExternalFn2(Box<dyn Fn(&mut Value, &mut Value) -> Result<Value, String>>),
+    ExternalFn3(Box<dyn Fn(&mut Value, &mut Value, &mut Value) -> Result<Value, String>>),
+    ExternalAsyncFn0(fn() -> futures::future::BoxFuture<'static, Result<Value, String>>),
     ExternalAsyncFn1(
-        fn(
-            Box<dyn Any + Send>,
-        ) -> futures::future::BoxFuture<'static, Result<Box<dyn Any>, String>>,
+        for<'a> fn(&'a mut Value) -> futures::future::BoxFuture<'a, Result<Value, String>>,
     ),
     #[default]
     RemoteFn,
@@ -70,18 +62,10 @@ pub enum Function {
 #[cfg(not(feature = "async"))]
 #[derive(Default)]
 pub enum Function {
-    ExternalFn0(Box<dyn Fn() -> Result<Box<dyn Any>, String>>),
-    ExternalFn1(Box<dyn Fn(&mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
-    ExternalFn2(Box<dyn Fn(&mut Box<dyn Any>, &mut Box<dyn Any>) -> Result<Box<dyn Any>, String>>),
-    ExternalFn3(
-        Box<
-            dyn Fn(
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
-                &mut Box<dyn Any>,
-            ) -> Result<Box<dyn Any>, String>,
-        >,
-    ),
+    ExternalFn0(Box<dyn Fn() -> Result<Value, String>>),
+    ExternalFn1(Box<dyn Fn(&mut Value) -> Result<Value, String>>),
+    ExternalFn2(Box<dyn Fn(&mut Value, &mut Value) -> Result<Value, String>>),
+    ExternalFn3(Box<dyn Fn(&mut Value, &mut Value, &mut Value) -> Result<Value, String>>),
     #[default]
     RemoteFn,
 }
@@ -682,7 +666,7 @@ impl<'permanent> TypeChecker<'permanent> {
 
     pub fn get_type<T>(&self) -> Option<TypeId>
     where
-        T: Any,
+        T: Type,
     {
         // Since the user can't create types in the script (currently), defer
         // type lookup to the permanent state

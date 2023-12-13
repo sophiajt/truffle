@@ -33,3 +33,9 @@ pub use truffle_attributes::{export, register_fn};
 
 #[cfg(feature = "lsp")]
 pub use postcard;
+
+pub type Value = Box<dyn std::any::Any + Send + Sync>;
+
+// Used for trait bounds, do not use directly in `Value` or it will break `downcast` calls.
+pub trait Type: std::any::Any + Send + Sync {}
+impl<T> Type for T where T: std::any::Any + Send + Sync {}

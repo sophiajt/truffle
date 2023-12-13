@@ -1,11 +1,9 @@
-use std::any::Any;
-
 use crate::{
     codegen::{FunctionCodegen, Instruction, InstructionId, RegisterId, RegisterValue},
     engine::ExternalFnRecord,
     parser::{NodeId, Span},
     typechecker::{ExternalFunctionId, Function, FunctionId, STRING_TYPE},
-    ScriptError, TypeChecker, TypeId, BOOL_TYPE, F64_TYPE, I64_TYPE, UNIT_TYPE,
+    ScriptError, TypeChecker, TypeId, Value, BOOL_TYPE, F64_TYPE, I64_TYPE, UNIT_TYPE,
 };
 
 #[derive(Clone)]
@@ -51,7 +49,7 @@ pub enum ReturnValue {
     F64(f64),
     Bool(bool),
     String(String),
-    Custom(Box<dyn Any>),
+    Custom(Value),
 }
 
 impl Evaluator {
@@ -101,16 +99,16 @@ impl Evaluator {
     /// by a previous access
     ///
     /// TODO: we need to either mark this function unsafe or change how we do this in the future
-    pub fn get_user_type(&self, register_id: RegisterId) -> Box<dyn Any> {
+    pub fn get_user_type(&self, register_id: RegisterId) -> Value {
         let boxed = unsafe {
-            std::mem::transmute::<i64, Box<Box<dyn Any>>>(
+            std::mem::transmute::<i64, Box<Value>>(
                 self.stack_frames[self.current_frame].register_values[register_id.0].i64,
             )
         };
 
         let boxed = Box::leak(boxed);
 
-        let leaked = &mut **boxed as *mut dyn Any;
+        let leaked = &mut **boxed as *mut _;
 
         unsafe { Box::from_raw(leaked) }
     }
@@ -357,7 +355,7 @@ impl Evaluator {
         head: ExternalFunctionId,
         args: &[RegisterId],
         functions: &[ExternalFnRecord],
-    ) -> Result<Box<dyn Any>, ScriptError> {
+    ) -> Result<Value, ScriptError> {
         #[allow(unreachable_patterns)]
         match &functions[head.0].fun {
             Function::ExternalFn0(fun) => match fun() {
@@ -434,7 +432,7 @@ impl Evaluator {
         head: ExternalFunctionId,
         args: &[RegisterId],
         functions: &[ExternalFnRecord],
-    ) -> Box<dyn Any> {
+    ) -> Value {
         match &functions[head.0].fun {
             Function::ExternalFn0(fun) => fun().unwrap(),
             Function::ExternalFn1(fun) => {
@@ -489,26 +487,30 @@ impl Evaluator {
                 result
             }
             Function::ExternalAsyncFn1(fun) => {
-                let arg0 = if self.stack_frames[self.current_frame].register_types[args[0].0]
-                    == I64_TYPE
-                {
-                    Box::new(self.get_reg_i64(args[0]))
-                } else {
-                    panic!("internal error: not an i64");
-                };
+                // let arg0 = if self.stack_frames[self.current_frame].register_types[args[0].0]
+                //     == I64_TYPE
+                // {
+                //     Box::new(self.get_reg_i64(args[0]))
+                // } else {
+                //     panic!("internal error: not an i64");
+                // };
+                let mut arg0 = self.box_register(args[0]);
                 // let mut arg0 = self.box_register();
-                fun(arg0).await.unwrap()
+                let result = fun(&mut arg0).await.unwrap();
 
-                // if self.is_user_type(args[0]) {
-                //     // We leak the box here because we manually clean it up later
-                //     Box::leak(arg0);
-                // }
+                if self.is_user_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+
+                result
             }
+            Function::ExternalAsyncFn0(fun) => fun().await.unwrap(),
             Function::RemoteFn => unreachable!("lsp instances of engines cannot evaluate scripts or remotely invoke registered functions"),
         }
     }
 
-    pub fn box_register(&self, register_id: RegisterId) -> Box<dyn Any> {
+    pub fn box_register(&self, register_id: RegisterId) -> Value {
         if self.stack_frames[self.current_frame].register_types[register_id.0] == F64_TYPE {
             let val = self.get_reg_f64(register_id);
             Box::new(val)
@@ -525,7 +527,7 @@ impl Evaluator {
         }
     }
 
-    pub fn unbox_to_register(&mut self, value: Box<dyn Any>, target: RegisterId) {
+    pub fn unbox_to_register(&mut self, value: Value, target: RegisterId) {
         if self.stack_frames[self.current_frame].register_types[target.0] == F64_TYPE {
             if let Ok(value) = value.downcast::<f64>() {
                 self.stack_frames[self.current_frame].register_values[target.0].f64 = *value;
@@ -549,7 +551,7 @@ impl Evaluator {
         } else {
             self.maybe_free_register(target);
             self.stack_frames[self.current_frame].register_values[target.0].i64 =
-                unsafe { std::mem::transmute::<Box<Box<dyn Any>>, i64>(Box::new(value)) };
+                unsafe { std::mem::transmute::<Box<Value>, i64>(Box::new(value)) };
         }
     }
 
