@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap, fmt};
+use std::{collections::HashMap, fmt};
 
 use crate::{
     engine::{ExternalFnRecord, PermanentDefinitions},
