@@ -1,13 +1,14 @@
-use std::{any::Any, collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
 #[cfg(feature = "lsp")]
 use lsp_types::Url;
 
 use crate::parser::Span;
+use crate::Type;
 
 use crate::{
     parser::NodeId, typechecker::ExternalFunctionId, ErrorBatch, Evaluator, Function, FunctionId,
-    Lexer, ParseResults, Parser, ReturnValue, Translater, TypeChecker, TypeId,
+    Lexer, ParseResults, Parser, ReturnValue, Translater, TypeChecker, TypeId, Value,
 };
 
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
@@ -53,7 +54,7 @@ pub enum SpanOrLocation {
 impl PermanentDefinitions {
     pub fn get_type<T>(&self) -> Option<TypeId>
     where
-        T: Any,
+        T: Type,
     {
         for (idx, tid) in self.types.iter().enumerate() {
             if tid == &std::any::TypeId::of::<T>() {
@@ -209,7 +210,7 @@ impl Engine {
 
     pub fn register_type<T>(&mut self) -> TypeId
     where
-        T: Any,
+        T: Type,
     {
         self.permanent_definitions
             .types
@@ -244,7 +245,7 @@ impl Engine {
 
     pub fn get_type<T>(&self) -> Option<TypeId>
     where
-        T: Any,
+        T: Type,
     {
         self.permanent_definitions.get_type::<T>()
     }
@@ -587,7 +588,7 @@ pub trait FnRegister<A, RetVal, Args> {
 impl<A, U> FnRegister<A, U, ()> for Engine
 where
     A: 'static + Fn() -> U,
-    U: Any,
+    U: Type,
 {
     fn register_fn(
         &mut self,
@@ -597,8 +598,8 @@ where
             &'static std::panic::Location<'static>,
         >,
     ) {
-        let wrapped: Box<dyn Fn() -> Result<Box<dyn Any>, String>> =
-            Box::new(move || Ok(Box::new(fun()) as Box<dyn Any>));
+        let wrapped: Box<dyn Fn() -> Result<Value, String>> =
+            Box::new(move || Ok(Box::new(fun()) as Value));
 
         let ret = if let Some(id) = self.permanent_definitions.get_type::<U>() {
             id
@@ -638,8 +639,8 @@ where
 impl<'a, A, T, U> FnRegister<A, U, (&'a T,)> for Engine
 where
     A: 'static + Fn(T) -> U,
-    T: Clone + Any,
-    U: Any,
+    T: Clone + Type,
+    U: Type,
 {
     fn register_fn(
         &mut self,
@@ -649,11 +650,11 @@ where
             &'static std::panic::Location<'static>,
         >,
     ) {
-        let wrapped: Box<dyn Fn(&mut Box<dyn Any + Send>) -> Result<Box<dyn Any>, String>> =
-            Box::new(move |arg: &mut Box<dyn Any + Send>| {
+        let wrapped: Box<dyn Fn(&mut Value) -> Result<Value, String>> =
+            Box::new(move |arg: &mut Value| {
                 let inside = (*arg).downcast_mut() as Option<&mut T>;
                 match inside {
-                    Some(b) => Ok(Box::new(fun(b.clone())) as Box<dyn Any>),
+                    Some(b) => Ok(Box::new(fun(b.clone())) as Value),
                     None => Err(format!(
                         "can't convert first argument to {}",
                         std::any::type_name::<T>()
@@ -705,8 +706,8 @@ where
 impl<A, T, U> FnRegister<A, U, (&mut T,)> for Engine
 where
     A: 'static + Fn(&mut T) -> U,
-    T: Any,
-    U: Any,
+    T: Type,
+    U: Type,
 {
     fn register_fn(
         &mut self,
@@ -716,11 +717,11 @@ where
             &'static std::panic::Location<'static>,
         >,
     ) {
-        let wrapped: Box<dyn Fn(&mut Box<dyn Any + Send>) -> Result<Box<dyn Any>, String>> =
-            Box::new(move |arg: &mut Box<dyn Any + Send>| {
+        let wrapped: Box<dyn Fn(&mut Value) -> Result<Value, String>> =
+            Box::new(move |arg: &mut Value| {
                 let inside = (*arg).downcast_mut() as Option<&mut T>;
                 match inside {
-                    Some(b) => Ok(Box::new(fun(b)) as Box<dyn Any>),
+                    Some(b) => Ok(Box::new(fun(b)) as Value),
                     None => Err(format!(
                         "can't convert first argument to {}",
                         std::any::type_name::<T>()
@@ -772,9 +773,9 @@ where
 impl<A, T, U, V> FnRegister<A, V, (&mut T, U)> for Engine
 where
     A: 'static + Fn(&mut T, U) -> V,
-    T: Any,
-    U: Clone + Any,
-    V: Any,
+    T: Type,
+    U: Clone + Type,
+    V: Type,
 {
     fn register_fn(
         &mut self,
@@ -784,18 +785,13 @@ where
             &'static std::panic::Location<'static>,
         >,
     ) {
-        let wrapped: Box<
-            dyn Fn(
-                &mut Box<dyn Any + Send>,
-                &mut Box<dyn Any + Send>,
-            ) -> Result<Box<dyn Any>, String>,
-        > = Box::new(
-            move |arg1: &mut Box<dyn Any + Send>, arg2: &mut Box<dyn Any + Send>| {
+        let wrapped: Box<dyn Fn(&mut Value, &mut Value) -> Result<Value, String>> =
+            Box::new(move |arg1: &mut Value, arg2: &mut Value| {
                 let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
                 let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
 
                 match (inside1, inside2) {
-                    (Some(b), Some(c)) => Ok(Box::new(fun(b, c.clone())) as Box<dyn Any>),
+                    (Some(b), Some(c)) => Ok(Box::new(fun(b, c.clone())) as Value),
                     (Some(_), None) => Err(format!(
                         "can't convert second argument to {}",
                         std::any::type_name::<U>()
@@ -805,8 +801,7 @@ where
                         std::any::type_name::<T>()
                     )),
                 }
-            },
-        );
+            });
 
         let param1 = if let Some(id) = self.permanent_definitions.get_type::<T>() {
             id
@@ -858,9 +853,9 @@ where
 impl<'a, A, T, U, V> FnRegister<A, V, (&'a T, U)> for Engine
 where
     A: 'static + Fn(T, U) -> V,
-    T: Clone + Any,
-    U: Clone + Any,
-    V: Any,
+    T: Clone + Type,
+    U: Clone + Type,
+    V: Type,
 {
     fn register_fn(
         &mut self,
@@ -870,18 +865,13 @@ where
             &'static std::panic::Location<'static>,
         >,
     ) {
-        let wrapped: Box<
-            dyn Fn(
-                &mut Box<dyn Any + Send>,
-                &mut Box<dyn Any + Send>,
-            ) -> Result<Box<dyn Any>, String>,
-        > = Box::new(
-            move |arg1: &mut Box<dyn Any + Send>, arg2: &mut Box<dyn Any + Send>| {
+        let wrapped: Box<dyn Fn(&mut Value, &mut Value) -> Result<Value, String>> =
+            Box::new(move |arg1: &mut Value, arg2: &mut Value| {
                 let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
                 let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
 
                 match (inside1, inside2) {
-                    (Some(b), Some(c)) => Ok(Box::new(fun(b.clone(), c.clone())) as Box<dyn Any>),
+                    (Some(b), Some(c)) => Ok(Box::new(fun(b.clone(), c.clone())) as Value),
                     (Some(_), None) => Err(format!(
                         "can't convert second argument to {}",
                         std::any::type_name::<U>()
@@ -891,8 +881,7 @@ where
                         std::any::type_name::<T>()
                     )),
                 }
-            },
-        );
+            });
 
         let param1 = if let Some(id) = self.permanent_definitions.get_type::<T>() {
             id
@@ -944,10 +933,10 @@ where
 impl<'a, A, T, U, V, W> FnRegister<A, V, (&'a T, U, W)> for Engine
 where
     A: 'static + Fn(T, U, W) -> V,
-    T: Clone + Any,
-    U: Clone + Any,
-    W: Clone + Any,
-    V: Any,
+    T: Clone + Type,
+    U: Clone + Type,
+    W: Clone + Type,
+    V: Type,
 {
     fn register_fn(
         &mut self,
@@ -957,39 +946,32 @@ where
             &'static std::panic::Location<'static>,
         >,
     ) {
-        let wrapped: Box<
-            dyn Fn(
-                &mut Box<dyn Any + Send>,
-                &mut Box<dyn Any + Send>,
-                &mut Box<dyn Any + Send>,
-            ) -> Result<Box<dyn Any>, String>,
-        > = Box::new(
-            move |arg1: &mut Box<dyn Any + Send>,
-                  arg2: &mut Box<dyn Any + Send>,
-                  arg3: &mut Box<dyn Any + Send>| {
-                let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
-                let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
-                let inside3 = (*arg3).downcast_mut() as Option<&mut W>;
+        let wrapped: Box<dyn Fn(&mut Value, &mut Value, &mut Value) -> Result<Value, String>> =
+            Box::new(
+                move |arg1: &mut Value, arg2: &mut Value, arg3: &mut Value| {
+                    let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
+                    let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
+                    let inside3 = (*arg3).downcast_mut() as Option<&mut W>;
 
-                match (inside1, inside2, inside3) {
-                    (Some(b), Some(c), Some(d)) => {
-                        Ok(Box::new(fun(b.clone(), c.clone(), d.clone())) as Box<dyn Any>)
+                    match (inside1, inside2, inside3) {
+                        (Some(b), Some(c), Some(d)) => {
+                            Ok(Box::new(fun(b.clone(), c.clone(), d.clone())) as Value)
+                        }
+                        (Some(_), Some(_), None) => Err(format!(
+                            "can't convert third argument to {}",
+                            std::any::type_name::<W>()
+                        )),
+                        (Some(_), None, _) => Err(format!(
+                            "can't convert second argument to {}",
+                            std::any::type_name::<U>()
+                        )),
+                        (None, _, _) => Err(format!(
+                            "can't convert first argument to {}",
+                            std::any::type_name::<T>()
+                        )),
                     }
-                    (Some(_), Some(_), None) => Err(format!(
-                        "can't convert third argument to {}",
-                        std::any::type_name::<W>()
-                    )),
-                    (Some(_), None, _) => Err(format!(
-                        "can't convert second argument to {}",
-                        std::any::type_name::<U>()
-                    )),
-                    (None, _, _) => Err(format!(
-                        "can't convert first argument to {}",
-                        std::any::type_name::<T>()
-                    )),
-                }
-            },
-        );
+                },
+            );
 
         let param1 = if let Some(id) = self.permanent_definitions.get_type::<T>() {
             id
@@ -1047,10 +1029,10 @@ where
 impl<A, T, U, V, W> FnRegister<A, V, (&mut T, U, W)> for Engine
 where
     A: 'static + Fn(&mut T, U, W) -> V,
-    T: Any,
-    U: Clone + Any,
-    W: Clone + Any,
-    V: Any,
+    T: Type,
+    U: Clone + Type,
+    W: Clone + Type,
+    V: Type,
 {
     fn register_fn(
         &mut self,
@@ -1060,39 +1042,32 @@ where
             &'static std::panic::Location<'static>,
         >,
     ) {
-        let wrapped: Box<
-            dyn Fn(
-                &mut Box<dyn Any + Send>,
-                &mut Box<dyn Any + Send>,
-                &mut Box<dyn Any + Send>,
-            ) -> Result<Box<dyn Any>, String>,
-        > = Box::new(
-            move |arg1: &mut Box<dyn Any + Send>,
-                  arg2: &mut Box<dyn Any + Send>,
-                  arg3: &mut Box<dyn Any + Send>| {
-                let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
-                let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
-                let inside3 = (*arg3).downcast_mut() as Option<&mut W>;
+        let wrapped: Box<dyn Fn(&mut Value, &mut Value, &mut Value) -> Result<Value, String>> =
+            Box::new(
+                move |arg1: &mut Value, arg2: &mut Value, arg3: &mut Value| {
+                    let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
+                    let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
+                    let inside3 = (*arg3).downcast_mut() as Option<&mut W>;
 
-                match (inside1, inside2, inside3) {
-                    (Some(b), Some(c), Some(d)) => {
-                        Ok(Box::new(fun(b, c.clone(), d.clone())) as Box<dyn Any>)
+                    match (inside1, inside2, inside3) {
+                        (Some(b), Some(c), Some(d)) => {
+                            Ok(Box::new(fun(b, c.clone(), d.clone())) as Value)
+                        }
+                        (Some(_), Some(_), None) => Err(format!(
+                            "can't convert third argument to {}",
+                            std::any::type_name::<W>()
+                        )),
+                        (Some(_), None, _) => Err(format!(
+                            "can't convert second argument to {}",
+                            std::any::type_name::<U>()
+                        )),
+                        (None, _, _) => Err(format!(
+                            "can't convert first argument to {}",
+                            std::any::type_name::<T>()
+                        )),
                     }
-                    (Some(_), Some(_), None) => Err(format!(
-                        "can't convert third argument to {}",
-                        std::any::type_name::<W>()
-                    )),
-                    (Some(_), None, _) => Err(format!(
-                        "can't convert second argument to {}",
-                        std::any::type_name::<U>()
-                    )),
-                    (None, _, _) => Err(format!(
-                        "can't convert first argument to {}",
-                        std::any::type_name::<T>()
-                    )),
-                }
-            },
-        );
+                },
+            );
 
         let param1 = if let Some(id) = self.permanent_definitions.get_type::<T>() {
             id

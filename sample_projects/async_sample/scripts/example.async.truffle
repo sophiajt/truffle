@@ -5,4 +5,5 @@ print(xyz)
 // And we can also call async functions.
 // Note: in truffle we elide the .await as all async functions
 // are currently immediately invoked
-async_print(3)
+async_print()
+async_print_int(xyz)

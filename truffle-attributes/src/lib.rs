@@ -220,7 +220,7 @@ mod generate {
                     }
 
                     pattype.ty = Box::new(
-                        syn::parse_str("&mut Box<dyn std::any::Any + Send>")
+                        syn::parse_str("&'a mut ::truffle::Value")
                             .expect("input should be a valid rust type"),
                     );
                 }
@@ -257,14 +257,14 @@ mod generate {
             .map(|ident| quote! { let #ident = #ident.downcast_mut().expect("downcast type should match the actual type"); });
 
         Ok(quote! {
-            fn wrapped_fn(
+            fn wrapped_fn<'a>(
                 #(#wrapped_params)*
-            ) -> futures::future::BoxFuture<'static, Result<Box<dyn std::any::Any>, String>> {
+            ) -> futures::future::BoxFuture<'a, Result<::truffle::Value, String>> {
                 async move {
                     #(
                     #converted_args
                     )*
-                    Ok(Box::new(#wrapped_fn_name(#(*#idents),*).await) as Box<dyn std::any::Any>)
+                    Ok(Box::new(#wrapped_fn_name(#(*#idents),*).await) as ::truffle::Value)
                 }
                 .boxed()
             }
