@@ -6,5 +6,5 @@ print(xyz)
 // Note: in truffle we elide the .await as all async functions
 // are currently immediately invoked
 async_print()
-async_print_int(xyz)
-async_print_4int(xyz, 0, 1, 2)
+async_print(xyz)
+async_print(xyz, 0, 1, 2)

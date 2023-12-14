@@ -18,16 +18,6 @@ async fn async_print_int(i: i64) {
     println!("hello from async {i}")
 }
 
-// #[export]
-// async fn async_print_2int(i: i64, j: i64) {
-//     println!("hello from async {i}, {j}")
-// }
-
-// #[export]
-// async fn async_print_3int(i: i64, j: i64, k: i64) {
-//     println!("hello from async {i}, {j}, {k}")
-// }
-
 #[export]
 async fn async_print_4int(i: i64, j: i64, k: i64, l: i64) {
     println!("hello from async {i}, {j}, {k}, {l}")
@@ -40,10 +30,8 @@ fn main() {
     register_fn!(engine, "print", print::<i64>);
     register_fn!(engine, "print", print::<String>);
     register_fn!(engine, "async_print", async_print);
-    register_fn!(engine, "async_print_int", async_print_int);
-    // register_fn!(engine, "async_print_2int", async_print_2int);
-    // register_fn!(engine, "async_print_3int", async_print_3int);
-    register_fn!(engine, "async_print_4int", async_print_4int);
+    register_fn!(engine, "async_print", async_print_int);
+    register_fn!(engine, "async_print", async_print_4int);
 
     let contents = std::fs::read_to_string(SCRIPT_NAME).unwrap();
     let results = futures::executor::block_on(engine.eval_source_async(

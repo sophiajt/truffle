@@ -54,7 +54,7 @@ pub fn register_fn(input: TokenStream) -> TokenStream {
     {
         quote! {
             if #fun_is_async() {
-                #engine.with(#register_fun())
+                #engine.with(#register_fun(#name))
             } else {
                 #engine.register_fn(#name, #fun, Some(#fn_location()))
             };
@@ -116,7 +116,12 @@ fn foo(item: TokenStream) -> Result<proc_macro2::TokenStream, syn::Error> {
 mod generate {
     use proc_macro2::TokenStream;
     use quote::{format_ident, quote};
-    use syn::{parse_quote, token::Mut, ItemFn};
+    use syn::{
+        parse_quote,
+        punctuated::Punctuated,
+        token::{Comma, Mut},
+        FnArg, ItemFn,
+    };
 
     pub fn register_fn(input: ItemFn) -> Result<TokenStream, syn::Error> {
         let wrapped_fn_name = input.sig.ident.to_string();
@@ -125,7 +130,7 @@ mod generate {
         let registration_closure = registration_closure(input)?;
 
         Ok(quote! {
-            fn #register_fn_name() -> impl Fn(&mut truffle::Engine) {
+            fn #register_fn_name(name: &'static str) -> impl Fn(&mut truffle::Engine) {
                 use futures::FutureExt;
 
                 #wrapped_fn
@@ -160,7 +165,10 @@ mod generate {
         register_fn_stub.sig.ident = format_ident!("register_{wrapped_fn_name}");
         register_fn_stub.sig.output = syn::parse_str("-> impl Fn(&mut truffle::Engine)")
             .expect("this should parse as a return type");
-        register_fn_stub.sig.inputs = Default::default();
+        let mut inputs: Punctuated<FnArg, Comma> = Default::default();
+        let arg = syn::parse_str("name: &'static str").expect("should parse as arguments");
+        inputs.push(arg);
+        register_fn_stub.sig.inputs = inputs;
         register_fn_stub.block = syn::parse_str(
             "{|engine| unreachable!(\"register fn should only be called for async fns\")}",
         )
@@ -310,7 +318,7 @@ mod generate {
                     vec![#(#param_types),*],
                     engine.get_type::<#ret_type>().expect("engine should already know about this type"),
                     #wrapper,
-                    #wrapped_fn_name,
+                    name,
                     #fn_location()
                 );
             }
