@@ -258,7 +258,7 @@ mod generate {
 
         Ok(quote! {
             fn wrapped_fn<'a>(
-                #(#wrapped_params)*
+                #(#wrapped_params),*
             ) -> futures::future::BoxFuture<'a, Result<::truffle::Value, String>> {
                 async move {
                     #(
@@ -295,7 +295,11 @@ mod generate {
             0 => quote! { Function::ExternalAsyncFn0(wrapped_fn) },
             1 => quote! { Function::ExternalAsyncFn1(wrapped_fn) },
             2 => quote! { Function::ExternalAsyncFn2(wrapped_fn) },
-            _ => todo!(),
+            3 => quote! { Function::ExternalAsyncFn3(wrapped_fn) },
+            4 => quote! { Function::ExternalAsyncFn4(wrapped_fn) },
+            _ => unimplemented!(
+                "only async functions with up to 4 arguments are currently supported"
+            ),
         };
 
         Ok(quote! {
@@ -303,7 +307,7 @@ mod generate {
                 use truffle::Function;
 
                 engine.add_async_call(
-                    vec![#(#param_types)*],
+                    vec![#(#param_types),*],
                     engine.get_type::<#ret_type>().expect("engine should already know about this type"),
                     #wrapper,
                     #wrapped_fn_name,

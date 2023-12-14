@@ -51,9 +51,33 @@ pub enum Function {
     ExternalFn1(Box<dyn Fn(&mut Value) -> Result<Value, String>>),
     ExternalFn2(Box<dyn Fn(&mut Value, &mut Value) -> Result<Value, String>>),
     ExternalFn3(Box<dyn Fn(&mut Value, &mut Value, &mut Value) -> Result<Value, String>>),
+    ExternalFn4(
+        Box<dyn Fn(&mut Value, &mut Value, &mut Value, &mut Value) -> Result<Value, String>>,
+    ),
     ExternalAsyncFn0(fn() -> futures::future::BoxFuture<'static, Result<Value, String>>),
     ExternalAsyncFn1(
         for<'a> fn(&'a mut Value) -> futures::future::BoxFuture<'a, Result<Value, String>>,
+    ),
+    ExternalAsyncFn2(
+        for<'a> fn(
+            &'a mut Value,
+            &'a mut Value,
+        ) -> futures::future::BoxFuture<'a, Result<Value, String>>,
+    ),
+    ExternalAsyncFn3(
+        for<'a> fn(
+            &'a mut Value,
+            &'a mut Value,
+            &'a mut Value,
+        ) -> futures::future::BoxFuture<'a, Result<Value, String>>,
+    ),
+    ExternalAsyncFn4(
+        for<'a> fn(
+            &'a mut Value,
+            &'a mut Value,
+            &'a mut Value,
+            &'a mut Value,
+        ) -> futures::future::BoxFuture<'a, Result<Value, String>>,
     ),
     #[default]
     RemoteFn,
@@ -66,6 +90,9 @@ pub enum Function {
     ExternalFn1(Box<dyn Fn(&mut Value) -> Result<Value, String>>),
     ExternalFn2(Box<dyn Fn(&mut Value, &mut Value) -> Result<Value, String>>),
     ExternalFn3(Box<dyn Fn(&mut Value, &mut Value, &mut Value) -> Result<Value, String>>),
+    ExternalFn4(
+        Box<dyn Fn(&mut Value, &mut Value, &mut Value, &mut Value) -> Result<Value, String>>,
+    ),
     #[default]
     RemoteFn,
 }

@@ -1122,6 +1122,224 @@ where
     }
 }
 
+impl<'a, A, T, U, V, W, X> FnRegister<A, V, (&'a T, U, W, X)> for Engine
+where
+    A: 'static + Fn(T, U, W, X) -> V,
+    T: Clone + Type,
+    U: Clone + Type,
+    W: Clone + Type,
+    X: Clone + Type,
+    V: Type,
+{
+    fn register_fn(
+        &mut self,
+        name: &str,
+        fun: A,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
+    ) {
+        let wrapped: Box<
+            dyn Fn(&mut Value, &mut Value, &mut Value, &mut Value) -> Result<Value, String>,
+        > = Box::new(
+            move |arg1: &mut Value, arg2: &mut Value, arg3: &mut Value, arg4: &mut Value| {
+                let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
+                let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
+                let inside3 = (*arg3).downcast_mut() as Option<&mut W>;
+                let inside4 = (*arg4).downcast_mut() as Option<&mut X>;
+
+                match (inside1, inside2, inside3, inside4) {
+                    (Some(b), Some(c), Some(d), Some(e)) => {
+                        Ok(Box::new(fun(b.clone(), c.clone(), d.clone(), e.clone())) as Value)
+                    }
+                    (Some(_), Some(_), Some(_), None) => Err(format!(
+                        "can't convert fourth argument to {}",
+                        std::any::type_name::<X>()
+                    )),
+                    (Some(_), Some(_), None, _) => Err(format!(
+                        "can't convert third argument to {}",
+                        std::any::type_name::<W>()
+                    )),
+                    (Some(_), None, _, _) => Err(format!(
+                        "can't convert second argument to {}",
+                        std::any::type_name::<U>()
+                    )),
+                    (None, _, _, _) => Err(format!(
+                        "can't convert first argument to {}",
+                        std::any::type_name::<T>()
+                    )),
+                }
+            },
+        );
+
+        let param1 = if let Some(id) = self.permanent_definitions.get_type::<T>() {
+            id
+        } else {
+            self.register_type::<T>()
+        };
+
+        let param2 = if let Some(id) = self.permanent_definitions.get_type::<U>() {
+            id
+        } else {
+            self.register_type::<U>()
+        };
+
+        let param3 = if let Some(id) = self.permanent_definitions.get_type::<W>() {
+            id
+        } else {
+            self.register_type::<W>()
+        };
+
+        let param4 = if let Some(id) = self.permanent_definitions.get_type::<X>() {
+            id
+        } else {
+            self.register_type::<X>()
+        };
+
+        let ret = if let Some(id) = self.permanent_definitions.get_type::<V>() {
+            id
+        } else {
+            self.register_type::<V>()
+        };
+
+        let fn_record = ExternalFnRecord {
+            params: vec![param1, param2, param3, param4],
+            ret,
+            fun: Function::ExternalFn4(wrapped),
+        };
+        self.permanent_definitions.functions.push(fn_record);
+        #[cfg(feature = "lsp")]
+        if let Some(location) = location {
+            self.permanent_definitions.function_infos.insert(
+                name.as_bytes().to_vec(),
+                ExternalFunctionLocation {
+                    path: location.file().into(),
+                    line: location.line(),
+                    column: location.column(),
+                },
+            );
+        }
+
+        let id = self.permanent_definitions.functions.len() - 1;
+
+        let ent = self
+            .permanent_definitions
+            .external_functions
+            .entry(name.as_bytes().to_vec())
+            .or_default();
+        (*ent).push(ExternalFunctionId(id));
+    }
+}
+
+impl<A, T, U, V, W, X> FnRegister<A, V, (&mut T, U, W, X)> for Engine
+where
+    A: 'static + Fn(&mut T, U, W, X) -> V,
+    T: Type,
+    U: Clone + Type,
+    W: Clone + Type,
+    X: Clone + Type,
+    V: Type,
+{
+    fn register_fn(
+        &mut self,
+        name: &str,
+        fun: A,
+        #[cfg_attr(not(feature = "lsp"), allow(unused_variables))] location: Option<
+            &'static std::panic::Location<'static>,
+        >,
+    ) {
+        let wrapped: Box<
+            dyn Fn(&mut Value, &mut Value, &mut Value, &mut Value) -> Result<Value, String>,
+        > = Box::new(
+            move |arg1: &mut Value, arg2: &mut Value, arg3: &mut Value, arg4: &mut Value| {
+                let inside1 = (*arg1).downcast_mut() as Option<&mut T>;
+                let inside2 = (*arg2).downcast_mut() as Option<&mut U>;
+                let inside3 = (*arg3).downcast_mut() as Option<&mut W>;
+                let inside4 = (*arg4).downcast_mut() as Option<&mut X>;
+
+                match (inside1, inside2, inside3, inside4) {
+                    (Some(b), Some(c), Some(d), Some(e)) => {
+                        Ok(Box::new(fun(b, c.clone(), d.clone(), e.clone())) as Value)
+                    }
+                    (Some(_), Some(_), Some(_), None) => Err(format!(
+                        "can't convert fourth argument to {}",
+                        std::any::type_name::<X>()
+                    )),
+                    (Some(_), Some(_), None, _) => Err(format!(
+                        "can't convert third argument to {}",
+                        std::any::type_name::<W>()
+                    )),
+                    (Some(_), None, _, _) => Err(format!(
+                        "can't convert second argument to {}",
+                        std::any::type_name::<U>()
+                    )),
+                    (None, _, _, _) => Err(format!(
+                        "can't convert first argument to {}",
+                        std::any::type_name::<T>()
+                    )),
+                }
+            },
+        );
+
+        let param1 = if let Some(id) = self.permanent_definitions.get_type::<T>() {
+            id
+        } else {
+            self.register_type::<T>()
+        };
+
+        let param2 = if let Some(id) = self.permanent_definitions.get_type::<U>() {
+            id
+        } else {
+            self.register_type::<U>()
+        };
+
+        let param3 = if let Some(id) = self.permanent_definitions.get_type::<W>() {
+            id
+        } else {
+            self.register_type::<W>()
+        };
+
+        let param4 = if let Some(id) = self.permanent_definitions.get_type::<X>() {
+            id
+        } else {
+            self.register_type::<X>()
+        };
+
+        let ret = if let Some(id) = self.permanent_definitions.get_type::<V>() {
+            id
+        } else {
+            self.register_type::<V>()
+        };
+
+        let fn_record = ExternalFnRecord {
+            params: vec![param1, param2, param3, param4],
+            ret,
+            fun: Function::ExternalFn4(wrapped),
+        };
+        self.permanent_definitions.functions.push(fn_record);
+        #[cfg(feature = "lsp")]
+        if let Some(location) = location {
+            self.permanent_definitions.function_infos.insert(
+                name.as_bytes().to_vec(),
+                ExternalFunctionLocation {
+                    path: location.file().into(),
+                    line: location.line(),
+                    column: location.column(),
+                },
+            );
+        }
+
+        let id = self.permanent_definitions.functions.len() - 1;
+
+        let ent = self
+            .permanent_definitions
+            .external_functions
+            .entry(name.as_bytes().to_vec())
+            .or_default();
+        (*ent).push(ExternalFunctionId(id));
+    }
+}
+
 #[cfg(not(any(feature = "async", feature = "lsp")))]
 #[macro_export]
 macro_rules! register_fn {

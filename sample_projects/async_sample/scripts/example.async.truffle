@@ -7,3 +7,4 @@ print(xyz)
 // are currently immediately invoked
 async_print()
 async_print_int(xyz)
+async_print_4int(xyz, 0, 1, 2)

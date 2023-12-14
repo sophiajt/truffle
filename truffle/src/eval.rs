@@ -486,16 +486,36 @@ impl Evaluator {
 
                 result
             }
-            Function::ExternalAsyncFn1(fun) => {
-                // let arg0 = if self.stack_frames[self.current_frame].register_types[args[0].0]
-                //     == I64_TYPE
-                // {
-                //     Box::new(self.get_reg_i64(args[0]))
-                // } else {
-                //     panic!("internal error: not an i64");
-                // };
+            Function::ExternalFn4(fun) => {
                 let mut arg0 = self.box_register(args[0]);
-                // let mut arg0 = self.box_register();
+                let mut arg1 = self.box_register(args[1]);
+                let mut arg2 = self.box_register(args[2]);
+                let mut arg3 = self.box_register(args[3]);
+
+                let result = fun(&mut arg0, &mut arg1, &mut arg2, &mut arg3).unwrap();
+
+                if self.is_heap_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+                if self.is_heap_type(args[1]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg1);
+                }
+                if self.is_heap_type(args[2]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg2);
+                }
+                if self.is_heap_type(args[3]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg3);
+                }
+
+                result
+            }
+            Function::ExternalAsyncFn0(fun) => fun().await.unwrap(),
+            Function::ExternalAsyncFn1(fun) => {
+                let mut arg0 = self.box_register(args[0]);
                 let result = fun(&mut arg0).await.unwrap();
 
                 if self.is_user_type(args[0]) {
@@ -505,7 +525,69 @@ impl Evaluator {
 
                 result
             }
-            Function::ExternalAsyncFn0(fun) => fun().await.unwrap(),
+            Function::ExternalAsyncFn2(fun) => {
+                let mut arg0 = self.box_register(args[0]);
+                let mut arg1 = self.box_register(args[1]);
+                let result = fun(&mut arg0, &mut arg1).await.unwrap();
+
+                if self.is_user_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+                if self.is_user_type(args[1]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg1);
+                }
+
+                result
+            }
+            Function::ExternalAsyncFn3(fun) => {
+                let mut arg0 = self.box_register(args[0]);
+                let mut arg1 = self.box_register(args[1]);
+                let mut arg2 = self.box_register(args[2]);
+                let result = fun(&mut arg0, &mut arg1, &mut arg2).await.unwrap();
+
+                if self.is_user_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+                if self.is_user_type(args[1]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg1);
+                }
+                if self.is_user_type(args[2]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg2);
+                }
+
+                result
+            }
+            Function::ExternalAsyncFn4(fun) => {
+                let mut arg0 = self.box_register(args[0]);
+                let mut arg1 = self.box_register(args[1]);
+                let mut arg2 = self.box_register(args[2]);
+                let mut arg3 = self.box_register(args[3]);
+                let result = fun(&mut arg0, &mut arg1, &mut arg2, &mut arg3).await.unwrap();
+
+                if self.is_user_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+                if self.is_user_type(args[1]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg1);
+                }
+                if self.is_user_type(args[2]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg2);
+                }
+                if self.is_user_type(args[3]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg3);
+                }
+
+                result
+            }
             Function::RemoteFn => unreachable!("lsp instances of engines cannot evaluate scripts or remotely invoke registered functions"),
         }
     }
