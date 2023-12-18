@@ -204,7 +204,7 @@ mod generate {
         let wrapped_params = input.sig.inputs.iter().map(|arg| {
             let mut arg = arg.clone();
             match &mut arg {
-                FnArg::Receiver(_) => todo!(),
+                FnArg::Receiver(_receiver) => todo!(),
                 FnArg::Typed(pattype) => {
                     match &mut *pattype.pat {
                         Pat::Ident(patident) => patident.mutability = Some(Mut::default()),
@@ -230,7 +230,14 @@ mod generate {
 
         let converted_args = idents
             .clone()
-            .map(|ident| quote! { let #ident = #ident.downcast_mut().expect("downcast type should match the actual type"); });
+            .zip(input.sig.inputs.iter())
+            .map(|(ident, arg)| {
+                let ty = match arg {
+                    FnArg::Receiver(_) => todo!(),
+                    FnArg::Typed(pattype) => &pattype.ty,
+                };
+                quote! { let #ident = #ident.downcast_mut::<#ty>().expect("downcast type should match the actual type"); }
+            });
 
         let idents =
             idents
@@ -240,7 +247,7 @@ mod generate {
                     FnArg::Receiver(_) => todo!(),
                     FnArg::Typed(pattype) => match &*pattype.ty {
                         syn::Type::Reference(_) => quote! { #ident },
-                        syn::Type::Path(_) => quote! { *#ident },
+                        syn::Type::Path(_) => quote! { #ident.clone() },
                         _ => todo!(),
                     },
                 });
@@ -266,10 +273,8 @@ mod generate {
 
         let param_types = input.sig.inputs.iter().map(|arg| {
             match arg {
-                FnArg::Receiver(_) => todo!(),
-                FnArg::Typed(pattype) => {
-                    &pattype.ty
-                }
+                FnArg::Receiver(receiver) => &receiver.ty,
+                FnArg::Typed(pattype) => &pattype.ty,
             }
         }).map(|ty| {
             quote! { if let Some(id) = engine.get_type::<#ty>() { id } else { engine.register_type::<#ty>() } }
