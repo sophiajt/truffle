@@ -1,6 +1,6 @@
 # Truffle - Fast Embeddable Scripting for Rust
 
-Truffle is an experimental embeddable scripting language that offers high performance, ease of embedding, lightweight requirements (no dependencies by default and low compile times), and a familiar syntax (a subset of the Rust syntax).
+Truffle is an experimental embeddable scripting language for Rust that offers high performance, ease of embedding, lightweight requirements (no dependencies by default and low compile times), and a familiar syntax (a subset of the Rust syntax).
 
 Truffle offers the following compile-time features:
 
@@ -13,9 +13,11 @@ You can read more about how to get started with truffle in [truffle/docs/getting
 
 Additionally, you can learn more about the Truffle language in [truffle/docs/language.md](truffle/docs/language.md).
 
+If you'd like to use the Truffle IDE support (including the Truffle->Rust IDE interop), you can learn about how to set it up in [truffle/docs/lsp.md](truffle/docs/lsp.md).
+
 ## Roadmap
 
-Truffle is still in its early stages of development. We're looking for folks who will use it to give us feedback on what they need in practice.
+Truffle is still in its early stages of development. You'll notice that as a language, Truffle has relatively few features, and it's focused largely on interaction with the Rust application. We're doing this on purpose to help focus which features are added to only what is needed. We're looking for folks who will use it to give us feedback on what they need in practice.
 
 Some possible future features:
 
@@ -24,7 +26,7 @@ Some possible future features:
 
 ## Performance
 
-Truffle's current hot loop performance is close to Lua's performance (180ms vs 130ms for a hot loop of 10mil iterations, on a 8 × Intel® Core™ i7-8809G CPU @ 3.10GHz machine with 16 gigs of RAM).
+Truffle's current hot loop performance is close to Lua's performance (180ms vs 130ms for a hot loop of 10mil iterations, on a macOS 8 × Intel® Core™ i7-8809G CPU @ 3.10GHz machine with 16 gigs of RAM).
 
 We're hoping to continue improving Truffle's performance to make it flexible to be used in more scripting scenarios.
 
@@ -38,3 +40,4 @@ Note: each REPL line is independent of the other REPL lines. Variables defined i
 
 - [ ] Decide on license
 - [ ] Decide on messaging
+- [ ] Incorporate private beta feedback
