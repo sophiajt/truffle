@@ -120,7 +120,7 @@ mod generate {
         parse_quote,
         punctuated::Punctuated,
         token::{Comma, Mut},
-        FnArg, ItemFn,
+        FnArg, ItemFn, Pat, ReturnType,
     };
 
     pub fn register_fn(input: ItemFn) -> Result<TokenStream, syn::Error> {
@@ -204,26 +204,10 @@ mod generate {
         let wrapped_params = input.sig.inputs.iter().map(|arg| {
             let mut arg = arg.clone();
             match &mut arg {
-                syn::FnArg::Receiver(_) => todo!(),
-                syn::FnArg::Typed(pattype) => {
+                FnArg::Receiver(_) => todo!(),
+                FnArg::Typed(pattype) => {
                     match &mut *pattype.pat {
-                        syn::Pat::Const(_) => todo!(),
-                        syn::Pat::Ident(patident) => patident.mutability = Some(Mut::default()),
-                        syn::Pat::Lit(_) => todo!(),
-                        syn::Pat::Macro(_) => todo!(),
-                        syn::Pat::Or(_) => todo!(),
-                        syn::Pat::Paren(_) => todo!(),
-                        syn::Pat::Path(_) => todo!(),
-                        syn::Pat::Range(_) => todo!(),
-                        syn::Pat::Reference(_) => todo!(),
-                        syn::Pat::Rest(_) => todo!(),
-                        syn::Pat::Slice(_) => todo!(),
-                        syn::Pat::Struct(_) => todo!(),
-                        syn::Pat::Tuple(_) => todo!(),
-                        syn::Pat::TupleStruct(_) => todo!(),
-                        syn::Pat::Type(_) => todo!(),
-                        syn::Pat::Verbatim(_) => todo!(),
-                        syn::Pat::Wild(_) => todo!(),
+                        Pat::Ident(patident) => patident.mutability = Some(Mut::default()),
                         _ => todo!(),
                     }
 
@@ -237,25 +221,9 @@ mod generate {
         });
 
         let idents = input.sig.inputs.iter().map(|arg| match arg {
-            syn::FnArg::Receiver(_) => todo!(),
-            syn::FnArg::Typed(pattype) => match &*pattype.pat {
-                syn::Pat::Const(_) => todo!(),
-                syn::Pat::Ident(patident) => &patident.ident,
-                syn::Pat::Lit(_) => todo!(),
-                syn::Pat::Macro(_) => todo!(),
-                syn::Pat::Or(_) => todo!(),
-                syn::Pat::Paren(_) => todo!(),
-                syn::Pat::Path(_) => todo!(),
-                syn::Pat::Range(_) => todo!(),
-                syn::Pat::Reference(_) => todo!(),
-                syn::Pat::Rest(_) => todo!(),
-                syn::Pat::Slice(_) => todo!(),
-                syn::Pat::Struct(_) => todo!(),
-                syn::Pat::Tuple(_) => todo!(),
-                syn::Pat::TupleStruct(_) => todo!(),
-                syn::Pat::Type(_) => todo!(),
-                syn::Pat::Verbatim(_) => todo!(),
-                syn::Pat::Wild(_) => todo!(),
+            FnArg::Receiver(_) => todo!(),
+            FnArg::Typed(pattype) => match &*pattype.pat {
+                Pat::Ident(patident) => &patident.ident,
                 _ => todo!(),
             },
         });
@@ -263,6 +231,19 @@ mod generate {
         let converted_args = idents
             .clone()
             .map(|ident| quote! { let #ident = #ident.downcast_mut().expect("downcast type should match the actual type"); });
+
+        let idents =
+            idents
+                .into_iter()
+                .zip(input.sig.inputs.iter())
+                .map(|(ident, arg)| match arg {
+                    FnArg::Receiver(_) => todo!(),
+                    FnArg::Typed(pattype) => match &*pattype.ty {
+                        syn::Type::Reference(_) => quote! { #ident },
+                        syn::Type::Path(_) => quote! { *#ident },
+                        _ => todo!(),
+                    },
+                });
 
         Ok(quote! {
             fn wrapped_fn<'a>(
@@ -272,7 +253,7 @@ mod generate {
                     #(
                     #converted_args
                     )*
-                    Ok(Box::new(#wrapped_fn_name(#(*#idents),*).await) as ::truffle::Value)
+                    Ok(Box::new(#wrapped_fn_name(#(#idents),*).await) as ::truffle::Value)
                 }
                 .boxed()
             }
@@ -285,18 +266,18 @@ mod generate {
 
         let param_types = input.sig.inputs.iter().map(|arg| {
             match arg {
-                syn::FnArg::Receiver(_) => todo!(),
-                syn::FnArg::Typed(pattype) => {
+                FnArg::Receiver(_) => todo!(),
+                FnArg::Typed(pattype) => {
                     &pattype.ty
                 }
             }
         }).map(|ty| {
-            quote! { engine.get_type::<#ty>().expect("engine should already know about this type") }
+            quote! { if let Some(id) = engine.get_type::<#ty>() { id } else { engine.register_type::<#ty>() } }
         });
 
         let ret_type = match input.sig.output {
-            syn::ReturnType::Default => syn::parse_str("()")?,
-            syn::ReturnType::Type(_, ty) => ty,
+            ReturnType::Default => syn::parse_str("()")?,
+            ReturnType::Type(_, ty) => ty,
         };
 
         let wrapper = match input.sig.inputs.len() {
@@ -314,8 +295,9 @@ mod generate {
             |engine: &mut Engine| {
                 use truffle::Function;
 
+                let args = vec![#(#param_types),*];
                 engine.add_async_call(
-                    vec![#(#param_types),*],
+                    args,
                     engine.get_type::<#ret_type>().expect("engine should already know about this type"),
                     #wrapper,
                     name,
