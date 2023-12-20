@@ -32,11 +32,11 @@ impl Drop for Evaluator {
     fn drop(&mut self) {
         let num_frames = self.stack_frames.len();
         for frame_id in (0..num_frames).rev() {
-            let stack_frame = &self.stack_frames[frame_id];
-            let num_registers = stack_frame.register_values.len();
+            let num_registers = self.stack_frames[frame_id].register_values.len();
 
             for register_id in (0..num_registers).map(RegisterId).rev() {
                 self.maybe_free_register(register_id);
+                self.stack_frames[frame_id].register_values[register_id.0].i64 = 0;
             }
         }
     }
@@ -229,6 +229,7 @@ impl Evaluator {
                 self.maybe_free_register(target);
                 self.stack_frames[self.current_frame].register_values[target.0] =
                     self.stack_frames[self.current_frame].register_values[source.0];
+
                 *instruction_pointer += 1;
             }
             Instruction::BRIF {
@@ -518,7 +519,7 @@ impl Evaluator {
                 let mut arg0 = self.box_register(args[0]);
                 let result = fun(&mut arg0).await.unwrap();
 
-                if self.is_user_type(args[0]) {
+                if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg0);
                 }
@@ -530,11 +531,11 @@ impl Evaluator {
                 let mut arg1 = self.box_register(args[1]);
                 let result = fun(&mut arg0, &mut arg1).await.unwrap();
 
-                if self.is_user_type(args[0]) {
+                if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg0);
                 }
-                if self.is_user_type(args[1]) {
+                if self.is_heap_type(args[1]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg1);
                 }
@@ -547,15 +548,15 @@ impl Evaluator {
                 let mut arg2 = self.box_register(args[2]);
                 let result = fun(&mut arg0, &mut arg1, &mut arg2).await.unwrap();
 
-                if self.is_user_type(args[0]) {
+                if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg0);
                 }
-                if self.is_user_type(args[1]) {
+                if self.is_heap_type(args[1]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg1);
                 }
-                if self.is_user_type(args[2]) {
+                if self.is_heap_type(args[2]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg2);
                 }
@@ -569,19 +570,19 @@ impl Evaluator {
                 let mut arg3 = self.box_register(args[3]);
                 let result = fun(&mut arg0, &mut arg1, &mut arg2, &mut arg3).await.unwrap();
 
-                if self.is_user_type(args[0]) {
+                if self.is_heap_type(args[0]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg0);
                 }
-                if self.is_user_type(args[1]) {
+                if self.is_heap_type(args[1]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg1);
                 }
-                if self.is_user_type(args[2]) {
+                if self.is_heap_type(args[2]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg2);
                 }
-                if self.is_user_type(args[3]) {
+                if self.is_heap_type(args[3]) {
                     // We leak the box here because we manually clean it up later
                     Box::leak(arg3);
                 }
@@ -638,16 +639,69 @@ impl Evaluator {
     }
 
     fn maybe_free_register(&mut self, target: RegisterId) {
-        if self.is_string_type(target) {
+        let target_type = self.stack_frames[self.current_frame].register_types[target.0];
+        if self.is_string_type(target)
+            && unsafe { self.stack_frames[self.current_frame].register_values[target.0].i64 != 0 }
+            && !self.stack_frames[self.current_frame]
+                .register_values
+                .iter()
+                .enumerate()
+                .any(|(idx, x)| {
+                    idx != target.0
+                        && self.stack_frames[self.current_frame].register_types[idx] == target_type
+                        && unsafe {
+                            self.stack_frames[self.current_frame].register_values[target.0].i64
+                                == x.i64
+                        }
+                })
+        {
             let _ = self.get_reg_string(target);
         } else if self.is_user_type(target)
             && unsafe { self.stack_frames[self.current_frame].register_values[target.0].i64 != 0 }
-            && unsafe {
-                self.stack_frames[self.current_frame].register_values[target.0].i64
-                    != self.stack_frames[self.current_frame].register_values[0].i64
-            }
+            && !self.stack_frames[self.current_frame]
+                .register_values
+                .iter()
+                .enumerate()
+                .any(|(idx, x)| {
+                    idx != target.0
+                        && self.stack_frames[self.current_frame].register_types[idx] == target_type
+                        && unsafe {
+                            self.stack_frames[self.current_frame].register_values[target.0].i64
+                                == x.i64
+                        }
+                })
         {
             let _ = self.get_user_type(target);
+        }
+    }
+
+    pub fn debug_print_simple(&self) {
+        println!("virtual machine:");
+        println!("  instructions:");
+        for instr in self.instructions.iter().enumerate() {
+            println!("    {:?}", instr);
+        }
+        println!("  registers:");
+        for (idx, value) in self.stack_frames[self.current_frame]
+            .register_values
+            .iter()
+            .enumerate()
+        {
+            if self.stack_frames[self.current_frame].register_types[idx] == F64_TYPE {
+                println!(
+                    "    {}: {} ({:?})",
+                    idx,
+                    unsafe { value.f64 },
+                    self.stack_frames[self.current_frame].register_types[idx]
+                );
+            } else {
+                println!(
+                    "    {}: {} ({:?})",
+                    idx,
+                    unsafe { value.i64 },
+                    self.stack_frames[self.current_frame].register_types[idx]
+                );
+            }
         }
     }
 
