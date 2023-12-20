@@ -54,7 +54,7 @@ pub fn register_fn(input: TokenStream) -> TokenStream {
     {
         quote! {
             if #fun_is_async() {
-                #engine.with(#register_fun())
+                #engine.with(#register_fun(#name))
             } else {
                 #engine.register_fn(#name, #fun, Some(#fn_location()))
             };
@@ -116,7 +116,12 @@ fn foo(item: TokenStream) -> Result<proc_macro2::TokenStream, syn::Error> {
 mod generate {
     use proc_macro2::TokenStream;
     use quote::{format_ident, quote};
-    use syn::{parse_quote, token::Mut, ItemFn};
+    use syn::{
+        parse_quote,
+        punctuated::Punctuated,
+        token::{Comma, Mut},
+        FnArg, ItemFn, Pat, ReturnType,
+    };
 
     pub fn register_fn(input: ItemFn) -> Result<TokenStream, syn::Error> {
         let wrapped_fn_name = input.sig.ident.to_string();
@@ -125,7 +130,7 @@ mod generate {
         let registration_closure = registration_closure(input)?;
 
         Ok(quote! {
-            fn #register_fn_name() -> impl Fn(&mut truffle::Engine) {
+            fn #register_fn_name(name: &'static str) -> impl Fn(&mut truffle::Engine) {
                 use futures::FutureExt;
 
                 #wrapped_fn
@@ -160,7 +165,10 @@ mod generate {
         register_fn_stub.sig.ident = format_ident!("register_{wrapped_fn_name}");
         register_fn_stub.sig.output = syn::parse_str("-> impl Fn(&mut truffle::Engine)")
             .expect("this should parse as a return type");
-        register_fn_stub.sig.inputs = Default::default();
+        let mut inputs: Punctuated<FnArg, Comma> = Default::default();
+        let arg = syn::parse_str("name: &'static str").expect("should parse as arguments");
+        inputs.push(arg);
+        register_fn_stub.sig.inputs = inputs;
         register_fn_stub.block = syn::parse_str(
             "{|engine| unreachable!(\"register fn should only be called for async fns\")}",
         )
@@ -196,26 +204,10 @@ mod generate {
         let wrapped_params = input.sig.inputs.iter().map(|arg| {
             let mut arg = arg.clone();
             match &mut arg {
-                syn::FnArg::Receiver(_) => todo!(),
-                syn::FnArg::Typed(pattype) => {
+                FnArg::Receiver(_receiver) => todo!(),
+                FnArg::Typed(pattype) => {
                     match &mut *pattype.pat {
-                        syn::Pat::Const(_) => todo!(),
-                        syn::Pat::Ident(patident) => patident.mutability = Some(Mut::default()),
-                        syn::Pat::Lit(_) => todo!(),
-                        syn::Pat::Macro(_) => todo!(),
-                        syn::Pat::Or(_) => todo!(),
-                        syn::Pat::Paren(_) => todo!(),
-                        syn::Pat::Path(_) => todo!(),
-                        syn::Pat::Range(_) => todo!(),
-                        syn::Pat::Reference(_) => todo!(),
-                        syn::Pat::Rest(_) => todo!(),
-                        syn::Pat::Slice(_) => todo!(),
-                        syn::Pat::Struct(_) => todo!(),
-                        syn::Pat::Tuple(_) => todo!(),
-                        syn::Pat::TupleStruct(_) => todo!(),
-                        syn::Pat::Type(_) => todo!(),
-                        syn::Pat::Verbatim(_) => todo!(),
-                        syn::Pat::Wild(_) => todo!(),
+                        Pat::Ident(patident) => patident.mutability = Some(Mut::default()),
                         _ => todo!(),
                     }
 
@@ -229,42 +221,46 @@ mod generate {
         });
 
         let idents = input.sig.inputs.iter().map(|arg| match arg {
-            syn::FnArg::Receiver(_) => todo!(),
-            syn::FnArg::Typed(pattype) => match &*pattype.pat {
-                syn::Pat::Const(_) => todo!(),
-                syn::Pat::Ident(patident) => &patident.ident,
-                syn::Pat::Lit(_) => todo!(),
-                syn::Pat::Macro(_) => todo!(),
-                syn::Pat::Or(_) => todo!(),
-                syn::Pat::Paren(_) => todo!(),
-                syn::Pat::Path(_) => todo!(),
-                syn::Pat::Range(_) => todo!(),
-                syn::Pat::Reference(_) => todo!(),
-                syn::Pat::Rest(_) => todo!(),
-                syn::Pat::Slice(_) => todo!(),
-                syn::Pat::Struct(_) => todo!(),
-                syn::Pat::Tuple(_) => todo!(),
-                syn::Pat::TupleStruct(_) => todo!(),
-                syn::Pat::Type(_) => todo!(),
-                syn::Pat::Verbatim(_) => todo!(),
-                syn::Pat::Wild(_) => todo!(),
+            FnArg::Receiver(_) => todo!(),
+            FnArg::Typed(pattype) => match &*pattype.pat {
+                Pat::Ident(patident) => &patident.ident,
                 _ => todo!(),
             },
         });
 
         let converted_args = idents
             .clone()
-            .map(|ident| quote! { let #ident = #ident.downcast_mut().expect("downcast type should match the actual type"); });
+            .zip(input.sig.inputs.iter())
+            .map(|(ident, arg)| {
+                let ty = match arg {
+                    FnArg::Receiver(_) => todo!(),
+                    FnArg::Typed(pattype) => &pattype.ty,
+                };
+                quote! { let #ident = #ident.downcast_mut::<#ty>().expect("downcast type should match the actual type"); }
+            });
+
+        let idents =
+            idents
+                .into_iter()
+                .zip(input.sig.inputs.iter())
+                .map(|(ident, arg)| match arg {
+                    FnArg::Receiver(_) => todo!(),
+                    FnArg::Typed(pattype) => match &*pattype.ty {
+                        syn::Type::Reference(_) => quote! { #ident },
+                        syn::Type::Path(_) => quote! { #ident.clone() },
+                        _ => todo!(),
+                    },
+                });
 
         Ok(quote! {
             fn wrapped_fn<'a>(
-                #(#wrapped_params)*
+                #(#wrapped_params),*
             ) -> futures::future::BoxFuture<'a, Result<::truffle::Value, String>> {
                 async move {
                     #(
                     #converted_args
                     )*
-                    Ok(Box::new(#wrapped_fn_name(#(*#idents),*).await) as ::truffle::Value)
+                    Ok(Box::new(#wrapped_fn_name(#(#idents),*).await) as ::truffle::Value)
                 }
                 .boxed()
             }
@@ -277,36 +273,39 @@ mod generate {
 
         let param_types = input.sig.inputs.iter().map(|arg| {
             match arg {
-                syn::FnArg::Receiver(_) => todo!(),
-                syn::FnArg::Typed(pattype) => {
-                    &pattype.ty
-                }
+                FnArg::Receiver(receiver) => &receiver.ty,
+                FnArg::Typed(pattype) => &pattype.ty,
             }
         }).map(|ty| {
-            quote! { engine.get_type::<#ty>().expect("engine should already know about this type") }
+            quote! { if let Some(id) = engine.get_type::<#ty>() { id } else { engine.register_type::<#ty>() } }
         });
 
         let ret_type = match input.sig.output {
-            syn::ReturnType::Default => syn::parse_str("()")?,
-            syn::ReturnType::Type(_, ty) => ty,
+            ReturnType::Default => syn::parse_str("()")?,
+            ReturnType::Type(_, ty) => ty,
         };
 
         let wrapper = match input.sig.inputs.len() {
             0 => quote! { Function::ExternalAsyncFn0(wrapped_fn) },
             1 => quote! { Function::ExternalAsyncFn1(wrapped_fn) },
             2 => quote! { Function::ExternalAsyncFn2(wrapped_fn) },
-            _ => todo!(),
+            3 => quote! { Function::ExternalAsyncFn3(wrapped_fn) },
+            4 => quote! { Function::ExternalAsyncFn4(wrapped_fn) },
+            _ => unimplemented!(
+                "only async functions with up to 4 arguments are currently supported"
+            ),
         };
 
         Ok(quote! {
             |engine: &mut Engine| {
                 use truffle::Function;
 
+                let args = vec![#(#param_types),*];
                 engine.add_async_call(
-                    vec![#(#param_types)*],
+                    args,
                     engine.get_type::<#ret_type>().expect("engine should already know about this type"),
                     #wrapper,
-                    #wrapped_fn_name,
+                    name,
                     #fn_location()
                 );
             }

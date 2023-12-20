@@ -6,4 +6,8 @@ print(xyz)
 // Note: in truffle we elide the .await as all async functions
 // are currently immediately invoked
 async_print()
-async_print_int(xyz)
+async_print(xyz)
+async_print(xyz, 8.8, false, "foo")
+let mut b = custom_new()
+b = async_print(b)
+b = async_print(b)
