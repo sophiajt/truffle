@@ -463,6 +463,10 @@ impl Engine {
     pub fn completion(&self, location: usize, contents: &[u8]) -> Vec<String> {
         let mut output = vec![];
 
+        if contents.is_empty() {
+            return output;
+        }
+
         let mut lexer = Lexer::new(contents.to_vec(), 0);
         let tokens = match lexer.lex() {
             Ok(tokens) => tokens,
@@ -472,9 +476,10 @@ impl Engine {
         // Logic to move into the token immediately left of us if necessary:
         // If we're on a space or eof, try moving left. Otherwise stay put.
         // Only try to move left if we have space to do so, If we try to move left
-        let location = if location < contents.len()
+        let location = if (location < contents.len()
             && contents[location].is_ascii_whitespace()
-            && location > 0
+            && location > 0)
+            || location == contents.len()
         {
             location - 1
         } else {
