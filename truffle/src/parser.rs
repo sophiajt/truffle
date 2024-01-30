@@ -759,6 +759,8 @@ impl Parser {
                 let end = self.position();
                 let span = Span { start, end };
                 self.create_node(AstNode::Await(expr), span)
+            } else if !self.has_tokens() {
+                self.error("missing method call")
             } else {
                 self.method_call(start, expr)
             }
