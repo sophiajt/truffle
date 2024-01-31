@@ -102,7 +102,7 @@ impl Server {
         ));
         let completion_provider = Some(CompletionOptions {
             resolve_provider: Some(true),
-            trigger_characters: None,
+            trigger_characters: Some(vec![".".into()]),
             all_commit_characters: None,
             work_done_progress_options: WorkDoneProgressOptions {
                 work_done_progress: None,

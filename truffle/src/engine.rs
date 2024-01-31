@@ -493,7 +493,8 @@ impl Engine {
             if prefix_start == 0
                 || (!contents[prefix_start].is_ascii_digit()
                     && !contents[prefix_start].is_ascii_alphabetic()
-                    && contents[prefix_start] != b'_')
+                    && contents[prefix_start] != b'_'
+                    && contents[prefix_start] != b'.')
             {
                 prefix_start += 1;
                 break;
@@ -504,35 +505,56 @@ impl Engine {
 
         let prefix = &contents[prefix_start..=location];
 
-        // eprintln!("prefix: {:?}", prefix);
-
-        // eprintln!("tokens: {:?}", tokens);
-
         let mut parser = Parser::new(tokens, contents.to_vec(), 0);
         let _ = parser.parse();
-
-        // eprintln!("parse results: {:?}", parser.results);
 
         let mut typechecker = TypeChecker::new(parser.results, &self.permanent_definitions);
         let _ = typechecker.typecheck();
 
-        let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
+        if prefix.ends_with(b".") {
+            let node_id = self.get_node_id_at_location(prefix_start, &typechecker.parse_results);
 
-        if let Some(node_id) = node_id {
-            let node_span = typechecker.parse_results.spans[node_id.0];
-
-            for scope in typechecker.scope.iter() {
-                let scope_span = typechecker.parse_results.spans[scope.node_id.0];
-
-                if node_span.start >= scope_span.start && node_span.end <= scope_span.end {
-                    for (var_name, var_node_id) in scope.variables.iter() {
-                        let var_end = typechecker.parse_results.spans[var_node_id.0].end;
-
-                        if var_end <= location && var_name.starts_with(prefix) {
-                            // Variable is in scope and defined ahead of the completion location
-                            output.push(String::from_utf8_lossy(var_name).to_string());
+            if let Some(node_id) = node_id {
+                let type_id = typechecker.node_types[node_id.0];
+                if TypeChecker::is_custom_type(type_id) {
+                    for (id, external_fn) in self.permanent_definitions.functions.iter().enumerate()
+                    {
+                        let current_id = ExternalFunctionId(id);
+                        if !external_fn.params.is_empty() && external_fn.params[0] == type_id {
+                            for (name, fns) in &self.permanent_definitions.external_functions {
+                                if fns.contains(&current_id) {
+                                    output.push(String::from_utf8_lossy(name).to_string())
+                                }
+                            }
                         }
                     }
+                }
+            }
+        } else {
+            let node_id = self.get_node_id_at_location(location, &typechecker.parse_results);
+
+            if let Some(node_id) = node_id {
+                let node_span = typechecker.parse_results.spans[node_id.0];
+
+                for scope in typechecker.scope.iter() {
+                    let scope_span = typechecker.parse_results.spans[scope.node_id.0];
+
+                    if node_span.start >= scope_span.start && node_span.end <= scope_span.end {
+                        for (var_name, var_node_id) in scope.variables.iter() {
+                            let var_end = typechecker.parse_results.spans[var_node_id.0].end;
+
+                            if var_end <= location && var_name.starts_with(prefix) {
+                                // Variable is in scope and defined ahead of the completion location
+                                output.push(String::from_utf8_lossy(var_name).to_string());
+                            }
+                        }
+                    }
+                }
+            }
+
+            for name in self.permanent_definitions.external_functions.keys() {
+                if name.starts_with(prefix) {
+                    output.push(String::from_utf8_lossy(name).to_string())
                 }
             }
         }
