@@ -7,7 +7,7 @@ use crate::{
     Type, Value,
 };
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "lsp", derive(serde::Serialize, serde::Deserialize))]
 pub struct TypeId(pub usize);
 
@@ -610,6 +610,10 @@ impl<'permanent> TypeChecker<'permanent> {
             let name = String::from_utf8_lossy(call_name);
             self.error(format!("unknown function '{}'", name), node_id)
         }
+    }
+
+    pub fn is_custom_type(type_id: TypeId) -> bool {
+        type_id > STRING_TYPE && type_id != UNKNOWN_TYPE
     }
 
     pub fn define_variable(

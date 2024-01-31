@@ -6,7 +6,6 @@ use lsp_types::Url;
 use crate::parser::Span;
 use crate::Type;
 
-use crate::typechecker::STRING_TYPE;
 use crate::{
     parser::NodeId, typechecker::ExternalFunctionId, ErrorBatch, Evaluator, Function, FunctionId,
     Lexer, ParseResults, Parser, ReturnValue, Translater, TypeChecker, TypeId, Value,
@@ -512,7 +511,7 @@ impl Engine {
 
             if let Some(node_id) = node_id {
                 let type_id = typechecker.node_types[node_id.0];
-                if type_id.0 > STRING_TYPE.0 {
+                if TypeChecker::is_custom_type(type_id) {
                     for (id, external_fn) in self.permanent_definitions.functions.iter().enumerate()
                     {
                         let current_id = ExternalFunctionId(id);
