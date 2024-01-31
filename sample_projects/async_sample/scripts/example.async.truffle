@@ -11,3 +11,4 @@ async_print(xyz, 8.8, false, "foo")
 let mut b = custom_new()
 b = async_print(b)
 b = async_print(b)
+b

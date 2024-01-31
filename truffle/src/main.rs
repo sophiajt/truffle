@@ -1,6 +1,6 @@
 mod line_editor;
 
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use line_editor::{LineEditor, ReadLineOutput};
 
@@ -88,6 +88,9 @@ where
     register_fn!(engine, "print", print::<bool>);
     register_fn!(engine, "add", add::<i64>);
     register_fn!(engine, "add", add::<f64>);
+    register_fn!(engine, "new_env", Env::new_env);
+    register_fn!(engine, "set_var", Env::set_var);
+    register_fn!(engine, "read_var", Env::read_var);
 
     let result = block_on(engine.eval_source_async(fname, source.as_bytes(), debug_output));
     match result {
@@ -121,6 +124,9 @@ where
     register_fn!(engine, "print", print::<bool>);
     register_fn!(engine, "add", add::<i64>);
     register_fn!(engine, "add", add::<f64>);
+    register_fn!(engine, "new_env", Env::new_env);
+    register_fn!(engine, "set_var", Env::set_var);
+    register_fn!(engine, "read_var", Env::read_var);
 
     let result = engine.eval_source(fname, contents, debug_output);
     match result {
@@ -144,4 +150,27 @@ pub fn print<T: std::fmt::Display>(value: T) {
 #[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
 pub fn add<T: std::ops::Add>(lhs: T, rhs: T) -> T::Output {
     lhs + rhs
+}
+
+pub struct Env {
+    vars: HashMap<String, i64>,
+}
+
+impl Env {
+    #[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
+    pub fn new_env() -> Env {
+        Env {
+            vars: HashMap::new(),
+        }
+    }
+
+    #[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
+    pub fn set_var(&mut self, var: String, value: i64) {
+        self.vars.insert(var, value);
+    }
+
+    #[cfg_attr(any(feature = "async", feature = "lsp"), truffle::export)]
+    pub fn read_var(&mut self, var: String) -> i64 {
+        *self.vars.get(&var).unwrap()
+    }
 }
