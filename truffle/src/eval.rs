@@ -34,7 +34,7 @@ impl Drop for Evaluator {
         for frame_id in (0..num_frames).rev() {
             let num_registers = self.stack_frames[frame_id].register_values.len();
 
-            for register_id in (0..num_registers).map(RegisterId).rev() {
+            for register_id in (1..num_registers).map(RegisterId).rev() {
                 self.maybe_free_register(register_id);
                 self.stack_frames[frame_id].register_values[register_id.0].i64 = 0;
             }

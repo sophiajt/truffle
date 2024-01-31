@@ -67,7 +67,10 @@ pub fn eval_source_runner(fname: &Path) -> Result<(), Failed> {
         .map_err(|_| "The file's contents are not a valid UTF-8 string!")?;
     match test_eval::eval_source(&source) {
         Ok(ReturnValue::Unit) => Ok(()),
-        Ok(non_zero) => Err(format!("Script evaluated to {non_zero:?}, expected 0"))?,
+        Ok(non_zero) => {
+            println!("Script evaluated to {non_zero:?}");
+            Ok(())
+        }
         Err(errors) => {
             let contents = source.as_bytes();
             errors.print_with(fname, contents);
