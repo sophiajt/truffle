@@ -422,6 +422,36 @@ impl Evaluator {
                 }
 
                 result
+            },
+            Function::ExternalFn4(fun) => {
+                let mut arg0 = self.box_register(args[0]);
+                let mut arg1 = self.box_register(args[1]);
+                let mut arg2 = self.box_register(args[2]);
+                let mut arg3 = self.box_register(args[3]);
+
+                let result = match fun(&mut arg0, &mut arg1, &mut arg2, &mut arg3) {
+                    Ok(val) => Ok(val),
+                    Err(error) => Err(self.error(error, self.source_map[instruction_pointer])),
+                };
+
+                if self.is_heap_type(args[0]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg0);
+                }
+                if self.is_heap_type(args[1]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg1);
+                }
+                if self.is_heap_type(args[2]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg2);
+                }
+                if self.is_heap_type(args[3]) {
+                    // We leak the box here because we manually clean it up later
+                    Box::leak(arg3);
+                }
+
+                result
             }
             _ => unreachable!(),
         }
