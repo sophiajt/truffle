@@ -924,7 +924,10 @@ impl Parser {
                     start += 1;
                     end -= 1;
                 } else {
-                    return self.error("expected: leading and trailing quotation marks");
+                    if self.results.contents[start] != b'"' {
+                        return self.error("expected: left quotation mark '\"'");
+                    }
+                    return self.error("expected: right quotation mark '\"'");
                 }
 
                 self.next();
