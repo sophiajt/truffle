@@ -86,7 +86,7 @@ impl Lexer {
     }
 
     pub fn lex_quoted_string(&mut self) -> Option<Token> {
-        let mut start = self.span_offset;
+        let start = self.span_offset;
         let mut current_position = self.span_offset + 1;
         let mut is_escaped = false;
         while current_position < self.source.len() {
@@ -102,16 +102,12 @@ impl Lexer {
         }
 
         self.span_offset = current_position;
-        
-        // Skip surrounding quotes
-        start += 1;
-        let end = self.span_offset - 1;
 
         Some(Token {
             token_type: TokenType::String,
             span: Span {
                 start,
-                end
+                end: self.span_offset,
             },
         })
     }
