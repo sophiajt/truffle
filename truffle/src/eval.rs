@@ -422,7 +422,7 @@ impl Evaluator {
                 }
 
                 result
-            },
+            }
             Function::ExternalFn4(fun) => {
                 let mut arg0 = self.box_register(args[0]);
                 let mut arg1 = self.box_register(args[1]);

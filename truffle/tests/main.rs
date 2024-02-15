@@ -58,19 +58,19 @@ fn float_math() {
 #[test]
 fn strings() {
     assert_matches!(
-        eval_source("\"hello world\""), 
+        eval_source("\"hello world\""),
         Ok(ReturnValue::String(s)) if s == "hello world"
     );
     assert_matches!(
-        eval_source("\"  hello world  \""), 
+        eval_source("\"  hello world  \""),
         Ok(ReturnValue::String(s)) if s == "  hello world  "
     );
     assert_matches!(
-        eval_source("\"\""), 
+        eval_source("\"\""),
         Ok(ReturnValue::String(s)) if s == ""
     );
     assert_matches!(
-        eval_source("\"!@#$%^&*()_+-=[]{}|;:',.<>/?\""), 
+        eval_source("\"!@#$%^&*()_+-=[]{}|;:',.<>/?\""),
         Ok(ReturnValue::String(s)) if s == "!@#$%^&*()_+-=[]{}|;:',.<>/?"
     );
 }
