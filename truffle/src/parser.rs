@@ -916,8 +916,22 @@ impl Parser {
                 span,
                 ..
             }) => {
+                let mut start = span.start;
+                let mut end = span.end;
+
+                // Exclude quotation marks
+                if self.results.contents[start] == b'"' && self.results.contents[end - 1] == b'"' {
+                    start += 1;
+                    end -= 1;
+                } else {
+                    if self.results.contents[start] != b'"' {
+                        return self.error("expected: left quotation mark '\"'");
+                    }
+                    return self.error("expected: right quotation mark '\"'");
+                }
+
                 self.next();
-                self.create_node(AstNode::String, span)
+                self.create_node(AstNode::String, Span { start, end })
             }
             _ => self.error("expected: string"),
         }

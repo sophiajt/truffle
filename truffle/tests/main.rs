@@ -56,6 +56,26 @@ fn float_math() {
 }
 
 #[test]
+fn strings() {
+    assert_matches!(
+        eval_source("\"hello world\""),
+        Ok(ReturnValue::String(s)) if s == "hello world"
+    );
+    assert_matches!(
+        eval_source("\"  hello world  \""),
+        Ok(ReturnValue::String(s)) if s == "  hello world  "
+    );
+    assert_matches!(
+        eval_source("\"\""),
+        Ok(ReturnValue::String(s)) if s == ""
+    );
+    assert_matches!(
+        eval_source("\"!@#$%^&*()_+-=[]{}|;:',.<>/?\""),
+        Ok(ReturnValue::String(s)) if s == "!@#$%^&*()_+-=[]{}|;:',.<>/?"
+    );
+}
+
+#[test]
 fn variables() {
     assert_matches!(eval_source("let x = 1; x + 10"), Ok(ReturnValue::I64(11)));
     assert_matches!(
