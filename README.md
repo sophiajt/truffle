@@ -36,8 +36,3 @@ Truffle also comes with a rudimentary REPL you can use to interact with a system
 
 Note: each REPL line is independent of the other REPL lines. Variables defined in previous REPL lines are not visible in the following lines. You can think of each line as a distinct script being run.
 
-## Before going public
-
-- [ ] Decide on license
-- [ ] Decide on messaging
-- [ ] Incorporate private beta feedback
